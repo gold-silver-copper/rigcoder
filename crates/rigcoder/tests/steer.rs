@@ -193,3 +193,81 @@ fn a_write_outside_the_scope_is_denied_before_it_happens_and_inside_goes_through
     assert!(!dir.join("harness/ledger.jsonl").exists());
     assert_eq!(std::fs::read_to_string(dir.join("crates/rigcoder/src/prompt.md")).unwrap(), "be careful\n");
 }
+
+/// A model whose first answer is a transient stream failure, then the script.
+struct Flaky {
+    failures: Mutex<usize>,
+    inner: Scripted,
+}
+
+impl Serve for Flaky {
+    type Family = rig::effect::family::Completion;
+    fn descriptor(&self) -> HandlerDescriptor {
+        self.inner.descriptor()
+    }
+    async fn serve(&self, kind: EffectKind, sink: OutcomeSink) {
+        let fail = {
+            let mut failures = self.failures.lock().unwrap();
+            if *failures > 0 {
+                *failures -= 1;
+                true
+            } else {
+                false
+            }
+        };
+        if fail {
+            sink.resolve(Err(rig::error::ErrorReport::new(rig::error::ErrorKind::Response, "the stream ended before its terminal record"))).await;
+            return;
+        }
+        self.inner.serve(kind, sink).await
+    }
+}
+
+#[derive(Resource)]
+struct FlakyModel(Mutex<Option<Flaky>>);
+
+fn register_flaky(mut handlers: Handlers, model: Res<FlakyModel>) {
+    if let Some(model) = model.0.lock().unwrap().take() {
+        handlers.register(rigcoder::model::MODEL_KEY, model).expect("a fresh key");
+    }
+}
+
+#[test]
+fn a_transient_provider_failure_is_retried_and_the_run_completes() {
+    let dir = scratch("flaky");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let model = Flaky {
+        failures: Mutex::new(1),
+        inner: Scripted { turns: Mutex::new(vec![vec![AssistantContent::text("all good")]].into()), seen: seen.clone() },
+    };
+    let captured: Arc<Mutex<Vec<Event>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut app = App::new();
+    app.add_plugins((
+        ScheduleRunnerPlugin::run_loop(std::time::Duration::from_millis(1)),
+        RigcoderPlugin::live(dir.clone(), ModelChoice::parse("gemini", None).unwrap(), 8),
+    ))
+    .insert_resource(Steer::default())
+    .insert_resource(FlakyModel(Mutex::new(Some(model))))
+    .insert_resource(Captured(captured.clone()))
+    .add_systems(PreStartup, register_flaky)
+    .add_systems(PostStartup, |world: &mut World| {
+        rigcoder::submit(world, "hello?");
+    })
+    .add_systems(bevy_app::Last, capture_when_retries_settle);
+    app.run();
+    let events = captured.lock().unwrap().clone();
+    assert!(events.iter().any(|e| matches!(e, Event::Retrying { attempt: 1, .. })), "{events:?}");
+    assert!(events.iter().any(|e| matches!(e, Event::Settled { answer } if answer == "all good")), "{events:?}");
+    assert!(!events.iter().any(|e| matches!(e, Event::Failed(_))), "{events:?}");
+    assert_eq!(seen.lock().unwrap().len(), 1, "the scripted model saw the retried request once");
+}
+
+/// Over when a run settled or finally failed; a pending retry is not over.
+fn capture_when_retries_settle(conversation: Res<rigcoder::Conversation>, transcript: Res<Transcript>, captured: Res<Captured>, mut ticks: Local<usize>, mut exit: MessageWriter<AppExit>) {
+    *ticks += 1;
+    let ended = transcript.events.iter().any(|e| matches!(e, Event::Settled { .. } | Event::Failed(_)));
+    if (conversation.active.is_none() && ended) || *ticks > 200_000 {
+        *captured.0.lock().unwrap() = transcript.events.clone();
+        exit.write(AppExit::Success);
+    }
+}

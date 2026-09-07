@@ -36,7 +36,16 @@ pub struct Conversation {
     shown: HashMap<Entity, usize>,
     /// Runs started, ever.
     pub runs: usize,
+    /// The last prompt and the history it was submitted after, so a run
+    /// that fails on a transient provider error can be submitted again.
+    last: Option<(String, Vec<MessageParts>)>,
+    /// A resubmission due at this instant.
+    retry_at: Option<std::time::Instant>,
+    pub provider_retries: usize,
 }
+
+/// Transient provider failures are retried this many times, with backoff.
+pub const MAX_PROVIDER_RETRIES: usize = 3;
 
 /// One thing that happened, in the order it happened.
 #[derive(Debug, Clone, Serialize)]
@@ -49,6 +58,8 @@ pub enum Event {
     ToolResult { name: String, output: String, ok: bool },
     Settled { answer: String },
     Failed(String),
+    /// The run failed on a transient provider error and will be submitted again.
+    Retrying { reason: String, attempt: usize, wait_secs: u64 },
     /// A tool call the gate refused; the model reads the reason as the result.
     Denied { name: String, reason: String },
     /// A tool call waiting for approval.
@@ -96,6 +107,10 @@ pub fn submit(world: &mut World, prompt: &str) -> Option<Entity> {
     world.resource_mut::<Transcript>().push(Event::User {
         text: prompt.to_owned(),
     });
+    {
+        let mut conversation = world.resource_mut::<Conversation>();
+        conversation.last = Some((prompt.to_owned(), history.clone()));
+    }
     let run = spawn_run(world, agent, &history, prompt, true, None);
     // The run's program identity goes into the effect log under its scope:
     // every granted tool as a required row, so a replay advertises the same
@@ -209,10 +224,24 @@ pub fn on_failed(
     }
     finish(run, &utterances, &mut conversation);
     record_usage(run, &usage, &mut transcript);
-    let reason = failures
-        .get(run)
-        .map(|Failed(failure)| format!("{failure:?}"))
-        .unwrap_or_else(|_| "unknown".to_owned());
+    let failure = failures.get(run).ok().map(|Failed(failure)| failure.clone());
+    let reason = failure.as_ref().map_or_else(|| "unknown".to_owned(), |f| format!("{f:?}"));
+    // A transient provider failure (a stream that ended early, a rate limit,
+    // a retryable report) is not the end: the same prompt goes again after
+    // a backoff, up to MAX_PROVIDER_RETRIES, with the history restored to
+    // what it was before the failed run.
+    if let Some(rig_ecs::agent::Failure::Provider(report)) = &failure
+        && conversation.provider_retries < MAX_PROVIDER_RETRIES
+        && transient(report)
+        && let Some((_, history)) = conversation.last.clone()
+    {
+        conversation.provider_retries += 1;
+        let wait = std::time::Duration::from_secs(2u64.pow(conversation.provider_retries as u32));
+        conversation.history = history;
+        conversation.retry_at = Some(std::time::Instant::now() + wait);
+        transcript.push(Event::Retrying { reason: reason.clone(), attempt: conversation.provider_retries, wait_secs: wait.as_secs() });
+        return;
+    }
     transcript.push(Event::Failed(reason));
 }
 
@@ -264,4 +293,52 @@ pub fn message_text(parts: &MessageParts) -> String {
             .collect::<Vec<_>>()
             .join(""),
     }
+}
+
+/// Does this provider report look like something a second attempt can fix?
+fn transient(report: &rig::error::ErrorReport) -> bool {
+    use rig::error::ErrorKind;
+    // A replay divergence is a finding, never something to retry.
+    if matches!(report.kind, ErrorKind::Divergence) {
+        return false;
+    }
+    if report.retryable {
+        return true;
+    }
+    if matches!(report.http_status, Some(429 | 500 | 502 | 503 | 504 | 529)) {
+        return true;
+    }
+    let text = report.message.to_lowercase();
+    ["stream ended", "terminal record", "rate limit", "overloaded", "timed out", "timeout", "connection reset", "connection closed", "eof", "temporarily"]
+        .iter()
+        .any(|needle| text.contains(needle))
+        || matches!(report.kind, ErrorKind::Timeout)
+}
+
+/// The exclusive step that submits a retried prompt once its backoff has
+/// elapsed. Add it to `Update`.
+pub fn resubmit_when_due(world: &mut World) {
+    let due = {
+        let conversation = world.resource::<Conversation>();
+        conversation.active.is_none() && conversation.retry_at.is_some_and(|at| std::time::Instant::now() >= at)
+    };
+    if !due {
+        return;
+    }
+    let (prompt, history) = {
+        let mut conversation = world.resource_mut::<Conversation>();
+        conversation.retry_at = None;
+        let Some((prompt, history)) = conversation.last.clone() else { return };
+        conversation.history = history.clone();
+        (prompt, history)
+    };
+    let Some(agent) = world.get_resource::<AgentHandle>().map(|h| h.agent) else { return };
+    let run = spawn_run(world, agent, &history, &prompt, true, None);
+    world.entity_mut(run).insert(rig_ecs::bus::Scope("rigcoder".to_owned()));
+    if let Some(recorder) = world.get_resource::<rig_ecs::bus::EffectLogResource>().map(|r| r.0.clone()) {
+        rig_ecs::replay::stamp_run(world, run, &recorder);
+    }
+    let mut conversation = world.resource_mut::<Conversation>();
+    conversation.active = Some(run);
+    conversation.runs += 1;
 }

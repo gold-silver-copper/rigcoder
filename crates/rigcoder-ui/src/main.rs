@@ -284,6 +284,9 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
             Event::Denied { name, reason } => {
                 lines.push(Line::from(Span::styled(format!("⛔ {name}: {reason}"), Style::new().fg(Color::Red))));
             }
+            Event::Retrying { attempt, wait_secs, .. } => {
+                lines.push(Line::from(Span::styled(format!("↻ provider error, retrying in {wait_secs}s (attempt {attempt})"), Style::new().fg(Color::Yellow))));
+            }
             Event::Held { name, args } => {
                 lines.push(Line::from(Span::styled(format!("⏸ {name} {} (y approve / n deny)", one_line(args, 120)), Style::new().fg(Color::Magenta))));
             }

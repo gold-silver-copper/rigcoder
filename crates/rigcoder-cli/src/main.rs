@@ -293,6 +293,9 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
             Event::Denied { name, reason } => {
                 let _ = writeln!(stdout, "[denied] {name}: {reason}");
             }
+            Event::Retrying { reason, attempt, wait_secs } => {
+                let _ = writeln!(stdout, "[retrying in {wait_secs}s, attempt {attempt}] {}", short(reason, 300));
+            }
             Event::Held { name, args } => {
                 let _ = writeln!(stdout, "[held] {name} {}", short(args, 300));
             }

@@ -109,6 +109,7 @@ impl Plugin for RigcoderPlugin {
                     session::stream_text.after(RigSet::Fold),
                 ),
             )
+            .add_systems(bevy_app::Update, session::resubmit_when_due)
             .add_observer(session::announce_tool_results)
             .add_observer(session::on_settled)
             .add_observer(session::on_failed);
