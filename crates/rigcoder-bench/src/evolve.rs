@@ -18,28 +18,111 @@ use crate::{
     trial::{self, TrialRecord, TrialSpec},
 };
 
-/// What the improvement step is allowed to change. Everything else is the
+/// Everything any lane may change: the revert set. Everything else is the
 /// harness's, not the agent's.
 pub const MUTABLE: &[&str] = &[
     "crates/rigcoder/src/prompt.md",
     "crates/rigcoder/src/tools.rs",
+    "crates/rigcoder/src/tools/",
     "crates/rigcoder/src/lib.rs",
-    "crates/rigcoder/src/session.rs",
     "crates/rigcoder-cli/src/main.rs",
+    "crates/rigcoder/src/session.rs",
+    "crates/rigcoder/src/steer.rs",
 ];
 
 /// What the meta agent must never read: the held-out tasks, its own scores,
 /// and the harness that scores it.
-pub const META_FORBIDDEN: &[&str] = &["harness/slices/holdout.txt", "harness/ledger.jsonl", "crates/rigcoder-bench/"];
+pub const META_FORBIDDEN: &[&str] = &["harness/slices/holdout.txt", "harness/ledger.jsonl", "crates/rigcoder-bench/", "harness/notes/"];
+
+/// One kind of change per generation, so the ledger can say which kind
+/// moved the score.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum Lane {
+    /// The system prompt.
+    Prompt,
+    /// Tool descriptions and behaviours.
+    Tools,
+    /// The agent components (max tokens, turns, tool concurrency, temperature) and the CLI defaults.
+    Settings,
+    /// How tool results and history are shaped before the model sees them.
+    Shaping,
+    /// Gate and Judge steering systems.
+    Systems,
+}
+
+impl Lane {
+    pub const ALL: [Lane; 5] = [Lane::Prompt, Lane::Tools, Lane::Settings, Lane::Shaping, Lane::Systems];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Lane::Prompt => "prompt",
+            Lane::Tools => "tools",
+            Lane::Settings => "settings",
+            Lane::Shaping => "shaping",
+            Lane::Systems => "systems",
+        }
+    }
+
+    /// The files the lane may touch.
+    pub fn files(self) -> &'static [&'static str] {
+        match self {
+            Lane::Prompt => &["crates/rigcoder/src/prompt.md"],
+            Lane::Tools => &["crates/rigcoder/src/tools.rs", "crates/rigcoder/src/tools/"],
+            Lane::Settings => &["crates/rigcoder/src/lib.rs", "crates/rigcoder-cli/src/main.rs"],
+            Lane::Shaping => &["crates/rigcoder/src/session.rs"],
+            Lane::Systems => &["crates/rigcoder/src/steer.rs"],
+        }
+    }
+
+    fn levers(self) -> &'static str {
+        match self {
+            Lane::Prompt => "the system prompt: process, verification habits, when to stop, what to do before the final message",
+            Lane::Tools => "tool descriptions and behaviours: output limits, timeouts, error messages the model can act on, what a result shows",
+            Lane::Settings => "the agent components set in lib.rs::setup (MaxTokens, MaxTurns, ToolPolicy concurrency, Temperature) and the CLI defaults",
+            Lane::Shaping => "how tool results and history are shaped before the model sees them (session.rs)",
+            Lane::Systems => "Gate and Judge systems in steer.rs: deny or hold dangerous tool calls, rewrite over-long results, retry a turn that would settle with deliverables missing",
+        }
+    }
+
+    /// Pick the lane the digest points at, or the next in round-robin.
+    pub fn choose(digest: Option<&crate::digest::Digest>, previous: Option<Lane>) -> Lane {
+        if let Some(d) = digest
+            && d.failed.trials > 0
+        {
+            let f = &d.failed;
+            let p = &d.passed;
+            if f.timeouts > p.timeouts + 0.25 || f.truncations > p.truncations + 0.25 {
+                return Lane::Tools;
+            }
+            if f.ended_deliberating > p.ended_deliberating + 0.25 || f.repeated_calls > p.repeated_calls + 1.0 || f.calls_before_first_edit > p.calls_before_first_edit * 1.5 + 5.0 {
+                return Lane::Prompt;
+            }
+            if f.input_tokens > p.input_tokens * 1.5 && p.input_tokens > 0.0 {
+                return Lane::Shaping;
+            }
+            if f.no_settle > p.no_settle + 0.25 {
+                return Lane::Systems;
+            }
+        }
+        let index = previous.map_or(0, |l| (Lane::ALL.iter().position(|x| *x == l).unwrap_or(0) + 1) % Lane::ALL.len());
+        Lane::ALL[index]
+    }
+}
+
+/// Is `path` inside one of `files` (a file, or a directory prefix)?
+pub fn covered(files: &[&str], path: &str) -> bool {
+    files.iter().any(|f| if f.ends_with('/') { path.starts_with(f) } else { path == *f })
+}
 
 const META_TASK: &str = "You are improving rigcoder, the coding agent in this repository, so it scores higher on Terminal-Bench.
 
-Read {report} first: it has the benchmark results of the current version, and for every failed task the instruction, the tail of the agent's transcript, and the verifier's output.
+Read {report} first: it opens with a digest of what failed trials did more of than passed ones, then every failed trial in full (instruction, transcript, verifier output).
 
-Then change the agent. You may only edit these files: {mutable}. Typical levers, in order of leverage: the system prompt (prompt.md: process, verification habits, when to stop), tool descriptions and behaviours (tools.rs: output limits, timeouts, error messages the model can act on), the agent's settings (lib.rs: max tokens, tool concurrency), and how tool results are shaped (session.rs).
+This generation works in the {lane} lane: {levers}. You may only edit these files: {mutable}. Nothing else.
 
 Rules:
-- Make one coherent improvement aimed at the failure patterns you see, not many unrelated tweaks.
+- Make one coherent improvement aimed at the failure patterns the digest shows, not many unrelated tweaks.
 - Do not touch the harness/ directory, the rigcoder-bench crate, Cargo.toml files, or the model choice. Do not read {forbidden}.
 - Run `cargo check --workspace` with bash and make it pass before you finish.
 - Finish with a short note: what you changed and which failures it targets. Write that note to {note}.
@@ -97,6 +180,9 @@ pub struct IterateArgs {
     /// Score the best kept generation on the holdout slice at the end.
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     pub holdout: bool,
+    /// Force one lane for every generation instead of choosing from the digest.
+    #[arg(long, value_enum)]
+    pub lane: Option<Lane>,
 }
 
 pub fn provider_key(provider: &str) -> Option<&'static str> {
@@ -254,17 +340,22 @@ fn entry(root: &Path, generation: Option<usize>, slice: &str, decision: Option<D
         best_ci_low: best.1,
         model: args.model.clone(),
         attempts: args.attempts,
+        lane: None,
         job_dir: job_dir.display().to_string(),
         time: now(),
         summary,
     })
 }
 
-fn improve(root: &Path, args: &IterateArgs, report_path: &Path) -> Result<()> {
-    let note = report_path.with_file_name("improvement.md");
+fn improve(root: &Path, args: &IterateArgs, report_path: &Path, lane: Lane, generation: usize) -> Result<()> {
+    let notes_dir = root.join("harness").join("notes");
+    std::fs::create_dir_all(&notes_dir)?;
+    let note = notes_dir.join(format!("gen-{generation:03}-{}.md", lane.name()));
     let task = META_TASK
         .replace("{report}", &report_path.display().to_string())
-        .replace("{mutable}", &MUTABLE.join(", "))
+        .replace("{lane}", lane.name())
+        .replace("{levers}", lane.levers())
+        .replace("{mutable}", &lane.files().join(", "))
         .replace("{forbidden}", &META_FORBIDDEN.join(", "))
         .replace("{note}", &note.display().to_string());
     let host_bin = std::env::var("RIGCODER_HOST_BIN")
@@ -290,9 +381,10 @@ fn improve(root: &Path, args: &IterateArgs, report_path: &Path) -> Result<()> {
         cmd.env("RIGCODER_MODEL", model);
     }
     let _ = cmd.status()?;
-    // Whatever the meta run did outside the mutable set is undone.
+    // Whatever the meta run did outside its lane is undone (the note is the
+    // one file outside the lane it may write).
     let changed = git(root, &["diff", "--name-only"])?;
-    let outside: Vec<&str> = changed.lines().filter(|f| !MUTABLE.contains(f)).collect();
+    let outside: Vec<&str> = changed.lines().filter(|f| !covered(lane.files(), f)).collect();
     if !outside.is_empty() {
         println!("meta agent touched non-mutable files, reverting: {outside:?}");
         let mut argv = vec!["checkout", "--"];
@@ -303,10 +395,21 @@ fn improve(root: &Path, args: &IterateArgs, report_path: &Path) -> Result<()> {
     let check = Command::new("cargo").args(["check", "--workspace"]).current_dir(root).status()?;
     if !check.success() {
         println!("improvement does not compile; reverting");
-        let mut argv = vec!["checkout", "--"];
-        argv.extend(MUTABLE);
-        git(root, &argv)?;
+        revert_mutable(root)?;
     }
+    Ok(())
+}
+
+/// `git checkout --` over the mutable set, skipping paths git does not track.
+fn revert_mutable(root: &Path) -> Result<()> {
+    let tracked = git(root, &["ls-files", "--", "crates"])?;
+    let paths: Vec<&str> = tracked.lines().filter(|f| covered(MUTABLE, f)).collect();
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut argv = vec!["checkout", "--"];
+    argv.extend(paths);
+    git(root, &argv)?;
     Ok(())
 }
 
@@ -325,6 +428,8 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         .map(|e| (e.summary.score, e.summary.ci_low))
         .unwrap_or((-1.0, -1.0));
     let slice = slice_name(run_args);
+    let mut previous_lane: Option<Lane> = ledger::read(root)?.iter().rev().find_map(|e| e.lane);
+    let mut lane_this_generation: Option<Lane> = None;
 
     for generation in 0..args.generations {
         if !run_args.no_build {
@@ -334,13 +439,14 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         let summary = stats::summarize(&records);
         let decision = stats::keep_decision(summary.score, summary.ci_low, best.0, best.1);
         let mut e = entry(root, Some(generation), &slice, Some(decision), best, run_args, &job_dir, summary.clone())?;
+        e.lane = lane_this_generation;
         match decision {
             Decision::Kept | Decision::Tie => {
                 best = (summary.score, summary.ci_low);
-                let mut status = vec!["status", "--porcelain", "--"];
+                let mut status = vec!["status", "--porcelain", "--", "harness/notes"];
                 status.extend(MUTABLE);
                 if !git(root, &status)?.is_empty() {
-                    let mut add = vec!["add", "--"];
+                    let mut add = vec!["add", "--", "harness/notes"];
                     add.extend(MUTABLE);
                     git(root, &add)?;
                     let message = format!("evolve: generation {generation} scored {:.3} [{:.3}, {:.3}] ({decision:?})", summary.score, summary.ci_low, summary.ci_high);
@@ -350,9 +456,8 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
             }
             Decision::Reverted => {
                 println!("generation {generation}: {:.3} [{:.3}] below best {:.3} [{:.3}]; reverting", summary.score, summary.ci_low, best.0, best.1);
-                let mut argv = vec!["checkout", "--"];
-                argv.extend(MUTABLE);
-                git(root, &argv)?;
+                revert_mutable(root)?;
+                let _ = git(root, &["clean", "-fq", "--", "harness/notes"]);
             }
         }
         ledger::append(root, &e)?;
@@ -360,7 +465,12 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
             continue;
         }
         let report_path = report::write(&job_dir, generation, &summary, &records, best.0, best.1)?;
-        improve(root, &args, &report_path)?;
+        let digest = crate::digest::job(&job_dir).ok();
+        let lane = args.lane.unwrap_or_else(|| Lane::choose(digest.as_ref(), previous_lane));
+        println!("generation {}: lane {}", generation + 1, lane.name());
+        improve(root, &args, &report_path, lane, generation + 1)?;
+        previous_lane = Some(lane);
+        lane_this_generation = Some(lane);
     }
 
     if args.holdout && slice == "dev" {
@@ -370,4 +480,41 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         ledger::append(root, &entry(root, None, "holdout", None, best, run_args, &job_dir, summary)?)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod lane_tests {
+    use super::*;
+    use crate::digest::{Aggregate, Digest};
+
+    fn digest(failed: Aggregate, passed: Aggregate) -> Digest {
+        Digest { failed, passed, trials: Vec::new() }
+    }
+
+    #[test]
+    fn timeouts_point_at_tools_and_deliberation_at_prompt() {
+        let f = Aggregate { trials: 2, timeouts: 1.0, ..Default::default() };
+        let p = Aggregate { trials: 4, ..Default::default() };
+        assert_eq!(Lane::choose(Some(&digest(f, p)), None), Lane::Tools);
+        let f = Aggregate { trials: 2, ended_deliberating: 1.0, ..Default::default() };
+        let p = Aggregate { trials: 4, ended_deliberating: 0.2, ..Default::default() };
+        assert_eq!(Lane::choose(Some(&digest(f, p)), None), Lane::Prompt);
+    }
+
+    #[test]
+    fn no_signal_round_robins_and_no_failures_too() {
+        assert_eq!(Lane::choose(None, None), Lane::Prompt);
+        assert_eq!(Lane::choose(None, Some(Lane::Prompt)), Lane::Tools);
+        assert_eq!(Lane::choose(None, Some(Lane::Systems)), Lane::Prompt);
+        let d = digest(Aggregate::default(), Aggregate { trials: 3, ..Default::default() });
+        assert_eq!(Lane::choose(Some(&d), Some(Lane::Tools)), Lane::Settings);
+    }
+
+    #[test]
+    fn coverage_handles_files_and_directories() {
+        assert!(covered(Lane::Tools.files(), "crates/rigcoder/src/tools.rs"));
+        assert!(covered(Lane::Tools.files(), "crates/rigcoder/src/tools/bash.rs"));
+        assert!(!covered(Lane::Tools.files(), "crates/rigcoder/src/lib.rs"));
+        assert!(!covered(Lane::Prompt.files(), "harness/ledger.jsonl"));
+    }
 }

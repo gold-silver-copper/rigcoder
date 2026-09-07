@@ -19,6 +19,9 @@ pub struct Entry {
     pub best_ci_low: f64,
     pub model: String,
     pub attempts: usize,
+    /// The lane whose self-edit this generation measured (None for a baseline or holdout).
+    #[serde(default)]
+    pub lane: Option<crate::evolve::Lane>,
     pub job_dir: String,
     pub time: u64,
     #[serde(flatten)]
@@ -70,14 +73,15 @@ pub fn best_kept(root: &Path) -> Result<Option<Entry>> {
 }
 
 pub fn print(root: &Path) -> Result<()> {
-    println!("{:<4} {:<8} {:<9} {:<9} {:>6} {:>6} {:>6} {:>13} {:>7}", "gen", "slice", "commit", "decision", "score", "pass1", "passk", "95% CI", "trials");
+    println!("{:<4} {:<8} {:<9} {:<9} {:<8} {:>6} {:>6} {:>6} {:>13} {:>7}", "gen", "slice", "commit", "decision", "lane", "score", "pass1", "passk", "95% CI", "trials");
     for e in read(root)? {
         println!(
-            "{:<4} {:<8} {:<9} {:<9} {:>6.3} {:>6.3} {:>6.3} {:>6.3}–{:<6.3} {:>7}",
+            "{:<4} {:<8} {:<9} {:<9} {:<8} {:>6.3} {:>6.3} {:>6.3} {:>6.3}–{:<6.3} {:>7}",
             e.generation.map_or("-".to_owned(), |g| g.to_string()),
             e.slice,
             e.commit,
             e.decision.map_or("-".to_owned(), |d| format!("{d:?}").to_lowercase()),
+            e.lane.map_or("-", |l| l.name()),
             e.summary.score,
             e.summary.pass1,
             e.summary.passk,

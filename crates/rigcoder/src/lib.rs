@@ -8,6 +8,7 @@
 
 pub mod model;
 pub mod session;
+pub mod steer;
 pub mod tools;
 
 use std::path::PathBuf;
@@ -55,7 +56,7 @@ impl Plugin for RigcoderPlugin {
             model,
             max_turns,
         } = self.clone();
-        app.add_plugins((BusPlugin::default(), AgentPlugin::default()))
+        app.add_plugins((BusPlugin::default(), AgentPlugin::default(), steer::SteerPlugin))
             .insert_resource(Workspace { root: workspace })
             .insert_resource(model)
             .insert_resource(AgentBudget { max_turns })
