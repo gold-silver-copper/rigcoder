@@ -47,6 +47,25 @@ enum Command {
     Digest {
         job_dir: PathBuf,
     },
+    /// Replay a recorded trial on this machine, no model and no side effects: reports the first divergence, if any.
+    Replay {
+        trial_dir: PathBuf,
+        /// Use this system prompt instead of the compiled-in one (a proposed edit).
+        #[arg(long)]
+        prompt_file: Option<PathBuf>,
+        /// The host rigcoder binary (default target/release/rigcoder).
+        #[arg(long)]
+        host_bin: Option<PathBuf>,
+    },
+    /// Resume a recorded trial from a checkpoint in fresh containers and count verifier passes.
+    BranchFrom {
+        trial_dir: PathBuf,
+        turn: usize,
+        #[arg(long, default_value_t = 3)]
+        times: usize,
+        #[command(flatten)]
+        run: evolve::RunArgs,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -66,6 +85,8 @@ fn main() -> anyhow::Result<()> {
             eprintln!("wrote {}", path.display());
             Ok(())
         }
+        Command::Replay { trial_dir, prompt_file, host_bin } => evolve::replay(&root, &trial_dir, prompt_file.as_deref(), host_bin.as_deref()),
+        Command::BranchFrom { trial_dir, turn, times, run } => evolve::branch_from(&root, &trial_dir, turn, times, &run),
         Command::Summarize { job_dir } => {
             let trials = trial::read_job(&job_dir)?;
             let summary = stats::summarize(&trials);

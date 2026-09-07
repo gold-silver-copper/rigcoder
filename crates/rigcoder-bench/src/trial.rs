@@ -35,6 +35,7 @@ pub struct TrialSpec<'a> {
     pub model: &'a str,
     pub api_key: Option<(&'a str, &'a str)>,
     pub max_turns: usize,
+    pub checkpoint: bool,
 }
 
 const REMOTE_BIN: &str = "/usr/local/bin/rigcoder";
@@ -110,13 +111,14 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
     if let Some((key, value)) = spec.api_key {
         env.push((key, value));
     }
+    let checkpoint = if spec.checkpoint { " --checkpoint /logs/agent/scenes --checkpoint-tar" } else { "" };
     let agent = docker::exec(
         container,
         &task.workdir,
         &env,
         &format!(
             "{REMOTE_BIN} --cwd {} --max-turns {max_turns} --timeout-secs {timeout_secs} \
-             --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json --task-file /logs/agent/instruction.md \
+             --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json --task-file /logs/agent/instruction.md{checkpoint} \
              > /logs/agent/rigcoder.txt 2>&1; echo $? > /logs/agent/exit_code.txt",
             task.workdir
         ),
@@ -199,4 +201,82 @@ pub fn read_job(job_dir: &Path) -> Result<Vec<TrialRecord>> {
 fn last_lines(text: &str, n: usize) -> String {
     let lines: Vec<&str> = text.lines().collect();
     lines[lines.len().saturating_sub(n)..].join("\n")
+}
+
+/// Resume a recorded trial from one of its checkpoints, `times` times, in
+/// fresh containers whose workspace is restored from the checkpoint's
+/// tarball; returns how many resumed runs the verifier passed.
+pub fn branch_from(task: &Task, trial_dir: &Path, turn: usize, times: usize, binary: &Path, provider: &str, model: &str, api_key: Option<(&str, &str)>, max_turns: usize, out_dir: &Path) -> Result<usize> {
+    let scenes = trial_dir.join("agent").join("scenes");
+    let scene = scenes.join(format!("turn-{turn:03}.scene.json"));
+    let tar = scenes.join(format!("turn-{turn:03}.tar"));
+    if !scene.is_file() || !tar.is_file() {
+        bail!("no checkpoint {turn} under {}: run the trial with --checkpoint", scenes.display());
+    }
+    build_image(task)?;
+    let mut passed = 0;
+    for attempt in 1..=times {
+        let dir = out_dir.join(format!("{}__branch{turn}-{attempt}", task.name));
+        let _ = std::fs::create_dir_all(dir.join("agent"));
+        let _ = std::fs::create_dir_all(dir.join("verifier"));
+        let container = format!("rigcoder-branch-{}-{turn}-{attempt}-{}", task.name, std::process::id());
+        let result = (|| -> Result<f64> {
+            docker::start(&container, &task.image_tag(), &task.workdir, task.cpus, &task.memory)?;
+            docker::exec(&container, "/", &[], "mkdir -p /logs/agent /logs/verifier /tests /restore", Duration::from_secs(60))?;
+            docker::copy_in(&container, binary, REMOTE_BIN)?;
+            docker::exec(&container, "/", &[], &format!("chmod 755 {REMOTE_BIN}"), Duration::from_secs(30))?;
+            docker::copy_in(&container, &task.dir.join("tests"), "/tests")?;
+            docker::exec(&container, "/", &[], "if [ -d /tests/tests ]; then cp -r /tests/tests/. /tests/ && rm -rf /tests/tests; fi", Duration::from_secs(30))?;
+            // The workspace as it was at the checkpoint: wipe, then untar.
+            docker::copy_in(&container, &tar, "/restore/workspace.tar")?;
+            docker::exec(
+                &container,
+                "/",
+                &[],
+                &format!("find {w} -mindepth 1 -delete && tar -xf /restore/workspace.tar -C {w}", w = task.workdir),
+                Duration::from_secs(120),
+            )?;
+            docker::copy_in(&container, &scene, "/logs/agent/resume.scene.json")?;
+            let timeout_secs = task.agent_timeout_secs.saturating_sub(60).max(60).to_string();
+            let max_turns = max_turns.to_string();
+            let mut env: Vec<(&str, &str)> = vec![("RIGCODER_PROVIDER", provider), ("RIGCODER_MODEL", model), ("RUST_LOG", "warn")];
+            if let Some((key, value)) = api_key {
+                env.push((key, value));
+            }
+            docker::exec(
+                &container,
+                &task.workdir,
+                &env,
+                &format!(
+                    "{REMOTE_BIN} --cwd {} --max-turns {max_turns} --timeout-secs {timeout_secs} \
+                     --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json \
+                     --resume /logs/agent/resume.scene.json > /logs/agent/rigcoder.txt 2>&1; echo $? > /logs/agent/exit_code.txt",
+                    task.workdir
+                ),
+                Duration::from_secs(task.agent_timeout_secs),
+            )?;
+            let _ = docker::copy_out(&container, "/logs/agent/.", &dir.join("agent"));
+            docker::exec(
+                &container,
+                &task.workdir,
+                &[],
+                "bash /tests/test.sh > /logs/verifier/output.txt 2>&1; echo $? > /logs/verifier/exit_code.txt",
+                Duration::from_secs(task.verifier_timeout_secs),
+            )?;
+            let _ = docker::copy_out(&container, "/logs/verifier/.", &dir.join("verifier"));
+            let reward = docker::read_file(&container, "/logs/verifier/reward.txt")?.with_context(|| "no reward.txt")?;
+            reward.trim().parse::<f64>().with_context(|| format!("reward.txt: {reward:?}"))
+        })();
+        docker::remove(&container);
+        match result {
+            Ok(reward) => {
+                println!("branch from turn {turn}, attempt {attempt}: reward {reward:.1}");
+                if reward >= 1.0 {
+                    passed += 1;
+                }
+            }
+            Err(error) => println!("branch from turn {turn}, attempt {attempt}: ERROR {error:#}"),
+        }
+    }
+    Ok(passed)
 }

@@ -73,6 +73,39 @@ struct Args {
 #[derive(Resource)]
 struct Resume(Option<rig_ecs::agent::scene::WorldScene>);
 
+#[derive(Resource)]
+struct EffectLogOut {
+    path: Option<PathBuf>,
+    written: bool,
+}
+
+/// Once the run has ended, write the effect log; the world is not readable
+/// after `App::run` returns, so this runs inside the app.
+fn write_effect_log(world: &mut World) {
+    let over = {
+        let c = world.resource::<rigcoder::Conversation>();
+        c.runs > 0 && c.active.is_none()
+    };
+    let due = {
+        let out = world.resource::<EffectLogOut>();
+        over && !out.written && out.path.is_some()
+    };
+    if !due {
+        return;
+    }
+    let path = world.resource::<EffectLogOut>().path.clone().expect("checked");
+    let log = rigcoder::effect_log(world);
+    match serde_json::to_string(&log) {
+        Ok(json) => {
+            if let Err(error) = std::fs::write(&path, json) {
+                eprintln!("rigcoder: could not write the effect log to {}: {error}", path.display());
+            }
+        }
+        Err(error) => eprintln!("rigcoder: could not serialize the effect log: {error}"),
+    }
+    world.resource_mut::<EffectLogOut>().written = true;
+}
+
 /// The first user message of the first recorded completion.
 fn recorded_prompt(log: &rigcoder::EffectLog) -> Option<String> {
     log.iter().find_map(|record| match &record.kind {
@@ -173,18 +206,9 @@ fn main() -> anyhow::Result<()> {
         })
         .add_systems(PostStartup, start)
         .add_systems(Update, (report, watchdog));
+    app.insert_resource(EffectLogOut { path: effect_log_path, written: false })
+        .add_systems(bevy_app::Last, write_effect_log);
     let exit = app.run();
-    if let Some(path) = effect_log_path {
-        let log = rigcoder::effect_log(app.world());
-        match serde_json::to_string(&log) {
-            Ok(json) => {
-                if let Err(error) = std::fs::write(&path, json) {
-                    eprintln!("rigcoder: could not write the effect log to {}: {error}", path.display());
-                }
-            }
-            Err(error) => eprintln!("rigcoder: could not serialize the effect log: {error}"),
-        }
-    }
     match exit {
         AppExit::Success => Ok(()),
         AppExit::Error(code) => std::process::exit(code.get() as i32),

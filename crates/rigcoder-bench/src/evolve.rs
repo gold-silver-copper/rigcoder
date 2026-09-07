@@ -160,6 +160,9 @@ pub struct RunArgs {
     /// Job name (default: <label>-<unix time>).
     #[arg(long)]
     pub job_name: Option<String>,
+    /// Save a scene and a workspace tarball after every turn into <trial>/agent/scenes/.
+    #[arg(long)]
+    pub checkpoint: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -281,6 +284,7 @@ pub fn evaluate(root: &Path, args: &RunArgs, label: &str, tasks: &[String]) -> R
                         model,
                         api_key: key_name.zip(key_value.as_deref()),
                         max_turns: args.max_turns,
+                        checkpoint: args.checkpoint,
                     };
                     let record = trial::run(&spec);
                     let mut results = results.lock().unwrap();
@@ -517,4 +521,57 @@ mod lane_tests {
         assert!(!covered(Lane::Tools.files(), "crates/rigcoder/src/lib.rs"));
         assert!(!covered(Lane::Prompt.files(), "harness/ledger.jsonl"));
     }
+}
+
+/// Replay a recorded trial's effect log on this machine through the host
+/// `rigcoder`: exit 0 means the current prompt and tools reproduce the
+/// recorded requests exactly; exit 3 means a divergence, printed with the
+/// request that differed.
+pub fn replay(root: &Path, trial_dir: &Path, prompt_file: Option<&Path>, host_bin: Option<&Path>) -> Result<()> {
+    let log = trial_dir.join("agent").join("effects.json");
+    if !log.is_file() {
+        bail!("no effect log at {}", log.display());
+    }
+    let host_bin = host_bin.map(Path::to_path_buf).unwrap_or_else(|| root.join("target").join("release").join("rigcoder"));
+    let scratch = std::env::temp_dir().join(format!("rigcoder-replay-{}", now()));
+    std::fs::create_dir_all(&scratch)?;
+    let mut cmd = Command::new(&host_bin);
+    cmd.arg("--cwd").arg(&scratch).arg("--replay").arg(&log).arg("--provider").arg("gemini");
+    if let Some(prompt) = prompt_file {
+        cmd.arg("--prompt-file").arg(prompt);
+    }
+    println!("$ {} --cwd {} --replay {}{}", host_bin.display(), scratch.display(), log.display(), prompt_file.map_or(String::new(), |p| format!(" --prompt-file {}", p.display())));
+    let status = cmd.status()?;
+    let _ = std::fs::remove_dir_all(&scratch);
+    match status.code() {
+        Some(0) => {
+            println!("no divergence: the recorded trajectory reproduces under the current prompt and tools");
+            Ok(())
+        }
+        Some(3) => {
+            println!("divergence: a live run is needed from the turn printed above");
+            std::process::exit(3)
+        }
+        other => bail!("replay exited with {other:?}"),
+    }
+}
+
+/// `branch-from`: resume a recorded trial from a checkpoint `times` times.
+pub fn branch_from(root: &Path, trial_dir: &Path, turn: usize, times: usize, args: &RunArgs) -> Result<()> {
+    docker::available()?;
+    let task_name = trial_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.split("__").next())
+        .ok_or_else(|| anyhow::anyhow!("trial dir name is not <task>__<attempt>"))?;
+    let task = Task::load(&root.join(&args.tasks_dir), task_name)?;
+    let (provider, model) = args.model.split_once('/').unwrap_or(("gemini", &args.model));
+    let key_name = provider_key(provider);
+    let key_value = key_name.and_then(|k| std::env::var(k).ok());
+    let binary = root.join(&args.binary);
+    let out_dir = root.join("harness").join("runs").join(format!("branch-{task_name}-{}", now()));
+    std::fs::create_dir_all(&out_dir)?;
+    let passed = trial::branch_from(&task, trial_dir, turn, times, &binary, provider, model, key_name.zip(key_value.as_deref()), args.max_turns, &out_dir)?;
+    println!("branch from turn {turn}: {passed}/{times} passed; runs under {}", out_dir.display());
+    Ok(())
 }
