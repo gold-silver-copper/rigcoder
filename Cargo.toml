@@ -10,8 +10,8 @@ repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
 # rig, pinned to the head of https://github.com/0xPlaygrounds/rig/pull/2443 (feat/effect-bus).
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "a7eb63a91a0be8feb3cde217f6b69de00a15c6c5", default-features = false }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "a7eb63a91a0be8feb3cde217f6b69de00a15c6c5", default-features = false, features = ["reqwest", "rustls"] }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "8a2ecce113fccca955cb7836c5d924a2b39662a6", default-features = false }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "8a2ecce113fccca955cb7836c5d924a2b39662a6", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }

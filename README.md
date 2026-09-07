@@ -62,5 +62,5 @@ run mid-task, and an `EffectLog` can replay one.
 
 ## Dependency pin
 
-`Cargo.toml` pins `rig` and `rig-ecs` to commit `a7eb63a91` of `feat/effect-bus`.
+`Cargo.toml` pins `rig` and `rig-ecs` to commit `8a2ecce` of `feat/effect-bus` (rebased on main, includes rig PR #2471).
 To move the pin, change the `rev` in both workspace dependencies.

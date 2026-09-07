@@ -7050,7 +7050,7 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 [[package]]
 name = "rig"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "rig-core",
  "rig-effect-log",
@@ -7065,7 +7065,7 @@ dependencies = [
 [[package]]
 name = "rig-core"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "as-any",
  "async-stream",
@@ -7095,7 +7095,7 @@ dependencies = [
 [[package]]
 name = "rig-ecs"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -7111,7 +7111,7 @@ dependencies = [
 [[package]]
 name = "rig-effect-log"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "rig-core",
  "serde",
@@ -7121,7 +7121,7 @@ dependencies = [
 [[package]]
 name = "rig-fastembed"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "fastembed",
  "rig-core",
@@ -7134,7 +7134,7 @@ dependencies = [
 [[package]]
 name = "rig-helixdb"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "reqwest 0.13.4",
  "rig-core",
@@ -7146,7 +7146,7 @@ dependencies = [
 [[package]]
 name = "rig-lancedb"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "arrow-array",
  "futures",
@@ -7160,7 +7160,7 @@ dependencies = [
 [[package]]
 name = "rig-milvus"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "reqwest 0.13.4",
  "rig-core",
@@ -7173,7 +7173,7 @@ dependencies = [
 [[package]]
 name = "rig-reqwest"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "bytes",
  "futures",
@@ -7191,7 +7191,7 @@ dependencies = [
 [[package]]
 name = "rig-tungstenite"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=a7eb63a91a0be8feb3cde217f6b69de00a15c6c5#a7eb63a91a0be8feb3cde217f6b69de00a15c6c5"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=8a2ecce113fccca955cb7836c5d924a2b39662a6#8a2ecce113fccca955cb7836c5d924a2b39662a6"
 dependencies = [
  "futures",
  "rig-core",
