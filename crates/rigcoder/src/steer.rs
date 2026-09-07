@@ -270,34 +270,54 @@ impl Scope {
         path.starts_with(prefix)
     }
 
-    /// The first path that breaks the scope, with the rule it broke.
+    /// The first path that breaks the scope, with the rule it broke. The
+    /// most specific rule wins: an allowed file inside a denied directory
+    /// is allowed.
     pub fn violation<'a>(&self, paths: impl Iterator<Item = &'a str>) -> Option<(String, String)> {
         if self.allow.is_empty() && self.deny.is_empty() {
             return None;
         }
         for raw in paths {
             let path = self.normalise(raw);
-            if let Some(denied) = self.deny.iter().find(|d| Self::under(&path, d)) {
+            // An ancestor of an allowed path (a `cd` or an `ls` on the way) is fine.
+            if self.allow.iter().any(|a| a != &path && Self::under(a, &path)) {
+                continue;
+            }
+            let deepest_allow = self.allow.iter().filter(|a| Self::under(&path, a)).map(|a| a.components().count()).max();
+            let deepest_deny = self.deny.iter().filter(|d| Self::under(&path, d)).map(|d| d.components().count()).max();
+            if let Some(deny) = deepest_deny
+                && deepest_allow.is_none_or(|allow| allow < deny)
+            {
+                let denied = self.deny.iter().filter(|d| Self::under(&path, d)).max_by_key(|d| d.components().count()).expect("matched");
                 return Some((raw.to_owned(), format!("under the denied path {}", denied.display())));
             }
-            if !self.allow.is_empty() && !self.allow.iter().any(|a| Self::under(&path, a) || Self::under(a, &path)) {
+            if deepest_allow.is_some() {
+                continue;
+            }
+            // A directory above an allowed file (a `cd` or an `ls`) is fine.
+            if !self.allow.is_empty() && !self.allow.iter().any(|a| Self::under(a, &path)) {
                 return Some((raw.to_owned(), "outside the allowed paths".to_owned()));
             }
         }
         None
     }
 
-    /// Paths a bash command might write: every token that looks like a
-    /// path, conservatively (anything with a `/` or a file extension that
-    /// is not a flag), plus redirection targets.
-    pub fn bash_paths(command: &str) -> Vec<String> {
+    /// Paths a bash command might write: tokens with a `/` in them, and
+    /// dotted tokens that name an existing file under `root` (so `os.path`
+    /// or `1.0` are not paths), plus redirection targets. Conservative on
+    /// purpose: a denial is a tool result the model can act on.
+    pub fn bash_paths_in(root: &std::path::Path, command: &str) -> Vec<String> {
         command
             .split(|c: char| c.is_whitespace() || c == ';' || c == '|' || c == '&' || c == '(' || c == ')' || c == '\'' || c == '"' || c == '`')
             .map(|t| t.trim_start_matches(['>', '<']))
-            .filter(|t| !t.is_empty() && !t.starts_with('-') && !t.starts_with('$') && (t.contains('/') || (t.contains('.') && !t.ends_with('.'))))
-            .filter(|t| !t.starts_with("http://") && !t.starts_with("https://") && !t.contains("://"))
+            .filter(|t| !t.is_empty() && !t.starts_with('-') && !t.starts_with('$') && !t.contains("://"))
+            .filter(|t| t.contains('/') || (t.contains('.') && !t.ends_with('.') && root.join(t).is_file()))
             .map(str::to_owned)
             .collect()
+    }
+
+    pub fn bash_paths(command: &str) -> Vec<String> {
+        Self::bash_paths_in(std::path::Path::new("/nonexistent"), command)
     }
 }
 
@@ -314,7 +334,7 @@ pub fn gate_scope(
         let Ok(value) = serde_json::from_str::<serde_json::Value>(args) else { continue };
         let paths: Vec<String> = match slot.name.as_str() {
             "write_file" | "edit_file" => value["path"].as_str().map(|p| vec![p.to_owned()]).unwrap_or_default(),
-            "bash" => value["command"].as_str().map(Scope::bash_paths).unwrap_or_default(),
+            "bash" => value["command"].as_str().map(|c| Scope::bash_paths_in(&scope.root, c)).unwrap_or_default(),
             _ => continue,
         };
         if let Some((path, why)) = scope.violation(paths.iter().map(String::as_str)) {
@@ -347,6 +367,19 @@ mod scope_tests {
         assert_eq!(s.violation(["harness/iterate.rs"].into_iter()).unwrap().1, "under the denied path /repo/harness/");
         assert_eq!(s.violation(["crates/rigcoder/src/lib.rs"].into_iter()).unwrap().1, "outside the allowed paths");
         assert!(s.violation(["/repo/Cargo.toml"].into_iter()).is_some());
+    }
+
+    #[test]
+    fn an_allowed_file_inside_a_denied_directory_is_allowed() {
+        let s = Scope {
+            root: PathBuf::from("/repo"),
+            allow: vec![PathBuf::from("/repo/harness/notes/gen-001-prompt.md"), PathBuf::from("/repo/crates/rigcoder/src/prompt.md")],
+            deny: vec![PathBuf::from("/repo/harness/")],
+        };
+        assert!(s.violation(["harness/notes/gen-001-prompt.md"].into_iter()).is_none());
+        assert!(s.violation(["harness/notes"].into_iter()).is_none(), "a directory above an allowed file");
+        assert!(s.violation(["harness/ledger.jsonl"].into_iter()).is_some());
+        assert!(Scope::bash_paths("python3 -c \"import os; os.path.join(1.0, 2)\"").is_empty());
     }
 
     #[test]

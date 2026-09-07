@@ -396,7 +396,11 @@ fn improve(root: &Path, args: &IterateArgs, report_path: &Path, lane: Lane, gene
     // Whatever the meta run did outside its lane is undone (the note is the
     // one file outside the lane it may write).
     let changed = git(root, &["diff", "--name-only"])?;
-    let outside: Vec<&str> = changed.lines().filter(|f| !covered(lane.files(), f)).collect();
+    // The ledger and the notes are the loop's own writes, not the agent's.
+    let outside: Vec<&str> = changed
+        .lines()
+        .filter(|f| !covered(lane.files(), f) && *f != "harness/ledger.jsonl" && !f.starts_with("harness/notes/"))
+        .collect();
     if !outside.is_empty() {
         println!("SCOPE GATE MISSED: meta agent touched files outside its lane, reverting: {outside:?}");
         let mut argv = vec!["checkout", "--"];
@@ -449,7 +453,7 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         if !run_args.no_build {
             build_linux(root)?;
         }
-        let (records, job_dir) = evaluate(root, run_args, &format!("generation-{generation:03}"), &tasks)?;
+        let (records, job_dir) = evaluate(root, run_args, &format!("gen-{generation:03}"), &tasks)?;
         let summary = stats::summarize(&records);
         let decision = stats::keep_decision(summary.score, summary.ci_low, best.0, best.1);
         let best_before = best;
@@ -459,11 +463,12 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         match decision {
             Decision::Kept | Decision::Tie => {
                 best = (summary.score, summary.ci_low);
+                let present: Vec<&str> = MUTABLE.iter().copied().filter(|p| root.join(p).exists()).collect();
                 let mut status = vec!["status", "--porcelain", "--", "harness/notes"];
-                status.extend(MUTABLE);
+                status.extend(present.iter().copied());
                 if !git(root, &status)?.is_empty() {
                     let mut add = vec!["add", "--", "harness/notes"];
-                    add.extend(MUTABLE);
+                    add.extend(present.iter().copied());
                     git(root, &add)?;
                     let message = format!("evolve: generation {generation} scored {:.3} [{:.3}, {:.3}] ({decision:?})", summary.score, summary.ci_low, summary.ci_high);
                     git(root, &["commit", "-q", "-m", &message])?;
