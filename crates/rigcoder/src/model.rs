@@ -55,7 +55,9 @@ impl ModelChoice {
             "anthropic" => Provider::Anthropic,
             "openai" => Provider::OpenAi,
             "gemini" => Provider::Gemini,
-            other => anyhow::bail!("unknown provider {other:?}; expected anthropic, openai or gemini"),
+            other => {
+                anyhow::bail!("unknown provider {other:?}; expected anthropic, openai or gemini")
+            }
         };
         let model = model.unwrap_or_else(|| match provider {
             Provider::Anthropic => Self::DEFAULT_ANTHROPIC.to_owned(),

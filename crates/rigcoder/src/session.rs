@@ -473,7 +473,7 @@ mod retry_tests {
         completion::{CompletionResponse, ModelRef, ProviderCapabilities},
         effect::{FamilyDescriptor, HandlerDescriptor, HandlerKey},
         error::{ErrorKind, ErrorReport},
-        serve::{OutcomeSink, Serve},
+        serve::{Dispatch, Reply, Serve},
     };
     use rig_ecs::bus::Handlers;
     use std::{collections::VecDeque, sync::Mutex, time::Instant};
@@ -492,21 +492,20 @@ mod retry_tests {
                 layers: Vec::new(),
             }
         }
-        async fn serve(&self, _: EffectKind, sink: OutcomeSink) {
+        async fn serve(&self, _: EffectKind, _dispatch: Dispatch) -> Reply {
             let answer = self
                 .0
                 .lock()
                 .unwrap()
                 .pop_front()
                 .expect("unexpected extra provider call");
-            sink.resolve(answer.map(|content| {
+            Reply::Outcome(answer.map(|content| {
                 Outcome::Completion(CompletionResponse::new(
                     content,
                     rig::completion::Usage::new(),
                     "scripted",
                 ))
             }))
-            .await;
         }
     }
     #[derive(Resource)]

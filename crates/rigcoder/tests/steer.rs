@@ -9,7 +9,7 @@ use rig::{
     completion::{CompletionResponse, ModelRef, ProviderCapabilities, Usage},
     effect::{EffectKind, FamilyDescriptor, HandlerDescriptor, HandlerKey, Outcome},
     message::AssistantContent,
-    serve::{OutcomeSink, Serve},
+    serve::{Dispatch, Reply, Serve},
 };
 use rig_ecs::{agent::MessageParts, bus::Handlers};
 use rigcoder::{Event, ModelChoice, RigcoderPlugin, Transcript, steer::Steer};
@@ -35,7 +35,7 @@ impl Serve for Scripted {
         }
     }
 
-    async fn serve(&self, kind: EffectKind, sink: OutcomeSink) {
+    async fn serve(&self, kind: EffectKind, _dispatch: Dispatch) -> Reply {
         if let EffectKind::Completion { request, .. } = &kind {
             self.seen.lock().unwrap().push(
                 request
@@ -51,12 +51,11 @@ impl Serve for Scripted {
             .unwrap()
             .pop_front()
             .unwrap_or_else(|| vec![AssistantContent::text("(script over)")]);
-        sink.resolve(Ok(Outcome::Completion(CompletionResponse::new(
+        Reply::Outcome(Ok(Outcome::Completion(CompletionResponse::new(
             next,
             Usage::new(),
             "scripted",
         ))))
-        .await;
     }
 }
 

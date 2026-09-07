@@ -1,0 +1,28 @@
+[package]
+name = "rigcoder-verify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Application verification, cassette replay and checkpoint equivalence for rigcoder."
+
+[dependencies]
+rig = { workspace = true }
+rig-core = { workspace = true }
+rig-ecs = { workspace = true }
+rig-effect-log = { workspace = true }
+rig-cassette = { workspace = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+assert_fs = "1"
+sha2 = "0.10"
+bytes = "1"
+
+[dev-dependencies]
+httpmock = "0.8"

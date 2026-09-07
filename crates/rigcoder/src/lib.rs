@@ -14,17 +14,21 @@ pub mod tools;
 
 use std::{path::PathBuf, sync::Arc};
 
-use bevy_app::{App, Plugin, Startup};
+use bevy_app::{App, Plugin, Startup, Update};
 use bevy_ecs::prelude::*;
+use rig::serve::ServingPolicy;
 use rig_ecs::{
     agent::scene::SceneExtensions,
     agent::{
         AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output, Owner,
         PolicyVersion, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
     },
-    bus::{Bound, BusPlugin, BusSet, EffectLogResource, Handlers, Replay, RigSchedule},
+    bus::{
+        Bound, BusSet, EffectLogResource, Handlers, Replay, RigSchedule, install_bus,
+        run_to_quiescence,
+    },
     prelude::*,
-    systems::AgentPlugin,
+    systems::install_agent,
 };
 
 pub use model::ModelChoice;
@@ -92,11 +96,10 @@ impl Plugin for RigcoderPlugin {
             mode,
             prompt_override,
         } = self.clone();
-        app.add_plugins((
-            BusPlugin::default(),
-            AgentPlugin::default(),
-            steer::SteerPlugin,
-        ));
+        install_bus(app.world_mut(), ServingPolicy::default());
+        install_agent(app.world_mut());
+        app.add_systems(Update, run_to_quiescence);
+        app.add_plugins(steer::SteerPlugin);
         // Every effect is recorded: the log replays on a host without keys.
         EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
         app.insert_resource(Workspace { root: workspace })
@@ -126,7 +129,7 @@ impl Plugin for RigcoderPlugin {
                     session::stream_text.after(RigSet::Fold),
                 ),
             )
-            .add_systems(bevy_app::Update, session::resubmit_when_due)
+            .add_systems(Update, session::resubmit_when_due.before(run_to_quiescence))
             .add_systems(
                 RigSchedule,
                 session::resubmit_when_due
