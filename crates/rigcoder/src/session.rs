@@ -38,7 +38,7 @@ pub struct Conversation {
     pub runs: usize,
     /// The last prompt and the history it was submitted after, so a run
     /// that fails on a transient provider error can be submitted again.
-    last: Option<(String, Vec<MessageParts>)>,
+    last: Option<(String, Vec<MessageParts>, crate::RunSettings)>,
     /// A resubmission due at this instant.
     retry_at: Option<std::time::Instant>,
     pub provider_retries: usize,
@@ -137,14 +137,35 @@ pub fn submit(world: &mut World, prompt: &str) -> Option<Entity> {
         return None;
     }
     world.resource_mut::<Conversation>().provider_retries = 0;
-    start_run(world, prompt, true)
+    let settings = world.resource::<crate::RunSettings>().clone();
+    start_run(world, prompt, true, settings)
 }
 
-fn start_run(world: &mut World, prompt: &str, announce: bool) -> Option<Entity> {
+fn start_run(
+    world: &mut World,
+    prompt: &str,
+    announce: bool,
+    settings: crate::RunSettings,
+) -> Option<Entity> {
     let agent = world.get_resource::<AgentHandle>()?.agent;
     if world.resource::<Conversation>().active.is_some() {
         return None;
     }
+    if settings.max_tokens == 0 {
+        world.resource_mut::<Transcript>().push(Event::Failed(
+            "max_tokens must be greater than zero".to_owned(),
+        ));
+        return None;
+    }
+    let Some(sequence) = world.resource::<Conversation>().runs.checked_add(1) else {
+        world
+            .resource_mut::<Transcript>()
+            .push(Event::Failed("run sequence exhausted".to_owned()));
+        return None;
+    };
+    world
+        .entity_mut(agent)
+        .insert(rig_ecs::agent::MaxTokens(Some(settings.max_tokens)));
     let history = world.resource::<Conversation>().history.clone();
     // Recorded handlers retain their old descriptors. Include the current
     // implementation and steering configuration in the declared policy so
@@ -152,9 +173,12 @@ fn start_run(world: &mut World, prompt: &str, announce: bool) -> Option<Entity> 
     let policy = rig_effect_log::stable_hash(&(
         env!("CARGO_PKG_VERSION"),
         include_str!("lib.rs"),
+        include_str!("model.rs"),
+        include_str!("checkpoint.rs"),
         include_str!("tools.rs"),
         include_str!("steer.rs"),
         include_str!("session.rs"),
+        &settings,
         world.resource::<crate::steer::Steer>(),
         world
             .get_resource::<crate::steer::Scope>()
@@ -173,20 +197,23 @@ fn start_run(world: &mut World, prompt: &str, announce: bool) -> Option<Entity> 
     }
     {
         let mut conversation = world.resource_mut::<Conversation>();
-        conversation.last = Some((prompt.to_owned(), history.clone()));
+        conversation.last = Some((prompt.to_owned(), history.clone(), settings.clone()));
     }
-    let run = spawn_run(world, agent, &history, prompt, true, None);
+    let run = spawn_run(world, agent, &history, prompt, settings.stream, None);
+    world
+        .entity_mut(run)
+        .insert(crate::RunConfiguration(settings));
     {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.active = Some(run);
-        conversation.runs += 1;
+        conversation.runs = sequence;
     }
     // The run's program identity goes into the effect log under its scope:
     // every granted tool as a required row, so a replay advertises the same
     // tools even where the record never called them.
     world
         .entity_mut(run)
-        .insert(rig_ecs::bus::Scope("rigcoder".to_owned()));
+        .insert(rig_ecs::bus::Scope(format!("rigcoder/run/{sequence}")));
     let compatible = world.resource_scope(|world, setup: Mut<crate::Setup>| match &setup.mode {
         crate::Mode::Live => Ok(()),
         crate::Mode::Replay(log) => rig_ecs::replay::check_replayable(world, run, log),
@@ -304,6 +331,7 @@ pub fn on_settled(
     transcript.push(Event::Settled { answer });
 }
 
+#[allow(clippy::too_many_arguments)] // Bevy injects independent event/query resources.
 pub fn on_failed(
     failed: On<Add, Failed>,
     failures: Query<&Failed>,
@@ -312,6 +340,7 @@ pub fn on_failed(
     mut conversation: ResMut<Conversation>,
     mut transcript: ResMut<Transcript>,
     setup: Res<crate::Setup>,
+    settings: Query<&crate::RunConfiguration>,
 ) {
     let run = failed.event().entity;
     if conversation.active != Some(run) {
@@ -330,9 +359,9 @@ pub fn on_failed(
     // tool calls. Completed tools may have irreversible side effects, so a
     // later provider failure must preserve their history and end the run.
     if let Some(rig_ecs::agent::Failure::Provider(report)) = &failure
-        && conversation.provider_retries < MAX_PROVIDER_RETRIES
+        && conversation.provider_retries < settings.get(run).map_or(0, |s| usize::from(s.0.provider_retries))
         && transient(report)
-        && let Some((_, history)) = conversation.last.clone()
+        && let Some((_, history, _)) = conversation.last.clone()
         && !conversation.history.iter().skip(history.len()).any(|parts| matches!(parts,
             MessageParts::Assistant { content, .. } if content.iter().any(|part| matches!(part, AssistantContent::ToolCall(_)))))
     {
@@ -343,7 +372,7 @@ pub fn on_failed(
         let wait = if matches!(setup.mode, crate::Mode::Replay(_)) {
             std::time::Duration::ZERO
         } else {
-            std::time::Duration::from_secs(2u64.pow(conversation.provider_retries as u32))
+            std::time::Duration::from_secs(1u64 << conversation.provider_retries.min(6))
         };
         conversation.history = history;
         conversation.retry_at = Some(std::time::Instant::now() + wait);
@@ -447,16 +476,16 @@ pub fn resubmit_when_due(world: &mut World) {
     if !due {
         return;
     }
-    let prompt = {
+    let (prompt, settings) = {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.retry_at = None;
-        let Some((prompt, history)) = conversation.last.clone() else {
+        let Some((prompt, history, settings)) = conversation.last.clone() else {
             return;
         };
         conversation.history = history.clone();
-        prompt
+        (prompt, settings)
     };
-    if start_run(world, &prompt, false).is_none() {
+    if start_run(world, &prompt, false, settings).is_none() {
         world.resource_mut::<Transcript>().push(Event::Failed(
             "could not retry: no agent is registered".to_owned(),
         ));
@@ -562,6 +591,125 @@ mod retry_tests {
         dir
     }
     use std::path::PathBuf;
+
+    fn settings(tokens: u64, stream: bool, retries: u8) -> crate::RunSettings {
+        crate::RunSettings {
+            max_tokens: tokens,
+            stream,
+            provider_retries: retries,
+        }
+    }
+
+    #[test]
+    fn automatic_retries_keep_the_original_configuration() {
+        let dir = scratch("frozen-settings");
+        let mut live = app(
+            &dir,
+            crate::Mode::Live,
+            Some(vec![transient_failure(), transient_failure(), done()]),
+        );
+        live.insert_resource(settings(512, false, 1));
+        submit(live.world_mut(), "first").unwrap();
+        live.insert_resource(settings(1024, true, 3));
+        drive(&mut live);
+        let log = crate::effect_log(live.world());
+        assert_eq!(log.records.len(), 2, "one original attempt and one retry");
+        for record in log.iter() {
+            let EffectKind::Completion { request, stream } = &record.kind else {
+                panic!("expected completion");
+            };
+            assert_eq!(request.max_tokens, Some(512));
+            assert!(!stream);
+        }
+        submit(live.world_mut(), "second").unwrap();
+        drive(&mut live);
+        let log = crate::effect_log(live.world());
+        let EffectKind::Completion { request, stream } = &log.records.last().unwrap().kind else {
+            panic!("expected completion");
+        };
+        assert_eq!(request.max_tokens, Some(1024));
+        assert!(*stream);
+    }
+
+    #[test]
+    fn differently_configured_runs_replay_from_one_log() {
+        let dir = scratch("settings-replay");
+        let mut live = app(&dir, crate::Mode::Live, Some(vec![done(), done()]));
+        for (prompt, tokens) in [("first", 512), ("second", 1024)] {
+            live.insert_resource(settings(tokens, false, 0));
+            submit(live.world_mut(), prompt).unwrap();
+            drive(&mut live);
+        }
+        let log = crate::effect_log(live.world());
+        assert_eq!(log.header.programs.len(), 2);
+        let mut replay = App::new();
+        replay.insert_resource(settings(512, false, 0));
+        let mut plugin =
+            crate::RigcoderPlugin::live(dir, crate::ModelChoice::parse("gemini", None).unwrap(), 8);
+        plugin.mode = crate::Mode::Replay(log.into());
+        replay
+            .add_plugins(plugin)
+            .add_systems(bevy_app::PostStartup, |world: &mut World| {
+                submit(world, "first").unwrap();
+            });
+        // Replay must reproduce subsequent host input before the bus declares
+        // quiescence; otherwise the next recorded request is rightly missing.
+        use bevy_ecs::schedule::IntoScheduleConfigs;
+        replay.add_systems(
+            rig_ecs::bus::RigSchedule,
+            (|world: &mut World| {
+                let conversation = world.resource::<Conversation>();
+                if conversation.runs == 1 && !conversation.is_busy() {
+                    world.insert_resource(settings(1024, false, 0));
+                    submit(world, "second").unwrap();
+                    world.resource_mut::<rig_ecs::bus::Progress>().mark();
+                }
+            })
+            .after(rig_ecs::systems::RigSet::Settle),
+        );
+        drive(&mut replay);
+        let events = &replay.world().resource::<Transcript>().events;
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, Event::Settled { .. }))
+                .count(),
+            2,
+            "{events:?}"
+        );
+        assert!(
+            !events.iter().any(|e| matches!(e, Event::Failed(_))),
+            "{events:?}"
+        );
+    }
+
+    #[test]
+    fn scene_retains_nondefault_configuration_and_run_sequence() {
+        let dir = scratch("settings-scene");
+        let mut live = app(&dir, crate::Mode::Live, Some(vec![done()]));
+        live.insert_resource(settings(512, false, 1));
+        live.world_mut().resource_mut::<Conversation>().runs = 6;
+        submit(live.world_mut(), "first").unwrap();
+        let scene = rig_ecs::agent::scene::save_world(live.world_mut()).unwrap();
+        let scene = serde_json::from_slice(&serde_json::to_vec(&scene).unwrap()).unwrap();
+        let mut resumed = app(&dir, crate::Mode::Live, Some(vec![done(), done()]));
+        let run = crate::checkpoint::resume(resumed.world_mut(), &scene).unwrap();
+        let restored = &resumed
+            .world()
+            .get::<crate::RunConfiguration>(run)
+            .unwrap()
+            .0;
+        assert_eq!(restored.max_tokens, 512);
+        assert!(!restored.stream);
+        assert_eq!(restored.provider_retries, 1);
+        assert_eq!(resumed.world().resource::<Conversation>().runs, 7);
+        drive(&mut resumed);
+        let next = submit(resumed.world_mut(), "next").unwrap();
+        assert_eq!(
+            resumed.world().get::<rig_ecs::bus::Scope>(next).unwrap().0,
+            "rigcoder/run/8"
+        );
+    }
 
     #[test]
     fn retry_keeps_both_recorded_attempts_and_replays_them() {

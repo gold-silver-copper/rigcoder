@@ -7,6 +7,7 @@ publish = false
 description = "Application verification, cassette replay and checkpoint equivalence for rigcoder."
 
 [dependencies]
+rigcoder = { path = "../rigcoder" }
 rig = { workspace = true }
 rig-core = { workspace = true }
 rig-ecs = { workspace = true }

@@ -79,23 +79,88 @@ impl std::fmt::Display for ModelChoice {
     }
 }
 
+/// Explicit provider connection for hosts that own transport, credentials and
+/// endpoint routing. Insert before startup to bypass environment-key lookup.
+#[derive(Resource, Clone)]
+pub struct ModelConnection {
+    pub base_url: String,
+    api_key: String,
+    http: rig::http_client::BoxedHttpClient,
+}
+
+impl ModelConnection {
+    pub fn new(
+        base_url: impl Into<String>,
+        api_key: impl Into<String>,
+        http: rig::http_client::BoxedHttpClient,
+    ) -> Self {
+        Self {
+            base_url: base_url.into(),
+            api_key: api_key.into(),
+            http,
+        }
+    }
+}
+
+impl std::fmt::Debug for ModelConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // URLs can also contain credentials; neither endpoint nor transport
+        // internals belong in diagnostics.
+        f.debug_struct("ModelConnection").finish_non_exhaustive()
+    }
+}
+
 /// Register the chosen model under [`MODEL_KEY`]; the handler entity is what
 /// the agent's `UsesModel` points at.
 pub fn register(handlers: &mut Handlers, choice: &ModelChoice) -> Result<Entity, ErrorReport> {
+    register_with_connection(handlers, choice, None)
+}
+
+/// Register the normal product provider adapter with an optional host connection.
+/// A supplied connection never falls back to environment credentials.
+pub fn register_with_connection(
+    handlers: &mut Handlers,
+    choice: &ModelChoice,
+    connection: Option<&ModelConnection>,
+) -> Result<Entity, ErrorReport> {
     let label = choice.model.as_str();
     match choice.provider {
         Provider::Anthropic => {
-            let client = anthropic::Client::from_env().map_err(provider_error)?;
+            let client = match connection {
+                Some(connection) => anthropic::Client::builder()
+                    .api_key(connection.api_key.clone())
+                    .base_url(&connection.base_url)
+                    .http_client(connection.http.clone())
+                    .build()
+                    .map_err(provider_error)?,
+                None => anthropic::Client::from_env().map_err(provider_error)?,
+            };
             let model = client.completion_model(label);
             handlers.register(MODEL_KEY, CompletionAdapter::new(label, model))
         }
         Provider::OpenAi => {
-            let client = openai::Client::from_env().map_err(provider_error)?;
+            let client = match connection {
+                Some(connection) => openai::Client::builder()
+                    .api_key(connection.api_key.clone())
+                    .base_url(&connection.base_url)
+                    .http_client(connection.http.clone())
+                    .build()
+                    .map_err(provider_error)?,
+                None => openai::Client::from_env().map_err(provider_error)?,
+            };
             let model = client.completion_model(label);
             handlers.register(MODEL_KEY, CompletionAdapter::new(label, model))
         }
         Provider::Gemini => {
-            let client = gemini::Client::from_env().map_err(provider_error)?;
+            let client = match connection {
+                Some(connection) => gemini::Client::builder()
+                    .api_key(connection.api_key.clone())
+                    .base_url(&connection.base_url)
+                    .http_client(connection.http.clone())
+                    .build()
+                    .map_err(provider_error)?,
+                None => gemini::Client::from_env().map_err(provider_error)?,
+            };
             let model = client.completion_model(label);
             handlers.register(MODEL_KEY, CompletionAdapter::new(label, model))
         }

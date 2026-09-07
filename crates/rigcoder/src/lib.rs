@@ -44,6 +44,30 @@ pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
 /// without touching Rust.
 pub const SYSTEM_PROMPT: &str = include_str!("prompt.md");
 
+/// Per-run provider settings shared by the CLI, UI and verification hosts.
+/// Insert before setup, or change between runs. Zero retries disables automatic
+/// whole-prompt retries; model/tool turn limits remain on `RigcoderPlugin`.
+#[derive(Resource, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RunSettings {
+    pub stream: bool,
+    pub max_tokens: u64,
+    pub provider_retries: u8,
+}
+
+impl Default for RunSettings {
+    fn default() -> Self {
+        Self {
+            stream: true,
+            max_tokens: 16_000,
+            provider_retries: session::MAX_PROVIDER_RETRIES as u8,
+        }
+    }
+}
+
+/// Settings frozen when a run is submitted, also retained by scene checkpoints.
+#[derive(Component, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RunConfiguration(pub RunSettings);
+
 /// Where the agent works. Every relative tool path resolves against it and
 /// every bash command starts in it.
 #[derive(Resource, Debug, Clone)]
@@ -103,6 +127,7 @@ impl Plugin for RigcoderPlugin {
         // Every effect is recorded: the log replays on a host without keys.
         EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
         app.insert_resource(Workspace { root: workspace })
+            .init_resource::<RunSettings>()
             .insert_resource(model)
             .insert_resource(AgentBudget { max_turns })
             .insert_resource(Setup {
@@ -155,6 +180,7 @@ pub fn setup(
     mut commands: Commands,
     workspace: Res<Workspace>,
     choice: Res<ModelChoice>,
+    connection: Option<Res<model::ModelConnection>>,
     budget: Res<AgentBudget>,
     setup: Res<Setup>,
     mut transcript: ResMut<Transcript>,
@@ -162,6 +188,7 @@ pub fn setup(
 ) {
     let _ =
         extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
+    let _ = extensions.register_component::<RunConfiguration>("rigcoder.run_settings");
     let (model, tools) = match &setup.mode {
         Mode::Replay(_) => {
             let model = bound
@@ -196,10 +223,9 @@ pub fn setup(
                 .iter()
                 .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
                 .map(|(e, _)| e);
-            let model = match existing
-                .map(Ok)
-                .unwrap_or_else(|| model::register(&mut handlers, &choice))
-            {
+            let model = match existing.map(Ok).unwrap_or_else(|| {
+                model::register_with_connection(&mut handlers, &choice, connection.as_deref())
+            }) {
                 Ok(model) => model,
                 Err(report) => {
                     transcript.push(Event::Failed(format!(
