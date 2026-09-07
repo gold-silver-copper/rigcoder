@@ -43,6 +43,8 @@ pub(super) struct Sandbox {
     pub toolchain: PathBuf,
     #[cfg(target_os = "macos")]
     developer: PathBuf,
+    #[cfg(target_os = "macos")]
+    xcode_preferences: PathBuf,
     pub compile: assert_fs::TempDir,
     runtime: assert_fs::TempDir,
     deadline: Option<Instant>,
@@ -125,6 +127,8 @@ impl Sandbox {
             toolchain,
             #[cfg(target_os = "macos")]
             developer,
+            #[cfg(target_os = "macos")]
+            xcode_preferences: PathBuf::from("/Library/Preferences/com.apple.dt.Xcode.plist"),
             compile: temporary()?,
             runtime: temporary()?,
             deadline,
@@ -259,6 +263,13 @@ impl Sandbox {
             profile.push_str(&format!(
                 "(allow file-read* (subpath {}))\n",
                 quote(read_root)?
+            ));
+            // xcrun checks the host's already-accepted Xcode license here.
+            // Reading this one plist does not grant preference-directory access
+            // or permission to change/accept a license inside the sandbox.
+            profile.push_str(&format!(
+                "(allow file-read* (literal {}))\n",
+                quote(&self.xcode_preferences)?
             ));
         }
         profile.push_str(&format!(

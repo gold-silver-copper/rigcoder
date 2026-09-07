@@ -13,9 +13,12 @@ fn selected_xcode_frameworks_are_readable_only_by_the_compile_profile() {
     std::fs::write(&framework, "selected framework").unwrap();
     let outside = host.path().join("unrelated");
     std::fs::write(&outside, "private host data").unwrap();
+    let preferences = host.path().join("com.apple.dt.Xcode.plist");
+    std::fs::write(&preferences, "accepted license state").unwrap();
     let project = project();
     let mut sandbox = Sandbox::new().unwrap();
     sandbox.developer = developer.canonicalize().unwrap();
+    sandbox.xcode_preferences = preferences.canonicalize().unwrap();
     for mode in [Mode::Compile, Mode::Test] {
         let writable = match mode {
             Mode::Compile => sandbox.compile.path(),
@@ -23,7 +26,7 @@ fn selected_xcode_frameworks_are_readable_only_by_the_compile_profile() {
         }
         .canonicalize()
         .unwrap();
-        for path in [&framework, &outside] {
+        for path in [&framework, &preferences, &outside] {
             // A trusted read probe exercises the actual generated profile;
             // Sandbox::run's separate executable allowlist remains unchanged.
             let mut command = sandbox
@@ -44,16 +47,40 @@ fn selected_xcode_frameworks_are_readable_only_by_the_compile_profile() {
                 .stderr(Stdio::piped())
                 .process_group(0);
             let result = execute(command, Duration::from_secs(5)).unwrap();
-            let allowed = matches!(mode, Mode::Compile) && path == &framework;
+            let allowed = matches!(mode, Mode::Compile) && path != &outside;
             assert_eq!(result.code == Some(0), allowed, "{result:?}");
             assert!(!result.timed_out && !result.output_limit, "{result:?}");
             if allowed {
-                assert_eq!(result.stdout, "selected framework");
+                assert_eq!(result.stdout, std::fs::read_to_string(path).unwrap());
             } else {
                 assert!(result.stdout.is_empty(), "{result:?}");
             }
         }
     }
+    let mut command = sandbox
+        .command(
+            &project.path().canonicalize().unwrap(),
+            Path::new("/bin/sh"),
+            &sandbox.compile.path().canonicalize().unwrap(),
+            &sandbox.compile.path().canonicalize().unwrap(),
+            Mode::Compile,
+        )
+        .unwrap();
+    command
+        .args(["-c", "printf changed > \"$1\"", "license-write-probe"])
+        .arg(&sandbox.xcode_preferences)
+        .env_clear()
+        .current_dir(project.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0);
+    let result = execute(command, Duration::from_secs(5)).unwrap();
+    assert_ne!(result.code, Some(0), "{result:?}");
+    assert_eq!(
+        std::fs::read_to_string(&preferences).unwrap(),
+        "accepted license state"
+    );
 }
 
 fn project() -> assert_fs::TempDir {
