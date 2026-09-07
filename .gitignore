@@ -3,3 +3,4 @@ target/
 .env
 harness/runs/
 harness/bin/
+harness/tasks/

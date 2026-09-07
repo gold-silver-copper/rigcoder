@@ -14,9 +14,10 @@ Three crates:
 | `crates/rigcoder` | the agent: `RigcoderPlugin`, the system prompt (`prompt.md`), six tools (`read_file`, `write_file`, `edit_file`, `list_files`, `grep`, `bash`), and the transcript systems |
 | `crates/rigcoder-cli` | `rigcoder`: headless, one task in, transcript out; what the benchmark harness runs inside task containers |
 | `crates/rigcoder-ui` | `rigcoder-ui`: a terminal UI, Bevy driving ratatui over crossterm via `bevy_ratatui` (Bevy 0.19 needs its `main` branch, pinned by commit) |
+| `crates/rigcoder-bench` | `rigcoder-bench`: the Terminal-Bench runner (Docker directly, no framework) and the self-improvement loop |
 
-Plus `harness/`, the self-improvement loop against Terminal-Bench via Harbor
-(see `harness/README.md`).
+Plus `harness/`: the task slices, the Linux build script and the ledger of the
+self-improvement loop (see `harness/README.md`).
 
 ## Run
 

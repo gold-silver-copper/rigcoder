@@ -1,73 +1,182 @@
 # The improvement harness
 
-Runs rigcoder against Terminal-Bench through [Harbor](https://github.com/harbor-framework/harbor)
-and lets rigcoder edit itself between generations.
+Runs rigcoder against Terminal-Bench 2.0 task directories through Docker,
+and lets rigcoder edit itself between generations. All of it is Rust:
+`crates/rigcoder-bench`, binary `rigcoder-bench`. No benchmark framework
+sits in between; the runner controls each Docker step.
 
 ## Pieces
 
-- `rigcoder_agent.py`: a Harbor `BaseInstalledAgent`. `install` uploads the
-  Linux `rigcoder` binary into the task container; `run` executes it in `/app`
-  on the task instruction with the transcript written to `/logs/agent/`, which
-  Harbor copies into the trial directory.
-- `build-linux.sh`: cross-builds that binary in a `rust:1.95` Docker container
-  (cargo caches in named volumes), into `harness/bin/`.
-- `iterate.py`: the loop. Build, evaluate, keep-or-revert, improve, repeat.
-  The improve step runs the host `rigcoder` on this repository with a
-  meta-task and a report of the failed trials; it may only edit the files in
-  `MUTABLE` (the prompt, the tools, the agent settings, the transcript shaping,
-  the CLI), and a change that does not `cargo check` is reverted.
-  Kept generations are commits on the `evolve` branch; `ledger.jsonl` records
-  every generation's score and rewards.
+- `crates/rigcoder-bench`:
+  - `run`: evaluate the current Linux binary on a slice. Per task: build the
+    image from `environment/Dockerfile` (natively, so the arm64 binary matches
+    an arm64 container), start a container with the task's `cpus`/`memory`,
+    copy the binary in, run the agent on `instruction.md` in the
+    Dockerfile's `WORKDIR` under the task's agent timeout, then install a fresh
+    `tests/` and run
+    `bash /tests/test.sh` under the verifier timeout, read
+    `/logs/verifier/reward.txt`, copy `/logs/agent` and `/logs/verifier` out.
+  - `iterate`: the loop. Build, evaluate with `-k` attempts, keep or revert,
+    let rigcoder edit itself, repeat; then score the best kept generation on
+    the holdout slice.
+  - `ledger`: the ledger as a table. `summarize <job>`: one job's metrics.
+  - `digest <job>`: the failure digest (what failed trials did more of than
+    passed ones), also written as `digest.json`.
+  - `replay <trial> [--prompt-file P]`: replay a recorded trial on this
+    machine through the host `rigcoder`: the model and the tools answer from
+    `agent/effects.json`, nothing is called and nothing is written. Exit 0
+    means the current prompt and tools reproduce the recorded requests; exit
+    3 reports an identity or request divergence. That is the cheap
+    check for "did this edit change the trajectory" before paying for a run.
+  - `branch-from <trial> <turn> [--times N]`: resume a trial recorded with
+    `run --checkpoint` from that turn in fresh containers (workspace restored
+    from the checkpoint tarball, scene loaded) and count verifier passes: the
+    fast inner loop for one failed trial.
+- `build-linux.sh`: cross-builds the Linux `rigcoder` in a `rust:1.95` Docker
+  container into `harness/bin/` (gitignored).
+- `slices/dev.txt` (20 tasks) and `slices/holdout.txt` (10, disjoint): the
+  task sets. The loop optimizes on dev; holdout is the check that it learned
+  something general, and the meta agent is told never to read it.
+- `tasks/` (gitignored): a checkout of the dataset,
+  `git clone https://github.com/laude-institute/terminal-bench-2 harness/tasks`.
+- `ledger.jsonl`: one JSON object per evaluation.
 
-## First run
+## The score and the keep rule
 
-```sh
-uv tool install harbor
-export ANTHROPIC_API_KEY=...
-./harness/build-linux.sh
-# baseline, no self-edit:
-python3 harness/iterate.py --generations 1 --no-improve -i 'hello-*' -n 2
-# then let it iterate:
-python3 harness/iterate.py --generations 5 -i 'hello-*' -i 'fix-*' -n 4
-```
+Evaluation runs `-k` attempts per task (default 3) and reports the mean
+reward, pass@1 (mean over tasks of the fraction of attempts passing), pass@k
+(a task counts if any attempt passed) and a 95% Wilson interval on the
+per-trial pass rate. A generation is kept when its lower bound is at least
+the best kept lower bound and its mean has not dropped; a tie keeps and is
+recorded as one; anything else reverts the mutable files. Unit tests in
+`crates/rigcoder-bench/src/stats.rs` pin the rule.
 
-`-i` globs select tasks from `terminal-bench@2.0`; run the full set by
-omitting them. Results land in `harness/runs/<job>/`, with `report.md` and
-`improvement.md` per generation.
+An incomplete evaluation fails without publishing a score. Image builds, artifact
+copies, verifier exits and finite rewards in `0..=1` are checked; stale verifier
+files are cleared after the agent stops. Every job gets an exclusive directory.
+Each iterate invocation measures a fresh baseline for its provider, model and
+slice instead of comparing against unrelated historical ledger rows.
+
+Every trial records tokens (from rigcoder's `usage` transcript event), tool
+calls, wall time and any harness-side error, in `result.json` and summed on
+the ledger line.
+
+## Steering systems
+
+rigcoder's tool calls are effect entities, so three small systems in
+`crates/rigcoder/src/steer.rs` do what hooks would: a `BusSet::Gate` system
+denies bash commands on a deny list (`find /`, recursive greps of `/`,
+`rm -rf /`) with a reason the model reads, or holds ones on a hold list for
+approval (automatic in the CLI, `y`/`n` in the TUI); a `BusSet::Judge` system
+cuts over-long tool results to head and tail for history while the record
+keeps the handler output and the result keeps its success/failure status. A
+`RigSet::Judge` system turns a text-only answer while a `--deliverable` file is
+missing into a retry naming the files. Handler output can itself be bounded:
+bash drains stdout/stderr into fixed
+head/tail captures, and large reads return an outline. On Unix, shell deadlines
+and cancellation terminate the process group and stop readers even if a detached
+descendant holds a pipe open; deliberately detached processes are not a sandboxed
+process tree. Invalid steering regexes fail closed, and cancelled approval holds
+are removed. The rules live in the `Steer` resource (the settings lane); the systems are the
+systems lane. `crates/rigcoder/tests/steer.rs` pins them.
+
+Transient provider failures may retry the current prompt up to three times,
+with backoff, only before that request has produced tool work. A new user request
+resets the retry budget. Backoff remains busy and can be cancelled; effect-log
+publication waits for all attempts and fails the CLI if the requested file cannot
+be written. Tests cover failure after a tool, cancellation during backoff and
+record/replay across failed and successful attempts.
+
+## Recording, replay, checkpoints
+
+Every fresh run can write an effect log (`--effect-log`, always on in trials).
+Replay validates the saved settings, tool/source and steering-policy fingerprint,
+as well as every recorded request, before reporting success. It binds recorded
+handlers in grant order and checks replayability. The log stores the complete
+handler output before presentation shaping, subject to each tool's own capture
+limits. Exact replay is a trajectory diagnostic; it does not test a changed tool
+implementation by executing it.
+
+`--checkpoint DIR` saves the run graph after completed tool batches and at terminal
+settlement. Resume recounts the materialized turns and continues a saved graph
+without reissuing completed work. `--checkpoint-tar` also snapshots the workspace;
+its checkpoint directory must be outside that workspace to avoid self-inclusion.
+A scene-only directory may be inside it. Archive, scene and write failures fail
+the run; existing snapshots cannot be overwritten with a new run's reused names.
+`--resume SCENE` restores the graph, while the caller must restore the matching
+workspace separately. `branch-from` handles that restoration in a fresh container
+and refuses system-root, traversal and symlink workspace destinations.
+
+Logs written after `--resume` contain continuation effects, not the original
+prefix; they are not standalone inputs to plain `--replay`. A scene also does not
+persist all host resources or provide an exactly-once filesystem transaction.
+`crates/rigcoder/tests/replay.rs` covers replay and checkpoint/resume behavior.
+
+## The improve step
+
+Runs the host `rigcoder` (`target/release/rigcoder`) on this repository with
+a meta-task, `report.md` from the failed trials, and one lane (prompt, tools,
+settings, shaping or systems) chosen from the digest or forced with `--lane`.
+The lane is enforced before dispatch using canonical write/edit paths and an
+explicit note-file exception. Bash is disabled while `Scope` is active; reads
+remain available. The trusted harness runs `cargo check` after cleaning changes.
+
+Tracked, staged and untracked changes outside the lane are restored after the
+agent exits, including staged changes masked by matching working-tree contents.
+The generated ledger is preserved. These are recovery safeguards rather than
+an isolation boundary for ignored files or arbitrary host code. Self-improvement
+requires a clean index and worktree, except the generated unstaged ledger. It
+creates `evolve` when absent or resumes it, never resets an existing branch,
+and stops for inspection if the agent changes HEAD or the symbolic branch.
+
+Kept generations commit actual changed lane files and the current note, without
+requiring optional directories to exist. Committed notes remain in
+`harness/notes/`; rejected notes remain with their job artifacts. The host binary
+is rebuilt after accepted edits, and `meta_commit` identifies the improver.
+`--pr` opens a pull request for a kept generation when explicitly requested.
+The improve step records its own effect log and scene checkpoints.
+
+`--no-improve` preserves branch, commits, index and user edits. `--no-build` is
+for evaluation only: self-edits and the final holdout rebuild the current source.
+Built binaries use `harness/bin/rigcoder-linux-aarch64` or `-x86_64`, defaulting
+to the host architecture. Custom binaries require `--no-build`.
 
 ## Running on macOS with colima
 
-Harbor's prebuilt task images are amd64-only; pass `--force-build` so the
-environments are built natively from their Dockerfiles and the arm64 binary
-matches. If the docker CLI config points at Docker Desktop's credential
-helper, give harbor and the build script an empty config plus the colima
-socket:
+Install GNU coreutils (`brew install coreutils`) for the host image-build
+timeout. The runner accepts GNU `timeout` or Homebrew's `gtimeout` on `PATH`
+and checks this dependency before starting. Containers need their own GNU
+`timeout` command as well.
+
+If the docker CLI config points at Docker Desktop's credential helper, give
+the runner an empty config plus the colima socket:
 
 ```sh
 colima start pi --cpu 8 --memory 16
 mkdir -p /tmp/dockercfg && echo '{"cliPluginsExtraDirs":["/opt/homebrew/lib/docker/cli-plugins"]}' > /tmp/dockercfg/config.json
 export DOCKER_CONFIG=/tmp/dockercfg DOCKER_HOST=unix://$HOME/.colima/pi/docker.sock
-export PYTHONPATH=$PWD RIGCODER_TIMEOUT_SECS=800
-harbor run -d terminal-bench@2.0 -a harness.rigcoder_agent:RigcoderAgent \
-  -m gemini/gemini-3.8-flash --ae GEMINI_API_KEY=$GEMINI_API_KEY \
-  -i fix-git -i regex-log -n 4 --force-build -o harness/runs
+export GEMINI_API_KEY=...
+./harness/build-linux.sh
+cargo build --release -p rigcoder-bench -p rigcoder-cli
+# baseline on the dev slice, 3 attempts per task, no self-edit:
+./target/release/rigcoder-bench iterate --generations 1 --no-improve -k 3 --no-build
+# then let it iterate:
+./target/release/rigcoder-bench iterate --generations 5 -k 3
 ```
 
-## Baseline (2026-09-06)
+Only the benchmarked provider's key is passed into containers, and it is
+never printed. Results land in `harness/runs/<prefix>-<label>-<unique-id>/<task>__<attempt>/` with
+`agent/`, `verifier/`, `instruction.md` and `result.json`, plus
+`summary.json`, `report.md` and `improvement.md` per job. `report.md` stays
+within 400 KiB; oversized evidence is preserved in linked `report.full.md`, with
+a bounded UTF-8 head/tail excerpt for the meta agent. These task containers run
+the agent as root and do not isolate against a malicious agent.
 
-Four tasks, one attempt each, reward and tool calls / wall time:
+## History
 
-| task | gemini-3.1-pro-preview | gemini-3.8-flash (default) |
-|---|---|---|
-| fix-git | 1.0, 14 calls, 49 s | 1.0, 24 calls, 26 s |
-| openssl-selfsigned-cert | 1.0, 22 calls, 93 s | 1.0, 50 calls, 137 s |
-| sqlite-db-truncate | 1.0, 17 calls, 110 s | 1.0, 19 calls, 43 s |
-| regex-log | 1.0, 22 calls, 213 s | 1.0, 55 calls, 218 s |
-
-regex-log first scored 0: its bare `ubuntu:24.04` image has no CA store and
-rig's default transport panicked instead of returning an error. The adapter
-now installs `ca-certificates`, and the panic is fixed upstream in
-[rig PR #2471](https://github.com/0xPlaygrounds/rig/pull/2471).
-
-`iterate.py` (the self-edit loop) has not been run yet; the Harbor
-invocation and result parsing it wraps are the ones above.
+The first evolve run (Harbor-based, since replaced by this runner; one
+attempt per task, six tasks, gemini-3.8-flash) went 0.833 → 0.833 → 1.0.
+Its self-edits fixed a real bug in the bash tool (a timed-out pipeline left
+children holding the pipes; now the process group is killed) and taught
+the agent that a text-only reply ends the run. The earlier four-task
+baselines: gemini-3.1-pro-preview and gemini-3.8-flash both 4/4.

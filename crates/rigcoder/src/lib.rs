@@ -6,25 +6,34 @@
 //! and the CLI show is read off components as the bus writes them; nothing
 //! here awaits.
 
+pub mod checkpoint;
 pub mod model;
 pub mod session;
+pub mod steer;
 pub mod tools;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::prelude::*;
 use rig_ecs::{
+    agent::scene::SceneExtensions,
     agent::{
-        AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output,
-        Owner, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
+        AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output, Owner,
+        PolicyVersion, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
     },
-    bus::{BusPlugin, BusSet, Handlers, RigSchedule},
+    bus::{Bound, BusPlugin, BusSet, EffectLogResource, Handlers, Replay, RigSchedule},
     prelude::*,
     systems::AgentPlugin,
 };
 
 pub use model::ModelChoice;
+pub use rig_effect_log::EffectLog;
+
+/// The effect log recorded so far.
+pub fn effect_log(world: &World) -> EffectLog {
+    world.resource::<EffectLogResource>().log()
+}
 pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
 
 /// The system prompt, kept as a file so the improvement harness can edit it
@@ -38,6 +47,17 @@ pub struct Workspace {
     pub root: PathBuf,
 }
 
+/// Live: the provider model and the real tools. Replay: every recorded key
+/// (the model, the tools) answered from an effect log, so a run replays on
+/// a host with no keys and no side effects; the first request that differs
+/// from its record fails the run with the divergence.
+#[derive(Debug, Clone, Default)]
+pub enum Mode {
+    #[default]
+    Live,
+    Replay(Arc<EffectLog>),
+}
+
 /// The whole agent as one plugin: the bus, the agent runtime, the model and
 /// tool handlers, the agent entity, and the systems that keep a transcript.
 #[derive(Debug, Clone)]
@@ -46,6 +66,21 @@ pub struct RigcoderPlugin {
     pub model: ModelChoice,
     /// Model calls per run: the tool loop's budget.
     pub max_turns: usize,
+    pub mode: Mode,
+    /// Use this system prompt instead of the compiled-in `prompt.md`.
+    pub prompt_override: Option<String>,
+}
+
+impl RigcoderPlugin {
+    pub fn live(workspace: PathBuf, model: ModelChoice, max_turns: usize) -> Self {
+        Self {
+            workspace,
+            model,
+            max_turns,
+            mode: Mode::Live,
+            prompt_override: None,
+        }
+    }
 }
 
 impl Plugin for RigcoderPlugin {
@@ -54,20 +89,49 @@ impl Plugin for RigcoderPlugin {
             workspace,
             model,
             max_turns,
+            mode,
+            prompt_override,
         } = self.clone();
-        app.add_plugins((BusPlugin::default(), AgentPlugin::default()))
-            .insert_resource(Workspace { root: workspace })
+        app.add_plugins((
+            BusPlugin::default(),
+            AgentPlugin::default(),
+            steer::SteerPlugin,
+        ));
+        // Every effect is recorded: the log replays on a host without keys.
+        EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
+        app.insert_resource(Workspace { root: workspace })
             .insert_resource(model)
             .insert_resource(AgentBudget { max_turns })
+            .insert_resource(Setup {
+                mode,
+                prompt_override,
+            })
+            .init_resource::<SceneExtensions>()
+            .init_resource::<checkpoint::Checkpoint>()
+            .init_resource::<checkpoint::MaterialisedTurns>()
+            .add_observer(checkpoint::count_materialised)
+            .add_systems(
+                RigSchedule,
+                checkpoint::save_between_turns
+                    .after(RigSet::Materialise)
+                    .before(RigSet::Settle),
+            )
             .init_resource::<Conversation>()
             .init_resource::<Transcript>()
-            .add_systems(Startup, setup)
+            .add_systems(Startup, (bind_replayers, setup).chain())
             .add_systems(
                 RigSchedule,
                 (
                     session::announce_tool_calls.in_set(BusSet::Gate),
                     session::stream_text.after(RigSet::Fold),
                 ),
+            )
+            .add_systems(bevy_app::Update, session::resubmit_when_due)
+            .add_systems(
+                RigSchedule,
+                session::resubmit_when_due
+                    .after(checkpoint::save_between_turns)
+                    .before(RigSet::Settle),
             )
             .add_observer(session::announce_tool_results)
             .add_observer(session::on_settled)
@@ -76,29 +140,77 @@ impl Plugin for RigcoderPlugin {
 }
 
 #[derive(Resource, Debug, Clone, Copy)]
-struct AgentBudget {
+pub struct AgentBudget {
     max_turns: usize,
 }
 
 /// Register the model and the tools, spawn the agent, grant it every tool.
-fn setup(
+#[allow(clippy::too_many_arguments)] // Bevy injects these independent system parameters.
+pub fn setup(
     mut handlers: Handlers,
+    bound: Query<(Entity, &Bound)>,
     mut commands: Commands,
     workspace: Res<Workspace>,
     choice: Res<ModelChoice>,
     budget: Res<AgentBudget>,
+    setup: Res<Setup>,
     mut transcript: ResMut<Transcript>,
+    mut extensions: ResMut<SceneExtensions>,
 ) {
-    let model = match model::register(&mut handlers, &choice) {
-        Ok(model) => model,
-        Err(report) => {
-            transcript.push(Event::Failed(format!("could not register the model: {report}")));
-            return;
+    let _ =
+        extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
+    let (model, tools) = match &setup.mode {
+        Mode::Replay(_) => {
+            let model = bound
+                .iter()
+                .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
+                .map(|(e, _)| e);
+            let Some(model) = model else {
+                transcript.push(Event::Failed(
+                    "the effect log records no model exchange".to_owned(),
+                ));
+                return;
+            };
+            let mut tools: Vec<(usize, String, Entity)> = bound
+                .iter()
+                .filter(|(_, b)| b.key.as_str().starts_with("tool:"))
+                .map(|(e, b)| {
+                    let name = &b.key.as_str()["tool:".len()..];
+                    let rank = tools::NAMES
+                        .iter()
+                        .position(|n| *n == name)
+                        .unwrap_or(tools::NAMES.len());
+                    (rank, name.to_owned(), e)
+                })
+                .collect();
+            tools.sort();
+            (model, tools.into_iter().map(|(_, _, e)| e).collect())
+        }
+        Mode::Live => {
+            // A model already registered under the key (a test's scripted one)
+            // is used as it is; otherwise the provider's is registered.
+            let existing = bound
+                .iter()
+                .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
+                .map(|(e, _)| e);
+            let model = match existing
+                .map(Ok)
+                .unwrap_or_else(|| model::register(&mut handlers, &choice))
+            {
+                Ok(model) => model,
+                Err(report) => {
+                    transcript.push(Event::Failed(format!(
+                        "could not register the model: {report}"
+                    )));
+                    return;
+                }
+            };
+            (model, tools::register_all(&mut handlers, &workspace.root))
         }
     };
-    let tools = tools::register_all(&mut handlers, &workspace.root);
+    let prompt = setup.prompt_override.as_deref().unwrap_or(SYSTEM_PROMPT);
     let preamble = format!(
-        "{SYSTEM_PROMPT}\nWorkspace directory: {}\n",
+        "{prompt}\nWorkspace directory: {}\n",
         workspace.root.display()
     );
     let agent = commands
@@ -114,6 +226,9 @@ fn setup(
             MaxTurns(budget.max_turns),
             InvalidCalls::default(),
             ToolPolicy { concurrency: 4 },
+            // Replay identity: the systems and settings this crate adds beyond
+            // the graph, named so a log knows what it was recorded under.
+            PolicyVersion(format!("rigcoder-{}", env!("CARGO_PKG_VERSION"))),
             UsesModel(model),
         ))
         .id();
@@ -125,4 +240,24 @@ fn setup(
         model,
         tools,
     });
+}
+
+/// How `setup` binds the model and the tools, and which system prompt it
+/// gives the agent.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct Setup {
+    pub mode: Mode,
+    pub prompt_override: Option<String>,
+}
+
+/// In replay mode, bind a replayer for every recorded key before `setup`
+/// looks the handler entities up (commands apply between the two).
+fn bind_replayers(mut handlers: Handlers, setup: Res<Setup>, mut transcript: ResMut<Transcript>) {
+    if let Mode::Replay(log) = &setup.mode
+        && let Err(report) = Replay::default().register(&mut handlers, log)
+    {
+        transcript.push(Event::Failed(format!(
+            "could not bind the replayers: {report}"
+        )));
+    }
 }

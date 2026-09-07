@@ -54,17 +54,23 @@ fn main() -> anyhow::Result<()> {
     }
     App::new()
         .add_plugins((
-            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f32(1. / 30.))),
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f32(
+                1. / 30.,
+            ))),
             RatatuiPlugins::default(),
-            RigcoderPlugin {
-                workspace,
-                model: ModelChoice::from_env(),
-                max_turns: 200,
-            },
+            RigcoderPlugin::live(workspace, ModelChoice::from_env(), 200),
         ))
         .insert_resource(Ui {
             follow: true,
             ..default()
+        })
+        .insert_resource(rigcoder::steer::Steer {
+            auto_approve: false,
+            hold: vec![
+                r"(^|[;&|]\s*)(rm\s+-[a-zA-Z]*r|git\s+(push|reset\s+--hard|clean)|sudo)\b"
+                    .to_owned(),
+            ],
+            ..Default::default()
         })
         .add_systems(PreUpdate, keys)
         .add_systems(Update, (deliver, draw).chain())
@@ -76,9 +82,10 @@ fn keys(
     mut messages: MessageReader<KeyMessage>,
     mut ui: ResMut<Ui>,
     conversation: Res<Conversation>,
+    mut approvals: ResMut<rigcoder::steer::Approvals>,
     mut exit: MessageWriter<AppExit>,
 ) {
-    let busy = conversation.active.is_some();
+    let busy = conversation.is_busy();
     for message in messages.read() {
         let key = &message.0;
         if key.kind == KeyEventKind::Release {
@@ -101,6 +108,12 @@ fn keys(
                 }
             }
             KeyCode::Esc if busy => ui.stop = true,
+            KeyCode::Char('y') if !approvals.pending.is_empty() && ui.input.is_empty() => {
+                approvals.approve_next()
+            }
+            KeyCode::Char('n') if !approvals.pending.is_empty() && ui.input.is_empty() => {
+                approvals.deny_next()
+            }
             KeyCode::Backspace => {
                 ui.input.pop();
             }
@@ -147,7 +160,7 @@ fn draw(
     model: Res<ModelChoice>,
 ) -> Result {
     ui.frame = ui.frame.wrapping_add(1);
-    let busy = conversation.active.is_some();
+    let busy = conversation.is_busy();
     let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"][(ui.frame / 3) % 10];
     let input_lines = ui.input.lines().count().clamp(1, 8) as u16 + 2;
     context.draw(|frame| {
@@ -166,7 +179,10 @@ fn draw(
         };
         frame.render_widget(
             Line::from(vec![
-                Span::styled(" rigcoder ", Style::new().add_modifier(Modifier::BOLD).reversed()),
+                Span::styled(
+                    " rigcoder ",
+                    Style::new().add_modifier(Modifier::BOLD).reversed(),
+                ),
                 Span::raw(format!(" {}  ", *model)),
                 Span::styled(workspace.root.display().to_string(), Style::new().dim()),
                 Span::raw("  "),
@@ -199,7 +215,11 @@ fn draw(
             body,
         );
 
-        let prompt_title = if busy { " Esc stops the run " } else { " prompt " };
+        let prompt_title = if busy {
+            " Esc stops the run "
+        } else {
+            " prompt "
+        };
         frame.render_widget(
             Paragraph::new(ui.input.as_str())
                 .wrap(Wrap { trim: false })
@@ -238,9 +258,15 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
     for event in events {
         match event {
             Event::User { text } => {
-                lines.push(Line::from(Span::styled("you", Style::new().fg(Color::Cyan).bold())));
+                lines.push(Line::from(Span::styled(
+                    "you",
+                    Style::new().fg(Color::Cyan).bold(),
+                )));
                 for l in text.lines() {
-                    lines.push(Line::from(Span::styled(l.to_owned(), Style::new().fg(Color::Cyan))));
+                    lines.push(Line::from(Span::styled(
+                        l.to_owned(),
+                        Style::new().fg(Color::Cyan),
+                    )));
                 }
                 lines.push(Line::default());
             }
@@ -259,14 +285,23 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
             Event::ToolResult { name, output, ok } => {
                 let color = if *ok { Color::DarkGray } else { Color::Red };
                 let mark = if *ok { "✓" } else { "✗" };
-                lines.push(Line::from(Span::styled(format!("{mark} {name}"), Style::new().fg(color))));
+                lines.push(Line::from(Span::styled(
+                    format!("{mark} {name}"),
+                    Style::new().fg(color),
+                )));
                 let shown: Vec<&str> = output.lines().take(COLLAPSED_RESULT_LINES).collect();
                 for l in &shown {
-                    lines.push(Line::from(Span::styled(format!("  {}", one_line(l, 160)), Style::new().fg(color))));
+                    lines.push(Line::from(Span::styled(
+                        format!("  {}", one_line(l, 160)),
+                        Style::new().fg(color),
+                    )));
                 }
                 let hidden = output.lines().count().saturating_sub(shown.len());
                 if hidden > 0 {
-                    lines.push(Line::from(Span::styled(format!("  … {hidden} more line(s)"), Style::new().fg(color).italic())));
+                    lines.push(Line::from(Span::styled(
+                        format!("  … {hidden} more line(s)"),
+                        Style::new().fg(color).italic(),
+                    )));
                 }
             }
             Event::Settled { .. } => {
@@ -274,8 +309,41 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
                 lines.push(Line::default());
             }
             Event::Failed(reason) => {
-                lines.push(Line::from(Span::styled(format!("run failed: {reason}"), Style::new().fg(Color::Red).bold())));
+                lines.push(Line::from(Span::styled(
+                    format!("run failed: {reason}"),
+                    Style::new().fg(Color::Red).bold(),
+                )));
                 lines.push(Line::default());
+            }
+            Event::Denied { name, reason } => {
+                lines.push(Line::from(Span::styled(
+                    format!("⛔ {name}: {reason}"),
+                    Style::new().fg(Color::Red),
+                )));
+            }
+            Event::Retrying {
+                attempt, wait_secs, ..
+            } => {
+                lines.push(Line::from(Span::styled(
+                    format!("↻ provider error, retrying in {wait_secs}s (attempt {attempt})"),
+                    Style::new().fg(Color::Yellow),
+                )));
+            }
+            Event::Held { name, args } => {
+                lines.push(Line::from(Span::styled(
+                    format!("⏸ {name} {} (y approve / n deny)", one_line(args, 120)),
+                    Style::new().fg(Color::Magenta),
+                )));
+            }
+            Event::Usage {
+                input_tokens,
+                output_tokens,
+                ..
+            } => {
+                lines.push(Line::from(Span::styled(
+                    format!("tokens: {input_tokens} in, {output_tokens} out"),
+                    Style::new().dim(),
+                )));
             }
         }
     }
