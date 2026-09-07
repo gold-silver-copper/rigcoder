@@ -1,5 +1,61 @@
 use super::*;
 
+#[test]
+#[cfg(target_os = "macos")]
+fn selected_xcode_frameworks_are_readable_only_by_the_compile_profile() {
+    use std::os::unix::process::CommandExt;
+    let host = assert_fs::TempDir::new().unwrap();
+    let contents = host.path().join("Xcode.app/Contents");
+    let developer = contents.join("Developer");
+    let framework = contents.join("SharedFrameworks/marker");
+    std::fs::create_dir_all(&developer).unwrap();
+    std::fs::create_dir_all(framework.parent().unwrap()).unwrap();
+    std::fs::write(&framework, "selected framework").unwrap();
+    let outside = host.path().join("unrelated");
+    std::fs::write(&outside, "private host data").unwrap();
+    let project = project();
+    let mut sandbox = Sandbox::new().unwrap();
+    sandbox.developer = developer.canonicalize().unwrap();
+    for mode in [Mode::Compile, Mode::Test] {
+        let writable = match mode {
+            Mode::Compile => sandbox.compile.path(),
+            Mode::Test => sandbox.runtime_root(),
+        }
+        .canonicalize()
+        .unwrap();
+        for path in [&framework, &outside] {
+            // A trusted read probe exercises the actual generated profile;
+            // Sandbox::run's separate executable allowlist remains unchanged.
+            let mut command = sandbox
+                .command(
+                    &project.path().canonicalize().unwrap(),
+                    Path::new("/bin/cat"),
+                    &sandbox.compile.path().canonicalize().unwrap(),
+                    &writable,
+                    mode,
+                )
+                .unwrap();
+            command
+                .arg(path.canonicalize().unwrap())
+                .env_clear()
+                .current_dir(project.path())
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .process_group(0);
+            let result = execute(command, Duration::from_secs(5)).unwrap();
+            let allowed = matches!(mode, Mode::Compile) && path == &framework;
+            assert_eq!(result.code == Some(0), allowed, "{result:?}");
+            assert!(!result.timed_out && !result.output_limit, "{result:?}");
+            if allowed {
+                assert_eq!(result.stdout, "selected framework");
+            } else {
+                assert!(result.stdout.is_empty(), "{result:?}");
+            }
+        }
+    }
+}
+
 fn project() -> assert_fs::TempDir {
     let project = assert_fs::TempDir::new().expect("project");
     for (path, contents) in [

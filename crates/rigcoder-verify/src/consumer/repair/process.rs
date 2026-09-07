@@ -41,6 +41,8 @@ pub(crate) struct Output {
 /// model code cannot replace another test binary or poison a later Cargo run.
 pub(super) struct Sandbox {
     pub toolchain: PathBuf,
+    #[cfg(target_os = "macos")]
+    developer: PathBuf,
     pub compile: assert_fs::TempDir,
     runtime: assert_fs::TempDir,
     deadline: Option<Instant>,
@@ -86,12 +88,43 @@ impl Sandbox {
             )));
         }
         let toolchain = PathBuf::from(output.stdout.trim()).canonicalize()?;
+        #[cfg(target_os = "macos")]
+        let developer = {
+            // Discover the host-selected Apple toolchain before model code runs.
+            // Do not inherit DEVELOPER_DIR; the isolated compiler uses this same
+            // resolved directory explicitly, even if xcode-select later changes.
+            let mut discovery = Command::new("/usr/bin/xcode-select");
+            discovery
+                .arg("--print-path")
+                .current_dir(super::super::artifacts::root())
+                .env_clear()
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            use std::os::unix::process::CommandExt;
+            discovery.process_group(0);
+            let output = execute(discovery, remaining(Duration::from_secs(10), deadline))?;
+            if output.code != Some(0) || output.timed_out || output.output_limit {
+                return Err(Error::Invariant(
+                    "cannot locate the selected Apple developer toolchain".into(),
+                ));
+            }
+            let path = PathBuf::from(output.stdout.trim()).canonicalize()?;
+            if !path.is_dir() {
+                return Err(Error::Invariant(
+                    "selected Apple developer toolchain is not a directory".into(),
+                ));
+            }
+            path
+        };
         let temporary = || {
             assert_fs::TempDir::new()
                 .map_err(|error| Error::Invariant(format!("create validation scratch: {error}")))
         };
         let sandbox = Self {
             toolchain,
+            #[cfg(target_os = "macos")]
+            developer,
             compile: temporary()?,
             runtime: temporary()?,
             deadline,
@@ -176,6 +209,10 @@ impl Sandbox {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        #[cfg(target_os = "macos")]
+        if matches!(mode, Mode::Compile) {
+            command.env("DEVELOPER_DIR", &self.developer);
+        }
         execute(command, remaining(timeout, self.deadline))
     }
 
@@ -199,13 +236,30 @@ impl Sandbox {
             Path::new("/usr/lib"),
             Path::new("/usr/share"),
             Path::new("/bin"),
-            Path::new("/Library/Developer/CommandLineTools"),
             &self.toolchain,
             project,
             compile,
             writable,
         ] {
             profile.push_str(&format!("(allow file-read* (subpath {}))\n", quote(path)?));
+        }
+        if matches!(mode, Mode::Compile) {
+            // Full Xcode also loads frameworks beside Contents/Developer.
+            // Admit only the selected installation, and only while compiling.
+            let read_root = self
+                .developer
+                .parent()
+                .filter(|parent| {
+                    self.developer
+                        .file_name()
+                        .is_some_and(|name| name == "Developer")
+                        && parent.file_name().is_some_and(|name| name == "Contents")
+                })
+                .unwrap_or(&self.developer);
+            profile.push_str(&format!(
+                "(allow file-read* (subpath {}))\n",
+                quote(read_root)?
+            ));
         }
         profile.push_str(&format!(
             "(allow file-write* (subpath {}) (literal \"/dev/null\"))\n",
