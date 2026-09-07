@@ -67,10 +67,12 @@ class RigcoderAgent(BaseInstalledAgent):
             )
         await environment.upload_file(binary, REMOTE_BIN)
         await self.exec_as_root(environment, f"chmod 755 {REMOTE_BIN}")
-        # bash is the tool the agent shells through; make sure it exists.
+        # bash is the tool the agent shells through, and the transport needs a
+        # CA store (bare ubuntu images ship none): make sure both exist.
         await self.exec_as_root(
             environment,
-            "command -v bash >/dev/null || (apt-get update -qq && apt-get install -y -qq bash) || true",
+            "(command -v bash >/dev/null && [ -s /etc/ssl/certs/ca-certificates.crt ]) "
+            "|| (apt-get update -qq && apt-get install -y -qq bash ca-certificates) || true",
         )
 
     def _provider_and_model(self) -> tuple[str, str | None]:
