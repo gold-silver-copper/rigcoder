@@ -76,7 +76,7 @@ class RigcoderAgent(BaseInstalledAgent):
         )
 
     def _provider_and_model(self) -> tuple[str, str | None]:
-        name = self.model_name or "anthropic/claude-opus-5"
+        name = self.model_name or "gemini/gemini-3.8-flash"
         if "/" in name:
             provider, model = name.split("/", 1)
         else:

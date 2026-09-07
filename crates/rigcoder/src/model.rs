@@ -34,7 +34,7 @@ pub struct ModelChoice {
 impl ModelChoice {
     pub const DEFAULT_ANTHROPIC: &str = "claude-opus-5";
     pub const DEFAULT_OPENAI: &str = "gpt-5.6-sol";
-    pub const DEFAULT_GEMINI: &str = "gemini-3.1-pro-preview";
+    pub const DEFAULT_GEMINI: &str = "gemini-3.8-flash";
 
     pub fn from_env() -> Self {
         let provider = match std::env::var("RIGCODER_PROVIDER").as_deref() {

@@ -49,7 +49,7 @@ mkdir -p /tmp/dockercfg && echo '{"cliPluginsExtraDirs":["/opt/homebrew/lib/dock
 export DOCKER_CONFIG=/tmp/dockercfg DOCKER_HOST=unix://$HOME/.colima/pi/docker.sock
 export PYTHONPATH=$PWD RIGCODER_TIMEOUT_SECS=800
 harbor run -d terminal-bench@2.0 -a harness.rigcoder_agent:RigcoderAgent \
-  -m gemini/gemini-3.1-pro-preview --ae GEMINI_API_KEY=$GEMINI_API_KEY \
+  -m gemini/gemini-3.8-flash --ae GEMINI_API_KEY=$GEMINI_API_KEY \
   -i fix-git -i regex-log -n 4 --force-build -o harness/runs
 ```
 
