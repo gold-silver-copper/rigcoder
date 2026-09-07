@@ -176,6 +176,7 @@ fn start_run(
         include_str!("model.rs"),
         include_str!("checkpoint.rs"),
         include_str!("tools.rs"),
+        include_str!("file_change.rs"),
         include_str!("steer.rs"),
         include_str!("session.rs"),
         &settings,

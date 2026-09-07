@@ -31,6 +31,8 @@ use rig::{
 use rig_ecs::bus::Handlers;
 use serde_json::{Value, json};
 
+use crate::file_change::FileSource;
+
 const DEFAULT_BASH_TIMEOUT_SECS: u64 = 120;
 const MAX_BASH_TIMEOUT_SECS: u64 = 600;
 
@@ -174,7 +176,7 @@ fn read_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
 fn write_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
     tool(
         "write_file",
-        "Create or overwrite a file with the given content. Parent directories are created.",
+        "Create or overwrite a file with the given content. Parent directories are created. New files are private; replacements preserve existing permissions. Read-only and hard-linked targets are refused.",
         json!({
             "type": "object",
             "properties": {
@@ -186,11 +188,8 @@ fn write_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
         move |args| {
             let path = resolve(&root, str_arg(&args, "path")?);
             let content = str_arg(&args, "content")?;
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
-            }
-            std::fs::write(&path, content)
+            FileSource::read(&path)
+                .and_then(|source| source.prepare(content.as_bytes().to_vec()).apply())
                 .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
             Ok(format!(
                 "wrote {} bytes to {}",
@@ -223,7 +222,10 @@ fn edit_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
             if old.is_empty() {
                 return Err("old_string must not be empty".to_owned());
             }
-            let before = std::fs::read_to_string(&path)
+            let source = FileSource::read(&path)
+                .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            let before = source
+                .text()
                 .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
             let count = before.matches(old).count();
             if count == 0 {
@@ -240,12 +242,15 @@ fn edit_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
             } else {
                 before.replacen(old, new, 1)
             };
-            std::fs::write(&path, &after)
+            let context = context_after_edit(before, &after, old, new);
+            source
+                .prepare(after.into_bytes())
+                .apply()
                 .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
             Ok(format!(
                 "{count} replacement(s) in {}\n{}",
                 path.display(),
-                context_after_edit(&before, &after, old, new)
+                context
             ))
         },
     )

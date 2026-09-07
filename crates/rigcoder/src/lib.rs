@@ -7,6 +7,7 @@
 //! here awaits.
 
 pub mod checkpoint;
+mod file_change;
 pub mod model;
 pub mod session;
 pub mod steer;

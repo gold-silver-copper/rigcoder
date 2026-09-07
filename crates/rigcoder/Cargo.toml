@@ -24,6 +24,7 @@ ignore = { workspace = true }
 similar = { workspace = true }
 regex = "1"
 globset = "0.4"
+tempfile = "3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

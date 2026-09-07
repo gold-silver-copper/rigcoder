@@ -7,7 +7,7 @@ handler entity, every tool is a handler entity, the agent is an entity that
 outcomes are components the UI reads. Nothing in this repository awaits or
 polls the model: the bus drives it as a Bevy schedule.
 
-Three crates:
+Workspace crates:
 
 | crate | what |
 |---|---|
@@ -15,6 +15,7 @@ Three crates:
 | `crates/rigcoder-cli` | `rigcoder`: headless, one task in, transcript out; what the benchmark harness runs inside task containers |
 | `crates/rigcoder-ui` | `rigcoder-ui`: a terminal UI, Bevy driving ratatui over crossterm via `bevy_ratatui` (Bevy 0.19 needs its `main` branch, pinned by commit) |
 | `crates/rigcoder-bench` | `rigcoder-bench`: the Terminal-Bench runner (Docker directly, no framework) and the self-improvement loop |
+| `crates/rigcoder-verify` | the migrated 42-case consumer verifier; integration with the product tools and stronger session contracts is in progress |
 
 Plus `harness/`: the task slices, the Linux build script and the ledger of the
 self-improvement loop (see `harness/README.md`).
@@ -45,8 +46,10 @@ Model selection: `RIGCODER_PROVIDER` (`anthropic` default, or `openai`) and
    each tool under `tool:<name>` with `Handlers::register`, spawns the agent
    entity (`Preamble`, `MaxTokens`, `MaxTurns`, `ToolPolicy`, `UsesModel`) and
    one `Grant` link entity per tool.
-2. `submit` spawns a streamed run over that agent with the conversation so far
+2. `submit` spawns a run over that agent with the conversation so far
    as history (`rig_ecs::systems::spawn_run`).
+   `RunSettings` controls streaming, output tokens and provider retries; its
+   defaults preserve streaming and each run freezes its own settings.
 3. The bus folds the graph into a request, dispatches the completion, and
    materialises the model's tool calls as child effects; the handlers run on
    Bevy's IO task pool.
@@ -61,7 +64,20 @@ unchanged: a system in `BusSet::Gate` can hold or deny a `bash` call for
 approval, a `Judge` system can rewrite a result, a `Scene` can checkpoint a
 run mid-task, and an `EffectLog` can replay one.
 
+File writes and edits prepare their contents without changing the workspace,
+then recheck the original file before an atomic replacement. On macOS and Linux,
+new files use private Unix permission bits; replacements preserve ordinary
+permission bits and ownership. Read-only, hard-linked, set-ID, ACL-bearing and
+extended-attribute-bearing targets are refused, as are replacements that would
+change ownership or inherit unsupported metadata. This does not yet provide
+file approval, a mutation ledger, or exclusion of concurrent external writers.
+
 ## Dependency pin
 
-`Cargo.toml` pins `rig` and `rig-ecs` to commit `8a2ecce` of `feat/effect-bus` (rebased on main, includes rig PR #2471).
-To move the pin, change the `rev` in both workspace dependencies.
+`Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
+`rig-ecs`, `rig-effect-log` and `rig-cassette`) to extraction commit
+`36bb89956a790367be8eaa88958d055bcce67718` in
+[Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474), stacked on #2443.
+To move the pin, update every Rig revision and `Cargo.lock`, then run the
+workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.
+The Rig PR remains open while this migration is integrated and verified.

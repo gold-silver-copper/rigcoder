@@ -447,7 +447,7 @@ impl Scope {
     /// Resolve each existing component before interpreting a later `..`.
     /// Missing leaves are allowed for new files; dangling symlinks and other
     /// filesystem errors fail closed.
-    fn canonical(&self, raw: &std::path::Path) -> std::io::Result<PathBuf> {
+    pub(crate) fn canonical(&self, raw: &std::path::Path) -> std::io::Result<PathBuf> {
         use std::path::Component;
         let absolute = if raw.is_absolute() {
             raw.to_path_buf()
@@ -460,12 +460,30 @@ impl Scope {
                 "scope root must be absolute",
             ));
         }
+        // Preserve filesystem errors that component normalization could hide,
+        // such as `regular_file/.` or `regular_file/../victim`.
+        match std::fs::symlink_metadata(&absolute) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
         let mut resolved = PathBuf::new();
         for component in absolute.components() {
             match component {
                 Component::Prefix(_) | Component::RootDir => resolved.push(component.as_os_str()),
                 Component::CurDir => {}
                 Component::ParentDir => {
+                    match std::fs::metadata(&resolved) {
+                        Ok(metadata) if !metadata.is_dir() => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::NotADirectory,
+                                "cannot traverse a non-directory parent",
+                            ));
+                        }
+                        Ok(_) => {}
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
+                    }
                     resolved.pop();
                 }
                 Component::Normal(name) => {
