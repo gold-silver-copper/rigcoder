@@ -4,3 +4,6 @@ target/
 harness/runs/
 harness/bin/
 harness/tasks/
+
+# Verification candidates and reports; committed fixtures live in fixtures/.
+.rigcoder-verify/

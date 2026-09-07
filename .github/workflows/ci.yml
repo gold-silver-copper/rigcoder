@@ -3,6 +3,8 @@ on:
   push:
     branches: [main, evolve]
   pull_request:
+permissions:
+  contents: read
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -11,8 +13,46 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
+          components: rustfmt, clippy
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
       - uses: Swatinem/rust-cache@v2
+      - name: Prepare repository-repair process isolation
+        run: bash .github/scripts/setup-verifier-sandbox.sh
       - run: cargo check --locked --workspace
-      - run: cargo test --locked --workspace
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace --exclude rigcoder-verify
       - run: cargo build --locked --release -p rigcoder-cli
+  verify:
+    name: offline verification (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      RIG_PROVIDER_TEST_MODE: replay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt
+      - name: Prepare Linux process isolation
+        if: runner.os == 'Linux'
+        run: bash .github/scripts/setup-verifier-sandbox.sh
+      - name: Check macOS process isolation
+        if: runner.os == 'macOS'
+        run: sandbox-exec -p '(version 1)(allow default)' /usr/bin/true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - run: cargo test --locked -p rigcoder -p rigcoder-verify
+      - run: cargo run --locked -p rigcoder-verify -- verify
+      - name: Retain verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ matrix.os }}
+          path: .rigcoder-verify/report.json
+          if-no-files-found: ignore

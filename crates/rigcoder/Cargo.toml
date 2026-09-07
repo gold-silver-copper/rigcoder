@@ -8,7 +8,7 @@ description = "A coding agent over rig-ecs: the run is a Bevy world, the tools a
 [dependencies]
 rig-ecs = { workspace = true }
 rig = { workspace = true }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "8a2ecce113fccca955cb7836c5d924a2b39662a6" }
+rig-effect-log = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_app = { workspace = true }
 bevy_tasks = { workspace = true }
@@ -24,6 +24,8 @@ ignore = { workspace = true }
 similar = { workspace = true }
 regex = "1"
 globset = "0.4"
+tempfile = "3"
+sha2 = "0.10"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

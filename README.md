@@ -7,7 +7,7 @@ handler entity, every tool is a handler entity, the agent is an entity that
 outcomes are components the UI reads. Nothing in this repository awaits or
 polls the model: the bus drives it as a Bevy schedule.
 
-Three crates:
+Workspace crates:
 
 | crate | what |
 |---|---|
@@ -15,6 +15,7 @@ Three crates:
 | `crates/rigcoder-cli` | `rigcoder`: headless, one task in, transcript out; what the benchmark harness runs inside task containers |
 | `crates/rigcoder-ui` | `rigcoder-ui`: a terminal UI, Bevy driving ratatui over crossterm via `bevy_ratatui` (Bevy 0.19 needs its `main` branch, pinned by commit) |
 | `crates/rigcoder-bench` | `rigcoder-bench`: the Terminal-Bench runner (Docker directly, no framework) and the self-improvement loop |
+| `crates/rigcoder-verify` | the transferred 42-case ECS consumer harness, preserving its own tools, repair workflow, replay and resume verification |
 
 Plus `harness/`: the task slices, the Linux build script and the ledger of the
 self-improvement loop (see `harness/README.md`).
@@ -34,6 +35,14 @@ run in flight, arrows and PgUp/PgDn scroll the transcript, End follows the
 stream again, Ctrl+C quits. Set `RIGCODER_LOG=path` to get tracing output in a
 file (the terminal is the screen).
 
+The TUI asks before file writes, edits and bash commands. Review the operation,
+source/result digests, formatted diff and exact resulting contents; with an
+empty input, `y` approves the displayed operation and `n` denies it. The CLI
+offers `--approve auto|deny|ask` (default `auto`). In `ask` mode, provide the task
+as an argument or through `--task-file` so stdin remains available for decisions.
+Only `y` or `yes` approves; EOF denies pending and subsequent requests. Waiting
+for a decision does not block the agent schedule or its timeout/cancellation.
+
 Model selection: `RIGCODER_PROVIDER` (`anthropic` default, or `openai`) and
 `RIGCODER_MODEL` (defaults `claude-opus-5` / `gpt-5.6-sol`); the CLI also takes
 `--provider` and `--model`. Other CLI flags: `--max-turns`, `--timeout-secs`,
@@ -45,8 +54,10 @@ Model selection: `RIGCODER_PROVIDER` (`anthropic` default, or `openai`) and
    each tool under `tool:<name>` with `Handlers::register`, spawns the agent
    entity (`Preamble`, `MaxTokens`, `MaxTurns`, `ToolPolicy`, `UsesModel`) and
    one `Grant` link entity per tool.
-2. `submit` spawns a streamed run over that agent with the conversation so far
+2. `submit` spawns a run over that agent with the conversation so far
    as history (`rig_ecs::systems::spawn_run`).
+   `RunSettings` controls streaming, output tokens and provider retries; its
+   defaults preserve streaming and each run freezes its own settings.
 3. The bus folds the graph into a request, dispatches the completion, and
    materialises the model's tool calls as child effects; the handlers run on
    Bevy's IO task pool.
@@ -61,7 +72,35 @@ unchanged: a system in `BusSet::Gate` can hold or deny a `bash` call for
 approval, a `Judge` system can rewrite a result, a `Scene` can checkpoint a
 run mid-task, and an `EffectLog` can replay one.
 
+File writes and edits prepare their contents without changing the workspace,
+format Rust before approval, then recheck the original file before an atomic
+replacement. Source and resulting files are limited to 16 MiB. Approval binds
+one invocation to its arguments and prepared bytes; changed arguments, stale
+sources, cancellation and reused decisions cannot authorize another write.
+Cancellation also stops an issued bash process. On macOS and Linux,
+new files use private Unix permission bits; replacements preserve ordinary
+permission bits and ownership. Read-only, hard-linked, set-ID, ACL-bearing and
+extended-attribute-bearing targets are refused, as are replacements that would
+change ownership or inherit unsupported metadata. Pending approvals are currently
+runtime state: durable approval checkpoints, a mutation ledger and exclusion of
+concurrent external writers are not implemented in the product. They are outside
+the consumer ownership transfer; the transferred harness retains its own existing
+approval, persistence and process-isolation contracts.
+
 ## Dependency pin
 
-`Cargo.toml` pins `rig` and `rig-ecs` to commit `8a2ecce` of `feat/effect-bus` (rebased on main, includes rig PR #2471).
-To move the pin, change the `rev` in both workspace dependencies.
+`Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
+`rig-ecs`, `rig-effect-log` and `rig-cassette`) to published migration commit
+`90a89f6dc9a8e3ee2a5558dcccd9b07635241675` in
+[Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474), stacked on #2443.
+To move the pin, update every Rig revision and `Cargo.lock`, then run the
+workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.
+The ECS consumer is transferred unchanged into `rigcoder-verify`. Its ownership
+transfer does not require integration with the product agent or tools. Rig PR
+#2474 remains open and stacked on #2443 while the replacement merges here,
+followed by removal of the Rig-owned copy and a final dependency-pin update.
+
+Run the preserved offline matrix with
+`cargo run --locked -p rigcoder-verify -- verify`. See the
+[consumer guide](crates/rigcoder-verify/src/consumer/README.md) for case selection,
+recording, replay, resume and failure diagnostics.

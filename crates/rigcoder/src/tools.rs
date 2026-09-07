@@ -31,6 +31,8 @@ use rig::{
 use rig_ecs::bus::Handlers;
 use serde_json::{Value, json};
 
+use crate::file_change::FileSource;
+
 const DEFAULT_BASH_TIMEOUT_SECS: u64 = 120;
 const MAX_BASH_TIMEOUT_SECS: u64 = 600;
 
@@ -54,8 +56,8 @@ pub fn register_all(handlers: &mut Handlers, root: &Path) -> Vec<Entity> {
             Err(report) => tracing::error!("could not register tool {name}: {report}"),
         };
     add("read_file", read_file(root.clone()));
-    add("write_file", write_file(root.clone()));
-    add("edit_file", edit_file(root.clone()));
+    add("write_file", write_file());
+    add("edit_file", edit_file());
     add("list_files", list_files(root.clone()));
     add("grep", grep(root.clone()));
     add("bash", bash(root));
@@ -96,13 +98,17 @@ fn tool_async<Fut>(
     name: &str,
     description: &str,
     parameters: Value,
-    run: impl Fn(Value) -> Fut + Send + Sync + 'static,
+    run: impl Fn(Value, Arc<crate::approval::Permit>) -> Fut + Send + Sync + 'static,
 ) -> ToolFn<Callback>
 where
     Fut: std::future::Future<Output = Result<String, String>> + Send + 'static,
 {
-    let callback: Callback = Box::new(move |_context, args| {
-        let work = run(args);
+    let callback: Callback = Box::new(move |context, args| {
+        let permit = match crate::approval::Permit::take_bash(context, &args) {
+            Ok(permit) => permit,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
+        let work = run(args, permit);
         Box::pin(async move {
             let text = match work.await {
                 Ok(text) => text,
@@ -171,10 +177,10 @@ fn read_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
     )
 }
 
-fn write_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
-    tool(
+fn write_file() -> ToolFn<Callback> {
+    file_tool(
         "write_file",
-        "Create or overwrite a file with the given content. Parent directories are created.",
+        "Create or overwrite a file with the given content. Parent directories are created. New files are private; replacements preserve existing permissions. Read-only and hard-linked targets are refused.",
         json!({
             "type": "object",
             "properties": {
@@ -183,26 +189,11 @@ fn write_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
             },
             "required": ["path", "content"]
         }),
-        move |args| {
-            let path = resolve(&root, str_arg(&args, "path")?);
-            let content = str_arg(&args, "content")?;
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
-            }
-            std::fs::write(&path, content)
-                .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-            Ok(format!(
-                "wrote {} bytes to {}",
-                content.len(),
-                path.display()
-            ))
-        },
     )
 }
 
-fn edit_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
-    tool(
+fn edit_file() -> ToolFn<Callback> {
+    file_tool(
         "edit_file",
         "Replace an exact string in a file. old_string must match exactly once unless replace_all is true. Returns the lines around each replacement as they now read.",
         json!({
@@ -215,40 +206,154 @@ fn edit_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
             },
             "required": ["path", "old_string", "new_string"]
         }),
-        move |args| {
-            let path = resolve(&root, str_arg(&args, "path")?);
-            let old = str_arg(&args, "old_string")?;
-            let new = str_arg(&args, "new_string")?;
-            let replace_all = args["replace_all"].as_bool().unwrap_or(false);
-            if old.is_empty() {
-                return Err("old_string must not be empty".to_owned());
-            }
-            let before = std::fs::read_to_string(&path)
-                .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-            let count = before.matches(old).count();
-            if count == 0 {
-                return Err(format!("old_string not found in {}", path.display()));
-            }
-            if count > 1 && !replace_all {
-                return Err(format!(
-                    "old_string occurs {count} times in {}; add context to make it unique or set replace_all",
-                    path.display()
-                ));
-            }
-            let after = if replace_all {
-                before.replace(old, new)
-            } else {
-                before.replacen(old, new, 1)
-            };
-            std::fs::write(&path, &after)
-                .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-            Ok(format!(
-                "{count} replacement(s) in {}\n{}",
-                path.display(),
-                context_after_edit(&before, &after, old, new)
-            ))
-        },
     )
+}
+
+fn file_tool(name: &'static str, description: &str, parameters: Value) -> ToolFn<Callback> {
+    let callback: Callback = Box::new(move |context, args| {
+        let result =
+            crate::approval::Permit::apply_file(context, name, &args).map(ToolOutput::text);
+        Box::pin(async move { result })
+    });
+    ToolFn::new(name, description, parameters, callback)
+}
+
+pub(crate) async fn prepare_file(
+    root: &Path,
+    name: &str,
+    args: Value,
+) -> Result<crate::approval::PreparedOperation, String> {
+    let path = resolve(root, str_arg(&args, "path")?);
+    let source = FileSource::read(&path)
+        .map_err(|error| format!("cannot prepare {}: {error}", path.display()))?;
+    let (after, replacement) = if name == "write_file" {
+        let content = str_arg(&args, "content")?;
+        check_mutation_size(Some(content.len()))?;
+        (content.to_owned(), None)
+    } else {
+        let old = str_arg(&args, "old_string")?;
+        let new = str_arg(&args, "new_string")?;
+        if old.is_empty() {
+            return Err("old_string must not be empty".to_owned());
+        }
+        let before = source.text().map_err(|error| error.to_string())?;
+        let count = before.matches(old).count();
+        if count == 0 {
+            return Err(format!("old_string not found in {}", path.display()));
+        }
+        if count > 1 && !args["replace_all"].as_bool().unwrap_or(false) {
+            return Err(format!(
+                "old_string occurs {count} times in {}; add context to make it unique or set replace_all",
+                path.display()
+            ));
+        }
+        // Bound expansion before allocating: replace_all can amplify a small
+        // repetitive source into an arbitrarily large result.
+        check_mutation_size(count.checked_mul(new.len()).and_then(|added| {
+            before
+                .len()
+                .checked_sub(count.checked_mul(old.len())?)?
+                .checked_add(added)
+        }))?;
+        (
+            before.replace(old, new),
+            Some((count, old.to_owned(), new.to_owned())),
+        )
+    };
+    if after.len() as u64 > crate::file_change::MAX_FILE_BYTES {
+        return Err("file mutation exceeds the 16 MiB limit".into());
+    }
+    let after = if source
+        .path()
+        .extension()
+        .is_some_and(|extension| extension == "rs")
+    {
+        format_rust(&after).await?
+    } else {
+        after
+    };
+    let receipt = if let Some((count, old, new)) = replacement {
+        format!(
+            "{count} replacement(s) in {}\n{}",
+            path.display(),
+            context_after_edit(
+                source.text().map_err(|error| error.to_string())?,
+                &after,
+                &old,
+                &new
+            )
+        )
+    } else {
+        format!("wrote {} bytes to {}", after.len(), path.display())
+    };
+    Ok(crate::approval::PreparedOperation::File {
+        change: Box::new(source.prepare(after.into_bytes())),
+        receipt,
+    })
+}
+
+fn check_mutation_size(size: Option<usize>) -> Result<(), String> {
+    if size.is_none_or(|size| size as u64 > crate::file_change::MAX_FILE_BYTES) {
+        return Err("file mutation exceeds the 16 MiB limit".into());
+    }
+    Ok(())
+}
+
+async fn format_rust(contents: &str) -> Result<String, String> {
+    // Format stdin into an owned scratch file. --emit stdout prevents a module
+    // path in model-authored Rust from modifying a different workspace file.
+    const MAX_FORMAT_BYTES: u64 = 16 * 1024 * 1024;
+    if contents.len() as u64 > MAX_FORMAT_BYTES {
+        return Err("Rust edit exceeds the 16 MiB formatting limit".into());
+    }
+    let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
+    let input = scratch.path().join("input.rs");
+    let output = scratch.path().join("output.rs");
+    let config = scratch.path().join("rustfmt.toml");
+    std::fs::write(&input, contents).map_err(|error| error.to_string())?;
+    std::fs::write(&config, "edition = \"2024\"\n").map_err(|error| error.to_string())?;
+    let executable = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .filter(|path| path.is_absolute())
+        .map(|path| path.join("rustfmt"))
+        .find(|path| path.is_file())
+        .ok_or_else(|| "rustfmt is required to prepare Rust edits".to_owned())?;
+    let mut command = Command::new(executable);
+    command
+        .args(["--emit", "stdout", "--edition", "2024", "--config-path"])
+        .arg(&config)
+        .current_dir(scratch.path())
+        .env_clear()
+        .stdin(std::fs::File::open(&input).map_err(|error| error.to_string())?)
+        .stdout(std::fs::File::create(&output).map_err(|error| error.to_string())?)
+        .stderr(Stdio::piped());
+    for name in [
+        "PATH",
+        "HOME",
+        "RUSTUP_HOME",
+        "CARGO_HOME",
+        "RUSTUP_TOOLCHAIN",
+    ] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    let result = run_command(command, Duration::from_secs(10)).await?;
+    if !result.success {
+        return Err(format!(
+            "Rust formatting failed before approval: {}",
+            result.text
+        ));
+    }
+    if std::fs::metadata(&output)
+        .map_err(|error| error.to_string())?
+        .len()
+        > MAX_FORMAT_BYTES
+    {
+        return Err("formatted Rust exceeds the 16 MiB limit".into());
+    }
+    std::fs::read_to_string(output).map_err(|error| error.to_string())
 }
 
 fn list_files(root: Arc<PathBuf>) -> ToolFn<Callback> {
@@ -390,7 +495,7 @@ fn bash(root: Arc<PathBuf>) -> ToolFn<Callback> {
             },
             "required": ["command"]
         }),
-        move |args| {
+        move |args, permit| {
             let command = str_arg(&args, "command").map(str::to_owned);
             let timeout = Duration::from_secs(
                 args["timeout_secs"]
@@ -401,7 +506,7 @@ fn bash(root: Arc<PathBuf>) -> ToolFn<Callback> {
             let root = root.clone();
             async move {
                 let command = command?;
-                run_shell(&root, &command, timeout).await
+                run_shell_cancellable(&root, &command, timeout, Some(permit.cancellation())).await
             }
         },
     )
@@ -508,16 +613,57 @@ fn drain(
 /// captures as they arrive, wait on a dedicated thread, kill the whole
 /// group at the deadline, and hand the result back through a oneshot so
 /// the caller's future never blocks a pool thread.
+#[cfg(test)]
 fn run_shell(
     root: &Path,
     command: &str,
     timeout: Duration,
 ) -> impl std::future::Future<Output = Result<String, String>> + Send {
+    run_shell_cancellable(root, command, timeout, None)
+}
+
+fn run_shell_cancellable(
+    root: &Path,
+    command: &str,
+    timeout: Duration,
+    cancelled: Option<Arc<AtomicBool>>,
+) -> impl std::future::Future<Output = Result<String, String>> + Send {
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
+        .arg(command)
+        .current_dir(root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let work = run_command_cancellable(cmd, timeout, cancelled);
+    async move { work.await.map(|result| result.text) }
+}
+
+pub(crate) struct CommandOutput {
+    pub text: String,
+    pub success: bool,
+}
+
+pub(crate) fn run_command(
+    command: Command,
+    timeout: Duration,
+) -> impl std::future::Future<Output = Result<CommandOutput, String>> + Send {
+    run_command_cancellable(command, timeout, None)
+}
+
+fn run_command_cancellable(
+    command: Command,
+    timeout: Duration,
+    cancelled: Option<Arc<AtomicBool>>,
+) -> impl std::future::Future<Output = Result<CommandOutput, String>> + Send {
     let (sender, receiver) = futures::channel::oneshot::channel();
-    let root = root.to_path_buf();
-    let command = command.to_owned();
     std::thread::spawn(move || {
-        let result = run_shell_blocking(&root, &command, timeout, || sender.is_canceled());
+        let result = run_command_blocking(command, timeout, || {
+            sender.is_canceled()
+                || cancelled
+                    .as_ref()
+                    .is_some_and(|flag| flag.load(Ordering::Acquire))
+        });
         let _ = sender.send(result);
     });
     async move {
@@ -527,22 +673,19 @@ fn run_shell(
     }
 }
 
-fn run_shell_blocking(
-    root: &Path,
-    command: &str,
+fn run_command_blocking(
+    mut cmd: Command,
     timeout: Duration,
     cancelled: impl Fn() -> bool,
-) -> Result<String, String> {
-    let mut cmd = Command::new("bash");
-    cmd.arg("-c")
-        .arg(command)
-        .current_dir(root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+) -> Result<CommandOutput, String> {
+    if cancelled() {
+        return Err("command cancelled before launch".to_owned());
+    }
     #[cfg(unix)]
     cmd.process_group(0);
-    let mut child = cmd.spawn().map_err(|e| format!("cannot start bash: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("cannot start command: {e}"))?;
     let stop_readers = Arc::new(AtomicBool::new(false));
     let stdout = child.stdout.take().map(|p| drain(p, stop_readers.clone()));
     let stderr = child.stderr.take().map(|p| drain(p, stop_readers.clone()));
@@ -554,7 +697,7 @@ fn run_shell_blocking(
         if status.is_none() {
             match child.try_wait() {
                 Ok(found) => status = found,
-                Err(error) => wait_error = Some(format!("waiting for bash: {error}")),
+                Err(error) => wait_error = Some(format!("waiting for command: {error}")),
             }
         }
         let drained = stdout.as_ref().is_none_or(|t| t.is_finished())
@@ -611,7 +754,10 @@ fn run_shell_blocking(
         "[exit code: {}]",
         code.map_or("signal".to_owned(), |c| c.to_string())
     ));
-    Ok(out)
+    Ok(CommandOutput {
+        text: out,
+        success: !killed && status.is_some_and(|status| status.success()),
+    })
 }
 
 /// Above this many lines, an unranged read returns an outline.
@@ -676,21 +822,31 @@ fn outline(path: &Path, text: &str, total: usize) -> String {
 }
 
 /// Five lines around each actual replacement, including deletions.
-fn context_after_edit(before: &str, after: &str, old: &str, new: &str) -> String {
+fn context_after_edit(before: &str, after: &str, _old: &str, _new: &str) -> String {
     if after.is_empty() {
         return "(file is now empty)\n".to_owned();
     }
     let lines: Vec<&str> = after.lines().collect();
     let mut out = String::new();
     let mut shown_until = 0usize;
-    let positions: Vec<usize> = before
-        .match_indices(old)
-        .enumerate()
-        .map(|(index, (offset, _))| offset - index * old.len() + index * new.len())
-        .collect();
-    for pos in positions.iter().take(20) {
-        let line = after[..*pos].matches('\n').count();
-        let end_line = line + new.matches('\n').count();
+    let diff = similar::TextDiff::configure()
+        .timeout(Duration::from_millis(250))
+        .diff_lines(before, after);
+    let mut cursor = 0usize;
+    let mut positions = Vec::new();
+    for change in diff.iter_all_changes() {
+        if change.tag() != similar::ChangeTag::Equal {
+            positions.push(cursor);
+            if positions.len() == 20 {
+                break;
+            }
+        }
+        if change.tag() != similar::ChangeTag::Delete {
+            cursor += 1;
+        }
+    }
+    for &line in positions.iter().take(20) {
+        let end_line = line;
         let start = line.saturating_sub(5).max(shown_until);
         let stop = (end_line + 6).min(lines.len());
         if start >= stop {
@@ -711,6 +867,34 @@ fn context_after_edit(before: &str, after: &str, old: &str, new: &str) -> String
 mod rewrite_tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn replacement_expansion_and_oversized_sources_are_refused_before_preparation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("file.txt");
+        std::fs::write(&path, "a".repeat(1024 * 1024)).unwrap();
+        let result = futures::executor::block_on(prepare_file(
+            dir.path(),
+            "edit_file",
+            json!({
+                "path": "file.txt", "old_string": "a", "new_string": "b".repeat(1024), "replace_all": true,
+            }),
+        ));
+        assert!(result.err().unwrap().contains("16 MiB"));
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), 1024 * 1024);
+        let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        file.set_len(crate::file_change::MAX_FILE_BYTES + 1)
+            .unwrap();
+        let result = futures::executor::block_on(prepare_file(
+            dir.path(),
+            "write_file",
+            json!({
+                "path": "file.txt", "content": "small",
+            }),
+        ));
+        assert!(result.err().unwrap().contains("16 MiB"));
+        assert!(check_mutation_size(None).is_err());
+    }
 
     #[test]
     fn a_huge_output_comes_back_bounded_with_head_and_tail() {

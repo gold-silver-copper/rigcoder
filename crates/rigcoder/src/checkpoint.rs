@@ -209,10 +209,16 @@ pub fn resume(world: &mut World, scene: &WorldScene) -> Result<Entity, rig::erro
         .ok_or_else(|| {
             rig::error::ErrorReport::new(rig::error::ErrorKind::Request, "the scene holds no run")
         })?;
+    let sequence = runs
+        .iter()
+        .filter_map(|entity| world.get::<rig_ecs::bus::Scope>(*entity))
+        .filter_map(|scope| scope.0.strip_prefix("rigcoder/run/")?.parse::<usize>().ok())
+        .max()
+        .unwrap_or(0);
     {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.active = Some(run);
-        conversation.runs += runs.len();
+        conversation.runs = conversation.runs.saturating_add(runs.len()).max(sequence);
     }
     if let Some(agent) = world.get::<RunOf>(run).map(|run_of| run_of.0) {
         world.resource_mut::<AgentHandle>().agent = agent;

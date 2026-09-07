@@ -10,7 +10,7 @@ use rig::{
     completion::{CompletionResponse, ModelRef, ProviderCapabilities, Usage},
     effect::{EffectKind, FamilyDescriptor, HandlerDescriptor, HandlerKey, Outcome},
     message::AssistantContent,
-    serve::{OutcomeSink, Serve},
+    serve::{Dispatch, Reply, Serve},
 };
 use rig_ecs::{agent::scene::WorldScene, bus::Handlers};
 use rigcoder::{
@@ -31,19 +31,18 @@ impl Serve for Scripted {
             layers: Vec::new(),
         }
     }
-    async fn serve(&self, _kind: EffectKind, sink: OutcomeSink) {
+    async fn serve(&self, _kind: EffectKind, _dispatch: Dispatch) -> Reply {
         let next = self
             .0
             .lock()
             .unwrap()
             .pop_front()
             .unwrap_or_else(|| vec![AssistantContent::text("(script over)")]);
-        sink.resolve(Ok(Outcome::Completion(CompletionResponse::new(
+        Reply::Outcome(Ok(Outcome::Completion(CompletionResponse::new(
             next,
             Usage::new(),
             "scripted",
         ))))
-        .await;
     }
 }
 

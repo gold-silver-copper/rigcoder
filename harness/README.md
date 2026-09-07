@@ -5,6 +5,13 @@ and lets rigcoder edit itself between generations. All of it is Rust:
 `crates/rigcoder-bench`, binary `rigcoder-bench`. No benchmark framework
 sits in between; the runner controls each Docker step.
 
+The separate [ECS consumer harness](../crates/rigcoder-verify/src/consumer/README.md)
+owns the verification corpus transferred from Rig, including the deliberately
+broken `harness/repair-project`. Run its 42-case offline matrix with
+`cargo run --locked -p rigcoder-verify -- verify`. It retains its own consumer
+tools, fixtures, approval/repair workflow, replay and resume implementation;
+it is not a new acceptance gate in this benchmark improvement loop.
+
 ## Pieces
 
 - `crates/rigcoder-bench`:

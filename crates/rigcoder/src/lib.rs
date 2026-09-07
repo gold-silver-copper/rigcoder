@@ -6,7 +6,9 @@
 //! and the CLI show is read off components as the bus writes them; nothing
 //! here awaits.
 
+pub mod approval;
 pub mod checkpoint;
+mod file_change;
 pub mod model;
 pub mod session;
 pub mod steer;
@@ -14,17 +16,21 @@ pub mod tools;
 
 use std::{path::PathBuf, sync::Arc};
 
-use bevy_app::{App, Plugin, Startup};
+use bevy_app::{App, Plugin, Startup, Update};
 use bevy_ecs::prelude::*;
+use rig::serve::ServingPolicy;
 use rig_ecs::{
     agent::scene::SceneExtensions,
     agent::{
         AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output, Owner,
         PolicyVersion, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
     },
-    bus::{Bound, BusPlugin, BusSet, EffectLogResource, Handlers, Replay, RigSchedule},
+    bus::{
+        Bound, BusSet, EffectLogResource, Handlers, Replay, RigSchedule, install_bus,
+        run_to_quiescence,
+    },
     prelude::*,
-    systems::AgentPlugin,
+    systems::install_agent,
 };
 
 pub use model::ModelChoice;
@@ -39,6 +45,30 @@ pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
 /// The system prompt, kept as a file so the improvement harness can edit it
 /// without touching Rust.
 pub const SYSTEM_PROMPT: &str = include_str!("prompt.md");
+
+/// Per-run provider settings shared by the CLI, UI and verification hosts.
+/// Insert before setup, or change between runs. Zero retries disables automatic
+/// whole-prompt retries; model/tool turn limits remain on `RigcoderPlugin`.
+#[derive(Resource, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RunSettings {
+    pub stream: bool,
+    pub max_tokens: u64,
+    pub provider_retries: u8,
+}
+
+impl Default for RunSettings {
+    fn default() -> Self {
+        Self {
+            stream: true,
+            max_tokens: 16_000,
+            provider_retries: session::MAX_PROVIDER_RETRIES as u8,
+        }
+    }
+}
+
+/// Settings frozen when a run is submitted, also retained by scene checkpoints.
+#[derive(Component, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RunConfiguration(pub RunSettings);
 
 /// Where the agent works. Every relative tool path resolves against it and
 /// every bash command starts in it.
@@ -92,14 +122,14 @@ impl Plugin for RigcoderPlugin {
             mode,
             prompt_override,
         } = self.clone();
-        app.add_plugins((
-            BusPlugin::default(),
-            AgentPlugin::default(),
-            steer::SteerPlugin,
-        ));
+        install_bus(app.world_mut(), ServingPolicy::default());
+        install_agent(app.world_mut());
+        app.add_systems(Update, run_to_quiescence);
+        app.add_plugins(steer::SteerPlugin);
         // Every effect is recorded: the log replays on a host without keys.
         EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
         app.insert_resource(Workspace { root: workspace })
+            .init_resource::<RunSettings>()
             .insert_resource(model)
             .insert_resource(AgentBudget { max_turns })
             .insert_resource(Setup {
@@ -126,7 +156,7 @@ impl Plugin for RigcoderPlugin {
                     session::stream_text.after(RigSet::Fold),
                 ),
             )
-            .add_systems(bevy_app::Update, session::resubmit_when_due)
+            .add_systems(Update, session::resubmit_when_due.before(run_to_quiescence))
             .add_systems(
                 RigSchedule,
                 session::resubmit_when_due
@@ -152,6 +182,7 @@ pub fn setup(
     mut commands: Commands,
     workspace: Res<Workspace>,
     choice: Res<ModelChoice>,
+    connection: Option<Res<model::ModelConnection>>,
     budget: Res<AgentBudget>,
     setup: Res<Setup>,
     mut transcript: ResMut<Transcript>,
@@ -159,6 +190,8 @@ pub fn setup(
 ) {
     let _ =
         extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
+    let _ = extensions.register_component::<RunConfiguration>("rigcoder.run_settings");
+    let _ = extensions.register_component::<approval::RunApproval>("rigcoder.run_approval");
     let (model, tools) = match &setup.mode {
         Mode::Replay(_) => {
             let model = bound
@@ -193,10 +226,9 @@ pub fn setup(
                 .iter()
                 .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
                 .map(|(e, _)| e);
-            let model = match existing
-                .map(Ok)
-                .unwrap_or_else(|| model::register(&mut handlers, &choice))
-            {
+            let model = match existing.map(Ok).unwrap_or_else(|| {
+                model::register_with_connection(&mut handlers, &choice, connection.as_deref())
+            }) {
                 Ok(model) => model,
                 Err(report) => {
                     transcript.push(Event::Failed(format!(

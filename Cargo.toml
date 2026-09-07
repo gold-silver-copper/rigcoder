@@ -9,9 +9,12 @@ license = "MIT"
 repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
-# rig, pinned to the head of https://github.com/0xPlaygrounds/rig/pull/2443 (feat/effect-bus).
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "8a2ecce113fccca955cb7836c5d924a2b39662a6", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "8a2ecce113fccca955cb7836c5d924a2b39662a6", default-features = false, features = ["reqwest", "rustls"] }
+# Keep all Rig dependencies on the extraction commit from Rig PR #2474.
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }
