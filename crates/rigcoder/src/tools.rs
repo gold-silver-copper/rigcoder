@@ -33,8 +33,12 @@ const MAX_OUTPUT_CHARS: usize = 30_000;
 const DEFAULT_BASH_TIMEOUT_SECS: u64 = 120;
 const MAX_BASH_TIMEOUT_SECS: u64 = 600;
 
-/// Register every tool; the entities, in a stable order, are what the agent
-/// is granted.
+/// The tools, in the order the agent is granted them (and so the order the
+/// model sees them). A replay orders its replayers the same way.
+pub const NAMES: [&str; 6] = ["read_file", "write_file", "edit_file", "list_files", "grep", "bash"];
+
+/// Register every tool; the entities, in [`NAMES`] order, are what the
+/// agent is granted.
 pub fn register_all(handlers: &mut Handlers, root: &Path) -> Vec<Entity> {
     let root: Arc<PathBuf> = Arc::new(root.to_path_buf());
     let mut entities = Vec::new();

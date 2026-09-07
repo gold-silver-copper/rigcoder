@@ -97,6 +97,13 @@ pub fn submit(world: &mut World, prompt: &str) -> Option<Entity> {
         text: prompt.to_owned(),
     });
     let run = spawn_run(world, agent, &history, prompt, true, None);
+    // The run's program identity goes into the effect log under its scope:
+    // every granted tool as a required row, so a replay advertises the same
+    // tools even where the record never called them.
+    world.entity_mut(run).insert(rig_ecs::bus::Scope("rigcoder".to_owned()));
+    if let Some(recorder) = world.get_resource::<rig_ecs::bus::EffectLogResource>().map(|r| r.0.clone()) {
+        rig_ecs::replay::stamp_run(world, run, &recorder);
+    }
     let mut conversation = world.resource_mut::<Conversation>();
     conversation.active = Some(run);
     conversation.runs += 1;
@@ -112,7 +119,7 @@ pub fn cancel(world: &mut World, reason: &str) {
 
 /// A fresh tool child, seen in `Gate` before the bus dispatches it.
 pub fn announce_tool_calls(
-    calls: Query<(&PendingEffect, &ToolCallSlot), Added<PendingEffect>>,
+    calls: Query<(&PendingEffect, &ToolCallSlot), (Added<PendingEffect>, Without<EffectOutcome>)>,
     mut transcript: ResMut<Transcript>,
 ) {
     for (effect, slot) in &calls {

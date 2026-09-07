@@ -49,8 +49,10 @@ struct ScriptedModel(Mutex<Option<Scripted>>);
 #[derive(Resource)]
 struct Captured(Arc<Mutex<Vec<Event>>>);
 
-fn capture_when_over(conversation: Res<rigcoder::Conversation>, transcript: Res<Transcript>, captured: Res<Captured>, mut exit: MessageWriter<AppExit>) {
-    if conversation.runs > 0 && conversation.active.is_none() {
+fn capture_when_over(conversation: Res<rigcoder::Conversation>, transcript: Res<Transcript>, captured: Res<Captured>, mut ticks: Local<usize>, mut exit: MessageWriter<AppExit>) {
+    *ticks += 1;
+    let failed_setup = conversation.runs == 0 && transcript.events.iter().any(|e| matches!(e, Event::Failed(_)));
+    if (conversation.runs > 0 && conversation.active.is_none()) || failed_setup || *ticks > 20_000 {
         *captured.0.lock().unwrap() = transcript.events.clone();
         exit.write(AppExit::Success);
     }
@@ -75,7 +77,7 @@ fn run_scripted(workspace: &std::path::Path, steer: Steer, script: Vec<Vec<Assis
     let mut app = App::new();
     app.add_plugins((
         ScheduleRunnerPlugin::run_loop(std::time::Duration::from_millis(1)),
-        RigcoderPlugin { workspace: workspace.to_path_buf(), model: ModelChoice::parse("gemini", None).unwrap(), max_turns: 8 },
+        RigcoderPlugin::live(workspace.to_path_buf(), ModelChoice::parse("gemini", None).unwrap(), 8),
     ))
     .insert_resource(steer)
     .insert_resource(ScriptedModel(Mutex::new(Some(model))))

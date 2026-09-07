@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 rigcoder = { path = "../rigcoder" }
 rig-ecs = { workspace = true }
+rig = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_app = { workspace = true }
 clap = { workspace = true }

@@ -93,9 +93,9 @@ impl Approvals {
     }
 }
 
-/// Deliverable retries spent, per run.
-#[derive(Component, Default)]
-struct DeliverableRetries(usize);
+/// Deliverable retries spent, per run (saved with a scene).
+#[derive(Component, Default, serde::Serialize, serde::Deserialize)]
+pub struct DeliverableRetries(pub usize);
 
 pub struct SteerPlugin;
 

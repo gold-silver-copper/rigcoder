@@ -56,11 +56,7 @@ fn main() -> anyhow::Result<()> {
         .add_plugins((
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f32(1. / 30.))),
             RatatuiPlugins::default(),
-            RigcoderPlugin {
-                workspace,
-                model: ModelChoice::from_env(),
-                max_turns: 200,
-            },
+            RigcoderPlugin::live(workspace, ModelChoice::from_env(), 200),
         ))
         .insert_resource(Ui {
             follow: true,

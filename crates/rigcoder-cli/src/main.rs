@@ -53,6 +53,38 @@ struct Args {
     /// Write the effect log (every model exchange and tool call, replayable without keys) here at exit.
     #[arg(long)]
     effect_log: Option<PathBuf>,
+    /// Replay a recorded effect log instead of calling a provider: the model and the
+    /// tools answer from the record; the first request that differs is reported as a divergence (exit 3).
+    #[arg(long, conflicts_with = "resume")]
+    replay: Option<PathBuf>,
+    /// Use this file as the system prompt instead of the compiled-in one.
+    #[arg(long)]
+    prompt_file: Option<PathBuf>,
+    /// Save the run graph (and, with --checkpoint-tar, the workspace) into this directory after every turn.
+    #[arg(long)]
+    checkpoint: Option<PathBuf>,
+    #[arg(long)]
+    checkpoint_tar: bool,
+    /// Resume a saved scene in a fresh world (the workspace must already be as it was).
+    #[arg(long)]
+    resume: Option<PathBuf>,
+}
+
+#[derive(Resource)]
+struct Resume(Option<rig_ecs::agent::scene::WorldScene>);
+
+/// The first user message of the first recorded completion.
+fn recorded_prompt(log: &rigcoder::EffectLog) -> Option<String> {
+    log.iter().find_map(|record| match &record.kind {
+        rig::effect::EffectKind::Completion { request, .. } => request.chat_history.iter().find_map(|m| match m {
+            rig::message::Message::User { content } => content.iter().find_map(|c| match c {
+                rig::message::UserContent::Text(t) => Some(t.text.clone()),
+                _ => None,
+            }),
+            _ => None,
+        }),
+        _ => None,
+    })
 }
 
 #[derive(Resource)]
@@ -71,10 +103,20 @@ fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
-    let task = match (&args.task, &args.task_file) {
-        (Some(task), _) => task.clone(),
-        (None, Some(path)) => std::fs::read_to_string(path)?,
-        (None, None) => {
+    let replay_log: Option<rigcoder::EffectLog> = match &args.replay {
+        Some(path) => Some(serde_json::from_str(&std::fs::read_to_string(path)?)?),
+        None => None,
+    };
+    let resume_scene: Option<rig_ecs::agent::scene::WorldScene> = match &args.resume {
+        Some(path) => Some(serde_json::from_str(&std::fs::read_to_string(path)?)?),
+        None => None,
+    };
+    let task = match (&args.task, &args.task_file, &replay_log, &resume_scene) {
+        (_, _, Some(log), _) => recorded_prompt(log).ok_or_else(|| anyhow::anyhow!("the effect log records no user prompt"))?,
+        (_, _, _, Some(_)) => String::new(),
+        (Some(task), _, ..) => task.clone(),
+        (None, Some(path), ..) => std::fs::read_to_string(path)?,
+        (None, None, ..) => {
             let mut task = String::new();
             std::io::stdin().read_line(&mut task)?;
             let mut rest = String::new();
@@ -84,7 +126,7 @@ fn main() -> anyhow::Result<()> {
         }
     };
     let task = task.trim().to_owned();
-    anyhow::ensure!(!task.is_empty(), "an empty task");
+    anyhow::ensure!(!task.is_empty() || resume_scene.is_some(), "an empty task");
     let workspace = match args.cwd {
         Some(dir) => dir,
         None => std::env::current_dir()?,
@@ -100,16 +142,26 @@ fn main() -> anyhow::Result<()> {
     eprintln!("rigcoder: {model} in {}", workspace.display());
 
     let effect_log_path = args.effect_log.clone();
+    let prompt_override = args.prompt_file.as_ref().map(std::fs::read_to_string).transpose()?;
+    let plugin = RigcoderPlugin {
+        workspace: workspace.clone(),
+        model,
+        max_turns: args.max_turns,
+        mode: match replay_log {
+            Some(log) => rigcoder::Mode::Replay(log),
+            None => rigcoder::Mode::Live,
+        },
+        prompt_override,
+    };
+    let checkpoint = rigcoder::checkpoint::Checkpoint { dir: args.checkpoint.clone(), tar: args.checkpoint_tar, turns_saved: 0 };
     let mut app = App::new();
     app
         .add_plugins((
             ScheduleRunnerPlugin::run_loop(Duration::from_millis(10)),
-            RigcoderPlugin {
-                workspace,
-                model,
-                max_turns: args.max_turns,
-            },
+            plugin,
         ))
+        .insert_resource(checkpoint)
+        .insert_resource(Resume(resume_scene))
         .insert_resource(steer)
         .insert_resource(Cli {
             task,
@@ -140,6 +192,16 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn start(world: &mut World) {
+    if let Some(scene) = world.resource_mut::<Resume>().0.take() {
+        match rigcoder::checkpoint::resume(world, &scene) {
+            Ok(_) => return,
+            Err(report) => {
+                eprintln!("rigcoder: could not resume: {report}");
+                world.write_message(AppExit::error());
+                return;
+            }
+        }
+    }
     let task = world.resource::<Cli>().task.clone();
     if rigcoder::submit(world, &task).is_none() {
         eprintln!("rigcoder: could not start the run (no model registered?)");
@@ -187,7 +249,11 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
             }
             Event::Failed(reason) => {
                 let _ = writeln!(stdout, "[failed] {reason}");
-                exit.write(AppExit::error());
+                exit.write(if reason.contains("replay") || reason.contains("diverg") || reason.contains("recorded") {
+                    AppExit::Error(std::num::NonZero::new(3).expect("nonzero"))
+                } else {
+                    AppExit::error()
+                });
             }
             Event::Denied { name, reason } => {
                 let _ = writeln!(stdout, "[denied] {name}: {reason}");
