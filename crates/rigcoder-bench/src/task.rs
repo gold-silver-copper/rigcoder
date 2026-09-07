@@ -1,0 +1,120 @@
+//! A Terminal-Bench task directory.
+
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use serde::Deserialize;
+
+#[derive(Debug, Clone)]
+pub struct Task {
+    pub name: String,
+    pub dir: PathBuf,
+    pub instruction: String,
+    /// The Dockerfile's last `WORKDIR`; the agent and the verifier run there.
+    pub workdir: String,
+    pub agent_timeout_secs: u64,
+    pub verifier_timeout_secs: u64,
+    pub build_timeout_secs: u64,
+    pub cpus: f64,
+    pub memory: String,
+    pub difficulty: String,
+}
+
+#[derive(Deserialize, Default)]
+struct TaskToml {
+    #[serde(default)]
+    metadata: Metadata,
+    #[serde(default)]
+    agent: Timeout,
+    #[serde(default)]
+    verifier: Timeout,
+    #[serde(default)]
+    environment: Environment,
+}
+
+#[derive(Deserialize, Default)]
+struct Metadata {
+    #[serde(default)]
+    difficulty: String,
+}
+
+#[derive(Deserialize)]
+struct Timeout {
+    #[serde(default = "default_timeout")]
+    timeout_sec: f64,
+}
+
+impl Default for Timeout {
+    fn default() -> Self {
+        Self { timeout_sec: default_timeout() }
+    }
+}
+
+fn default_timeout() -> f64 {
+    900.0
+}
+
+#[derive(Deserialize)]
+struct Environment {
+    #[serde(default = "default_build_timeout")]
+    build_timeout_sec: f64,
+    #[serde(default = "default_cpus")]
+    cpus: f64,
+    #[serde(default = "default_memory")]
+    memory: String,
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self {
+            build_timeout_sec: default_build_timeout(),
+            cpus: default_cpus(),
+            memory: default_memory(),
+        }
+    }
+}
+
+fn default_build_timeout() -> f64 {
+    600.0
+}
+fn default_cpus() -> f64 {
+    1.0
+}
+fn default_memory() -> String {
+    "2G".to_owned()
+}
+
+impl Task {
+    pub fn load(tasks_dir: &Path, name: &str) -> Result<Self> {
+        let dir = tasks_dir.join(name);
+        let toml_text = std::fs::read_to_string(dir.join("task.toml"))
+            .with_context(|| format!("no task.toml under {}", dir.display()))?;
+        let parsed: TaskToml = toml::from_str(&toml_text).with_context(|| format!("{name}/task.toml"))?;
+        let instruction = std::fs::read_to_string(dir.join("instruction.md"))
+            .with_context(|| format!("{name}/instruction.md"))?;
+        let dockerfile = std::fs::read_to_string(dir.join("environment").join("Dockerfile"))
+            .with_context(|| format!("{name}/environment/Dockerfile"))?;
+        let workdir = dockerfile
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("WORKDIR"))
+            .map(|rest| rest.trim().to_owned())
+            .last()
+            .unwrap_or_else(|| "/app".to_owned());
+        Ok(Self {
+            name: name.to_owned(),
+            dir,
+            instruction,
+            workdir,
+            agent_timeout_secs: parsed.agent.timeout_sec as u64,
+            verifier_timeout_secs: parsed.verifier.timeout_sec as u64,
+            build_timeout_secs: parsed.environment.build_timeout_sec as u64,
+            cpus: parsed.environment.cpus,
+            memory: parsed.environment.memory,
+            difficulty: parsed.metadata.difficulty,
+        })
+    }
+
+    pub fn image_tag(&self) -> String {
+        format!("rigcoder-bench/{}:local", self.name)
+    }
+}

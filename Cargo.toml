@@ -32,6 +32,7 @@ glob = "0.3"
 ignore = "0.4"
 similar = "2"
 clap = { version = "4", features = ["derive", "env"] }
+toml = "0.9"
 
 [profile.dev]
 opt-level = 1
