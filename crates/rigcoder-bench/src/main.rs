@@ -7,6 +7,7 @@
 //! runs the verifier, and reads the reward. No framework in between: six
 //! `docker` calls per trial.
 
+mod digest;
 mod docker;
 mod evolve;
 mod ledger;
@@ -42,6 +43,10 @@ enum Command {
     Summarize {
         job_dir: PathBuf,
     },
+    /// The failure digest of one job directory, as markdown; writes digest.json beside it.
+    Digest {
+        job_dir: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -55,6 +60,12 @@ fn main() -> anyhow::Result<()> {
         Command::Run(args) => evolve::run(&root, args),
         Command::Iterate(args) => evolve::iterate(&root, args),
         Command::Ledger => ledger::print(&root),
+        Command::Digest { job_dir } => {
+            let (digest, path) = digest::write(&job_dir)?;
+            print!("{}", digest::render(&digest));
+            eprintln!("wrote {}", path.display());
+            Ok(())
+        }
         Command::Summarize { job_dir } => {
             let trials = trial::read_job(&job_dir)?;
             let summary = stats::summarize(&trials);
