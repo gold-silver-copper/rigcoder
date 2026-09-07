@@ -49,6 +49,10 @@ pub enum Event {
     ToolResult { name: String, output: String, ok: bool },
     Settled { answer: String },
     Failed(String),
+    /// A tool call the gate refused; the model reads the reason as the result.
+    Denied { name: String, reason: String },
+    /// A tool call waiting for approval.
+    Held { name: String, args: String },
     /// The run's token usage, summed over its completions; written once
     /// when the run ends, before `Settled` or `Failed`.
     Usage {
@@ -176,11 +180,11 @@ pub fn on_settled(
     }
     let answer = results.get(run).map(|r| r.0.clone()).unwrap_or_default();
     finish(run, &utterances, &mut conversation);
-    record_usage(run, &usage, &mut transcript);
     // A non-streamed answer was never shown; a streamed one already was.
     if !matches!(transcript.events.last(), Some(Event::Assistant { .. })) && !answer.is_empty() {
         transcript.append_text(&answer);
     }
+    record_usage(run, &usage, &mut transcript);
     transcript.push(Event::Settled { answer });
 }
 

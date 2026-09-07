@@ -66,6 +66,11 @@ fn main() -> anyhow::Result<()> {
             follow: true,
             ..default()
         })
+        .insert_resource(rigcoder::steer::Steer {
+            auto_approve: false,
+            hold: vec![r"(^|[;&|]\s*)(rm\s+-[a-zA-Z]*r|git\s+(push|reset\s+--hard|clean)|sudo)\b".to_owned()],
+            ..Default::default()
+        })
         .add_systems(PreUpdate, keys)
         .add_systems(Update, (deliver, draw).chain())
         .run();
@@ -76,6 +81,7 @@ fn keys(
     mut messages: MessageReader<KeyMessage>,
     mut ui: ResMut<Ui>,
     conversation: Res<Conversation>,
+    mut approvals: ResMut<rigcoder::steer::Approvals>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let busy = conversation.active.is_some();
@@ -101,6 +107,8 @@ fn keys(
                 }
             }
             KeyCode::Esc if busy => ui.stop = true,
+            KeyCode::Char('y') if !approvals.pending.is_empty() && ui.input.is_empty() => approvals.approve_next(),
+            KeyCode::Char('n') if !approvals.pending.is_empty() && ui.input.is_empty() => approvals.deny_next(),
             KeyCode::Backspace => {
                 ui.input.pop();
             }
@@ -276,6 +284,12 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
             Event::Failed(reason) => {
                 lines.push(Line::from(Span::styled(format!("run failed: {reason}"), Style::new().fg(Color::Red).bold())));
                 lines.push(Line::default());
+            }
+            Event::Denied { name, reason } => {
+                lines.push(Line::from(Span::styled(format!("⛔ {name}: {reason}"), Style::new().fg(Color::Red))));
+            }
+            Event::Held { name, args } => {
+                lines.push(Line::from(Span::styled(format!("⏸ {name} {} (y approve / n deny)", one_line(args, 120)), Style::new().fg(Color::Magenta))));
             }
             Event::Usage { input_tokens, output_tokens, .. } => {
                 lines.push(Line::from(Span::styled(format!("tokens: {input_tokens} in, {output_tokens} out"), Style::new().dim())));

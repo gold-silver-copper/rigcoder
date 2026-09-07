@@ -41,6 +41,18 @@ struct Args {
     /// Print tool output in full instead of the first lines.
     #[arg(long)]
     verbose: bool,
+    /// A file the task must produce; a text-only answer while it is missing is retried (repeatable).
+    #[arg(long = "deliverable")]
+    deliverables: Vec<PathBuf>,
+    /// An extra regex; a bash command matching it is denied (repeatable).
+    #[arg(long = "deny")]
+    deny: Vec<String>,
+    /// A regex; a bash command matching it is held and, headless, approved after logging (repeatable).
+    #[arg(long = "hold")]
+    hold: Vec<String>,
+    /// Write the effect log (every model exchange and tool call, replayable without keys) here at exit.
+    #[arg(long)]
+    effect_log: Option<PathBuf>,
 }
 
 #[derive(Resource)]
@@ -80,9 +92,16 @@ fn main() -> anyhow::Result<()> {
     .canonicalize()?;
     let model = ModelChoice::parse(&args.provider, args.model)?;
     let transcript = args.transcript.map(std::fs::File::create).transpose()?;
+    let mut steer = rigcoder::steer::Steer::default();
+    steer.deliverables = args.deliverables.iter().map(|p| if p.is_absolute() { p.clone() } else { workspace.join(p) }).collect();
+    steer.deny.extend(args.deny.iter().map(|p| (p.clone(), "denied by a --deny rule".to_owned())));
+    steer.hold.extend(args.hold.iter().cloned());
+    steer.auto_approve = true;
     eprintln!("rigcoder: {model} in {}", workspace.display());
 
-    let exit = App::new()
+    let effect_log_path = args.effect_log.clone();
+    let mut app = App::new();
+    app
         .add_plugins((
             ScheduleRunnerPlugin::run_loop(Duration::from_millis(10)),
             RigcoderPlugin {
@@ -91,6 +110,7 @@ fn main() -> anyhow::Result<()> {
                 max_turns: args.max_turns,
             },
         ))
+        .insert_resource(steer)
         .insert_resource(Cli {
             task,
             printed: 0,
@@ -100,8 +120,19 @@ fn main() -> anyhow::Result<()> {
             verbose: args.verbose,
         })
         .add_systems(PostStartup, start)
-        .add_systems(Update, (report, watchdog))
-        .run();
+        .add_systems(Update, (report, watchdog));
+    let exit = app.run();
+    if let Some(path) = effect_log_path {
+        let log = rigcoder::effect_log(app.world());
+        match serde_json::to_string(&log) {
+            Ok(json) => {
+                if let Err(error) = std::fs::write(&path, json) {
+                    eprintln!("rigcoder: could not write the effect log to {}: {error}", path.display());
+                }
+            }
+            Err(error) => eprintln!("rigcoder: could not serialize the effect log: {error}"),
+        }
+    }
     match exit {
         AppExit::Success => Ok(()),
         AppExit::Error(code) => std::process::exit(code.get() as i32),
@@ -157,6 +188,12 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
             Event::Failed(reason) => {
                 let _ = writeln!(stdout, "[failed] {reason}");
                 exit.write(AppExit::error());
+            }
+            Event::Denied { name, reason } => {
+                let _ = writeln!(stdout, "[denied] {name}: {reason}");
+            }
+            Event::Held { name, args } => {
+                let _ = writeln!(stdout, "[held] {name} {}", short(args, 300));
             }
             Event::Usage {
                 input_tokens,

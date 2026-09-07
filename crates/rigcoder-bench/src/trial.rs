@@ -116,7 +116,7 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
         &env,
         &format!(
             "{REMOTE_BIN} --cwd {} --max-turns {max_turns} --timeout-secs {timeout_secs} \
-             --transcript /logs/agent/transcript.jsonl --task-file /logs/agent/instruction.md \
+             --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json --task-file /logs/agent/instruction.md \
              > /logs/agent/rigcoder.txt 2>&1; echo $? > /logs/agent/exit_code.txt",
             task.workdir
         ),

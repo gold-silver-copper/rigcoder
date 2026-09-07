@@ -20,12 +20,18 @@ use rig_ecs::{
         AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output,
         Owner, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
     },
-    bus::{BusPlugin, BusSet, Handlers, RigSchedule},
+    bus::{Bound, BusPlugin, BusSet, EffectLogResource, Handlers, RigSchedule},
     prelude::*,
     systems::AgentPlugin,
 };
 
 pub use model::ModelChoice;
+pub use rig_effect_log::EffectLog;
+
+/// The effect log recorded so far.
+pub fn effect_log(world: &World) -> EffectLog {
+    world.resource::<EffectLogResource>().log()
+}
 pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
 
 /// The system prompt, kept as a file so the improvement harness can edit it
@@ -56,7 +62,10 @@ impl Plugin for RigcoderPlugin {
             model,
             max_turns,
         } = self.clone();
-        app.add_plugins((BusPlugin::default(), AgentPlugin::default(), steer::SteerPlugin))
+        app.add_plugins((BusPlugin::default(), AgentPlugin::default(), steer::SteerPlugin));
+        // Every effect is recorded: the log replays on a host without keys.
+        EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
+        app
             .insert_resource(Workspace { root: workspace })
             .insert_resource(model)
             .insert_resource(AgentBudget { max_turns })
@@ -77,20 +86,24 @@ impl Plugin for RigcoderPlugin {
 }
 
 #[derive(Resource, Debug, Clone, Copy)]
-struct AgentBudget {
+pub struct AgentBudget {
     max_turns: usize,
 }
 
 /// Register the model and the tools, spawn the agent, grant it every tool.
-fn setup(
+pub fn setup(
     mut handlers: Handlers,
+    bound: Query<(Entity, &Bound)>,
     mut commands: Commands,
     workspace: Res<Workspace>,
     choice: Res<ModelChoice>,
     budget: Res<AgentBudget>,
     mut transcript: ResMut<Transcript>,
 ) {
-    let model = match model::register(&mut handlers, &choice) {
+    // A model already registered under the key (a test's scripted one, a
+    // replayer) is used as it is; otherwise the provider's is registered.
+    let existing = bound.iter().find(|(_, b)| b.key.as_str() == model::MODEL_KEY).map(|(e, _)| e);
+    let model = match existing.map(Ok).unwrap_or_else(|| model::register(&mut handlers, &choice)) {
         Ok(model) => model,
         Err(report) => {
             transcript.push(Event::Failed(format!("could not register the model: {report}")));
