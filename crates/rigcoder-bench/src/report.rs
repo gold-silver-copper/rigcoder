@@ -1,6 +1,6 @@
 //! The failure report the meta agent reads: the digest first, then every
 //! failed trial in full (instruction, transcript with long results
-//! collapsed, verifier output), capped at 400 KB.
+//! collapsed, verifier output), capped at 400 KiB with complete evidence on disk.
 
 use std::path::{Path, PathBuf};
 
@@ -55,12 +55,19 @@ fn collapse(text: &str) -> String {
 pub fn render_transcript(jsonl: &str) -> String {
     let mut out = String::new();
     for line in jsonl.lines() {
-        let Ok(e) = serde_json::from_str::<Event>(line) else { continue };
+        let Ok(e) = serde_json::from_str::<Event>(line) else {
+            continue;
+        };
         match e.kind.as_str() {
             "user" => out.push_str(&format!("> {}\n\n", e.text)),
             "assistant" => out.push_str(&format!("{}\n\n", e.text)),
             "tool_call" => out.push_str(&format!("[tool] {} {}\n", e.name, e.args)),
-            "tool_result" => out.push_str(&format!("[{}] {}\n{}\n\n", if e.ok { "result" } else { "error" }, e.name, collapse(&e.output))),
+            "tool_result" => out.push_str(&format!(
+                "[{}] {}\n{}\n\n",
+                if e.ok { "result" } else { "error" },
+                e.name,
+                collapse(&e.output)
+            )),
             "settled" => out.push_str(&format!("[settled] {}\n", collapse(&e.answer))),
             "failed" => out.push_str("[failed]\n"),
             other => out.push_str(&format!("[{other}]\n")),
@@ -69,7 +76,14 @@ pub fn render_transcript(jsonl: &str) -> String {
     out
 }
 
-pub fn write(job_dir: &Path, generation: usize, summary: &Summary, trials: &[TrialRecord], best_score: f64, best_low: f64) -> Result<PathBuf> {
+pub fn write(
+    job_dir: &Path,
+    generation: usize,
+    summary: &Summary,
+    trials: &[TrialRecord],
+    best_score: f64,
+    best_low: f64,
+) -> Result<PathBuf> {
     let (d, _) = digest::write(job_dir)?;
     let mut out = String::new();
     out.push_str(&format!("# Generation {generation}\n\n"));
@@ -85,50 +99,97 @@ pub fn write(job_dir: &Path, generation: usize, summary: &Summary, trials: &[Tri
     out.push('\n');
     out.push_str(&digest::render(&d));
 
-    // Failed trials in full. Verifier output is never dropped; if the cap
-    // is hit, transcripts are shortened from the longest down.
-    let failed: Vec<&TrialRecord> = trials.iter().filter(|t| t.reward < 1.0).collect();
-    let mut sections: Vec<(String, String, String)> = failed
-        .iter()
-        .map(|t| {
-            let dir = trial_dir(job_dir, &t.task, t.attempt);
-            let mut head = format!("## Failed: {} (attempt {})\n\n", t.task, t.attempt);
-            if let Some(error) = &t.error {
-                head.push_str(&format!("Harness error: {error}\n\n"));
-            }
-            head.push_str(&format!("### Instruction\n\n{}\n\n", read(&dir.join("instruction.md"))));
-            let transcript = format!(
-                "### Agent transcript (full; long results collapsed; JSON at {})\n\n```\n{}\n```\n\n",
-                dir.join("agent").join("transcript.jsonl").display(),
-                render_transcript(&read(&dir.join("agent").join("transcript.jsonl")))
-            );
-            let verifier = format!("### Verifier output\n\n```\n{}\n```\n\n", read(&dir.join("verifier").join("output.txt")));
-            (head, transcript, verifier)
-        })
-        .collect();
-    let fixed: usize = out.len() + sections.iter().map(|(h, _, v)| h.len() + v.len()).sum::<usize>();
-    let mut budget = REPORT_CAP.saturating_sub(fixed);
-    let total_transcripts: usize = sections.iter().map(|(_, t, _)| t.len()).sum();
-    if total_transcripts > budget && !sections.is_empty() {
-        let each = budget / sections.len();
-        for (_, transcript, _) in &mut sections {
-            if transcript.len() > each {
-                let keep = transcript.len().saturating_sub(each).max(0);
-                let start = (keep..transcript.len()).find(|i| transcript.is_char_boundary(*i)).unwrap_or(transcript.len());
-                *transcript = format!("### Agent transcript (tail, cut for the report cap)\n\n```\n…{}", &transcript[start..]);
-            }
+    // Keep complete evidence on disk. Large reports expose bounded excerpts
+    // with a link to the full report instead of silently dropping verifier data.
+    for t in trials.iter().filter(|t| t.reward < 1.0) {
+        let dir = trial_dir(job_dir, &t.task, t.attempt);
+        out.push_str(&format!(
+            "## Failed: {} (attempt {})\n\n",
+            t.task, t.attempt
+        ));
+        if let Some(error) = &t.error {
+            out.push_str(&format!("Harness error: {error}\n\n"));
         }
-        budget = 0;
+        out.push_str("### Instruction\n\n");
+        out.push_str(&fenced(&read(&dir.join("instruction.md"))));
+        out.push_str(&format!(
+            "### Agent transcript (long results collapsed; JSON at {})\n\n",
+            dir.join("agent/transcript.jsonl").display()
+        ));
+        out.push_str(&fenced(&render_transcript(&read(
+            &dir.join("agent/transcript.jsonl"),
+        ))));
+        out.push_str("### Verifier output\n\n");
+        out.push_str(&fenced(&read(&dir.join("verifier/output.txt"))));
     }
-    let _ = budget;
-    for (head, transcript, verifier) in sections {
-        out.push_str(&head);
-        out.push_str(&transcript);
-        out.push_str(&verifier);
+    if out.len() > REPORT_CAP {
+        std::fs::write(job_dir.join("report.full.md"), &out)?;
+        out = bounded_excerpt(&out, REPORT_CAP);
     }
     let path = job_dir.join("report.md");
     std::fs::write(&path, out)?;
     Ok(path)
+}
+
+fn fenced(text: &str) -> String {
+    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat(longest.saturating_add(1).max(3));
+    format!("{fence}\n{text}\n{fence}\n\n")
+}
+
+fn indented_prefix(text: &str, budget: usize) -> String {
+    let mut out = String::new();
+    for line in text.split_inclusive('\n') {
+        if budget.saturating_sub(out.len()) <= 5 {
+            break;
+        }
+        out.push_str("    ");
+        let mut end = line.len().min(budget - out.len() - 1);
+        while !line.is_char_boundary(end) {
+            end -= 1;
+        }
+        out.push_str(&line[..end]);
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+        if end < line.len() {
+            break;
+        }
+    }
+    out
+}
+
+fn indented_suffix(text: &str, budget: usize) -> String {
+    let mut parts = Vec::new();
+    let mut remaining = budget;
+    for line in text.lines().rev() {
+        if remaining <= 5 {
+            break;
+        }
+        let mut start = line.len().saturating_sub(remaining - 5);
+        while !line.is_char_boundary(start) {
+            start += 1;
+        }
+        let part = format!("    {}\n", &line[start..]);
+        remaining -= part.len();
+        parts.push(part);
+        if start > 0 {
+            break;
+        }
+    }
+    parts.reverse();
+    parts.concat()
+}
+
+fn bounded_excerpt(text: &str, cap: usize) -> String {
+    let header = "# Report excerpt\n\nThe report exceeded its size limit. [Read the complete report](report.full.md) for all instructions, transcripts and verifier output.\n\n";
+    let marker = "\nContent omitted; complete evidence is in report.full.md.\n\n";
+    let budget = cap.saturating_sub(header.len() + marker.len());
+    let mut out = header.to_owned();
+    out.push_str(&indented_prefix(text, budget / 2));
+    out.push_str(marker);
+    out.push_str(&indented_suffix(text, cap.saturating_sub(out.len())));
+    out
 }
 
 #[cfg(test)]
@@ -137,11 +198,82 @@ mod tests {
 
     #[test]
     fn long_results_collapse_to_head_and_tail() {
-        let text: String = (1..=40).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let text: String = (1..=40)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let c = collapse(&text);
         assert!(c.starts_with("line 1\n"));
         assert!(c.ends_with("line 40"));
         assert!(c.contains("[... 20 lines ...]"));
         assert_eq!(collapse("short"), "short");
+    }
+
+    #[test]
+    fn oversized_unicode_evidence_is_bounded_and_has_no_open_fence() {
+        let text = format!(
+            "```\n{}\n```\n{}",
+            "界\n".repeat(REPORT_CAP),
+            "verifier".repeat(REPORT_CAP)
+        );
+        let report = bounded_excerpt(&text, REPORT_CAP);
+        assert!(report.len() <= REPORT_CAP);
+        assert!(report.contains("report.full.md"));
+        assert!(!report.lines().any(|line| line.starts_with("```")));
+        assert!(report.contains("verifier"));
+    }
+
+    #[test]
+    fn embedded_backticks_cannot_close_evidence_fence() {
+        let rendered = fenced("```\nmodel output\n```");
+        assert!(rendered.starts_with("````\n"));
+        assert!(rendered.ends_with("\n````\n\n"));
+    }
+
+    #[test]
+    fn large_verifier_keeps_complete_evidence_beside_bounded_report() {
+        let root = std::env::temp_dir().join(format!(
+            "rigcoder-report-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let trial = root.join("case__1");
+        std::fs::create_dir_all(trial.join("agent")).unwrap();
+        std::fs::create_dir_all(trial.join("verifier")).unwrap();
+        let record = TrialRecord {
+            task: "case".to_owned(),
+            attempt: 1,
+            reward: 0.0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_tokens: 0,
+            tool_calls: 0,
+            wall_seconds: 0.0,
+            settled: false,
+            error: None,
+        };
+        std::fs::write(
+            trial.join("result.json"),
+            serde_json::to_vec(&record).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(trial.join("instruction.md"), "repair the task").unwrap();
+        std::fs::write(trial.join("agent/transcript.jsonl"), "").unwrap();
+        let verifier = format!("{}END-OF-VERIFIER", "界\nx\n".repeat(REPORT_CAP));
+        std::fs::write(trial.join("verifier/output.txt"), &verifier).unwrap();
+        let report = write(&root, 0, &Summary::default(), &[record], 0.0, 0.0).unwrap();
+        let text = std::fs::read_to_string(report).unwrap();
+        assert!(text.len() <= REPORT_CAP);
+        assert!(text.contains("report.full.md"));
+        assert!(text.contains("END-OF-VERIFIER"));
+        assert!(
+            std::fs::read_to_string(root.join("report.full.md"))
+                .unwrap()
+                .contains(&verifier)
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

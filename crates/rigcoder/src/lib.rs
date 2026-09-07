@@ -12,16 +12,16 @@ pub mod session;
 pub mod steer;
 pub mod tools;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::prelude::*;
 use rig_ecs::{
-    agent::{
-        AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output,
-        Owner, PolicyVersion, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
-    },
     agent::scene::SceneExtensions,
+    agent::{
+        AdditionalParams, DefaultMaxTurns, InvalidCalls, MaxTokens, MaxTurns, Order, Output, Owner,
+        PolicyVersion, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
+    },
     bus::{Bound, BusPlugin, BusSet, EffectLogResource, Handlers, Replay, RigSchedule},
     prelude::*,
     systems::AgentPlugin,
@@ -55,7 +55,7 @@ pub struct Workspace {
 pub enum Mode {
     #[default]
     Live,
-    Replay(EffectLog),
+    Replay(Arc<EffectLog>),
 }
 
 /// The whole agent as one plugin: the bus, the agent runtime, the model and
@@ -73,7 +73,13 @@ pub struct RigcoderPlugin {
 
 impl RigcoderPlugin {
     pub fn live(workspace: PathBuf, model: ModelChoice, max_turns: usize) -> Self {
-        Self { workspace, model, max_turns, mode: Mode::Live, prompt_override: None }
+        Self {
+            workspace,
+            model,
+            max_turns,
+            mode: Mode::Live,
+            prompt_override: None,
+        }
     }
 }
 
@@ -86,19 +92,30 @@ impl Plugin for RigcoderPlugin {
             mode,
             prompt_override,
         } = self.clone();
-        app.add_plugins((BusPlugin::default(), AgentPlugin::default(), steer::SteerPlugin));
+        app.add_plugins((
+            BusPlugin::default(),
+            AgentPlugin::default(),
+            steer::SteerPlugin,
+        ));
         // Every effect is recorded: the log replays on a host without keys.
         EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
-        app
-            .insert_resource(Workspace { root: workspace })
+        app.insert_resource(Workspace { root: workspace })
             .insert_resource(model)
             .insert_resource(AgentBudget { max_turns })
-            .insert_resource(Setup { mode, prompt_override })
+            .insert_resource(Setup {
+                mode,
+                prompt_override,
+            })
             .init_resource::<SceneExtensions>()
             .init_resource::<checkpoint::Checkpoint>()
             .init_resource::<checkpoint::MaterialisedTurns>()
             .add_observer(checkpoint::count_materialised)
-            .add_systems(RigSchedule, checkpoint::save_between_turns.after(RigSet::Materialise).before(RigSet::Settle))
+            .add_systems(
+                RigSchedule,
+                checkpoint::save_between_turns
+                    .after(RigSet::Materialise)
+                    .before(RigSet::Settle),
+            )
             .init_resource::<Conversation>()
             .init_resource::<Transcript>()
             .add_systems(Startup, (bind_replayers, setup).chain())
@@ -122,6 +139,7 @@ pub struct AgentBudget {
 }
 
 /// Register the model and the tools, spawn the agent, grant it every tool.
+#[allow(clippy::too_many_arguments)] // Bevy injects these independent system parameters.
 pub fn setup(
     mut handlers: Handlers,
     bound: Query<(Entity, &Bound)>,
@@ -133,12 +151,18 @@ pub fn setup(
     mut transcript: ResMut<Transcript>,
     mut extensions: ResMut<SceneExtensions>,
 ) {
-    let _ = extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
+    let _ =
+        extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
     let (model, tools) = match &setup.mode {
         Mode::Replay(_) => {
-            let model = bound.iter().find(|(_, b)| b.key.as_str() == model::MODEL_KEY).map(|(e, _)| e);
+            let model = bound
+                .iter()
+                .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
+                .map(|(e, _)| e);
             let Some(model) = model else {
-                transcript.push(Event::Failed("the effect log records no model exchange".to_owned()));
+                transcript.push(Event::Failed(
+                    "the effect log records no model exchange".to_owned(),
+                ));
                 return;
             };
             let mut tools: Vec<(usize, String, Entity)> = bound
@@ -146,7 +170,10 @@ pub fn setup(
                 .filter(|(_, b)| b.key.as_str().starts_with("tool:"))
                 .map(|(e, b)| {
                     let name = &b.key.as_str()["tool:".len()..];
-                    let rank = tools::NAMES.iter().position(|n| *n == name).unwrap_or(tools::NAMES.len());
+                    let rank = tools::NAMES
+                        .iter()
+                        .position(|n| *n == name)
+                        .unwrap_or(tools::NAMES.len());
                     (rank, name.to_owned(), e)
                 })
                 .collect();
@@ -156,11 +183,19 @@ pub fn setup(
         Mode::Live => {
             // A model already registered under the key (a test's scripted one)
             // is used as it is; otherwise the provider's is registered.
-            let existing = bound.iter().find(|(_, b)| b.key.as_str() == model::MODEL_KEY).map(|(e, _)| e);
-            let model = match existing.map(Ok).unwrap_or_else(|| model::register(&mut handlers, &choice)) {
+            let existing = bound
+                .iter()
+                .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
+                .map(|(e, _)| e);
+            let model = match existing
+                .map(Ok)
+                .unwrap_or_else(|| model::register(&mut handlers, &choice))
+            {
                 Ok(model) => model,
                 Err(report) => {
-                    transcript.push(Event::Failed(format!("could not register the model: {report}")));
+                    transcript.push(Event::Failed(format!(
+                        "could not register the model: {report}"
+                    )));
                     return;
                 }
             };
@@ -168,7 +203,10 @@ pub fn setup(
         }
     };
     let prompt = setup.prompt_override.as_deref().unwrap_or(SYSTEM_PROMPT);
-    let preamble = format!("{prompt}\nWorkspace directory: {}\n", workspace.root.display());
+    let preamble = format!(
+        "{prompt}\nWorkspace directory: {}\n",
+        workspace.root.display()
+    );
     let agent = commands
         .spawn((
             Owner("rigcoder".to_owned()),
@@ -212,6 +250,8 @@ fn bind_replayers(mut handlers: Handlers, setup: Res<Setup>, mut transcript: Res
     if let Mode::Replay(log) = &setup.mode
         && let Err(report) = Replay::default().register(&mut handlers, log)
     {
-        transcript.push(Event::Failed(format!("could not bind the replayers: {report}")));
+        transcript.push(Event::Failed(format!(
+            "could not bind the replayers: {report}"
+        )));
     }
 }

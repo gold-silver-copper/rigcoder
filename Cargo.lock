@@ -7212,6 +7212,7 @@ dependencies = [
  "futures",
  "globset",
  "ignore",
+ "libc",
  "regex",
  "reqwest 0.13.4",
  "rig",

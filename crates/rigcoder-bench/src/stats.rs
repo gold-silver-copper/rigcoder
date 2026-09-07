@@ -74,7 +74,11 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
     }
     let n = trials.len();
     let passed = trials.iter().filter(|t| t.reward >= 1.0).count();
-    let score = if n > 0 { trials.iter().map(|t| t.reward).sum::<f64>() / n as f64 } else { 0.0 };
+    let score = if n > 0 {
+        trials.iter().map(|t| t.reward).sum::<f64>() / n as f64
+    } else {
+        0.0
+    };
     let tasks = by_task.len();
     let pass1 = if tasks > 0 {
         by_task
@@ -86,7 +90,11 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
         0.0
     };
     let passk = if tasks > 0 {
-        by_task.values().filter(|rs| rs.iter().any(|r| *r >= 1.0)).count() as f64 / tasks as f64
+        by_task
+            .values()
+            .filter(|rs| rs.iter().any(|r| *r >= 1.0))
+            .count() as f64
+            / tasks as f64
     } else {
         0.0
     };
@@ -98,7 +106,17 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
         tool_calls: trials.iter().map(|t| t.tool_calls).sum(),
         wall_seconds: trials.iter().map(|t| t.wall_seconds).sum(),
     };
-    Summary { score, pass1, passk, ci_low, ci_high, trials: n, tasks, rewards: by_task, cost }
+    Summary {
+        score,
+        pass1,
+        passk,
+        ci_low,
+        ci_high,
+        trials: n,
+        tasks,
+        rewards: by_task,
+        cost,
+    }
 }
 
 #[cfg(test)]
@@ -131,7 +149,7 @@ mod tests {
         let (l6, h6) = wilson(5, 6);
         let (l60, h60) = wilson(50, 60);
         assert!(h6 - l6 > h60 - l60);
-        assert!(0.0 <= l60 && l60 < 50.0 / 60.0 && 50.0 / 60.0 < h60 && h60 <= 1.0);
+        assert!((0.0..50.0 / 60.0).contains(&l60) && (50.0 / 60.0..=1.0).contains(&h60));
     }
 
     #[test]
@@ -159,12 +177,19 @@ mod tests {
     fn higher_point_on_fewer_trials_is_reverted() {
         let (low, _) = wilson(3, 3);
         let (best_low, _) = wilson(50, 60);
-        assert_eq!(keep_decision(1.0, low, 50.0 / 60.0, best_low), Decision::Reverted);
+        assert_eq!(
+            keep_decision(1.0, low, 50.0 / 60.0, best_low),
+            Decision::Reverted
+        );
     }
 
     #[test]
     fn summary_metrics() {
-        let s = summarize(&trials(&[("a", &[1.0, 1.0, 0.0]), ("b", &[0.0, 0.0, 0.0]), ("c", &[1.0, 0.0, 1.0])]));
+        let s = summarize(&trials(&[
+            ("a", &[1.0, 1.0, 0.0]),
+            ("b", &[0.0, 0.0, 0.0]),
+            ("c", &[1.0, 0.0, 1.0]),
+        ]));
         assert_eq!(s.trials, 9);
         assert_eq!(s.tasks, 3);
         assert!((s.score - 4.0 / 9.0).abs() < 1e-9);

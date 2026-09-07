@@ -22,7 +22,10 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "rigcoder-bench", about = "Terminal-Bench runner and evolve loop for rigcoder.")]
+#[command(
+    name = "rigcoder-bench",
+    about = "Terminal-Bench runner and evolve loop for rigcoder."
+)]
 struct Cli {
     /// Repository root (default: the current directory).
     #[arg(long, global = true)]
@@ -40,13 +43,9 @@ enum Command {
     /// Print the ledger as a table.
     Ledger,
     /// Summarize one job directory (scores, interval, per-task attempts).
-    Summarize {
-        job_dir: PathBuf,
-    },
+    Summarize { job_dir: PathBuf },
     /// The failure digest of one job directory, as markdown; writes digest.json beside it.
-    Digest {
-        job_dir: PathBuf,
-    },
+    Digest { job_dir: PathBuf },
     /// Replay a recorded trial on this machine, no model and no side effects: reports the first divergence, if any.
     Replay {
         trial_dir: PathBuf,
@@ -85,8 +84,22 @@ fn main() -> anyhow::Result<()> {
             eprintln!("wrote {}", path.display());
             Ok(())
         }
-        Command::Replay { trial_dir, prompt_file, host_bin } => evolve::replay(&root, &trial_dir, prompt_file.as_deref(), host_bin.as_deref()),
-        Command::BranchFrom { trial_dir, turn, times, run } => evolve::branch_from(&root, &trial_dir, turn, times, &run),
+        Command::Replay {
+            trial_dir,
+            prompt_file,
+            host_bin,
+        } => evolve::replay(
+            &root,
+            &trial_dir,
+            prompt_file.as_deref(),
+            host_bin.as_deref(),
+        ),
+        Command::BranchFrom {
+            trial_dir,
+            turn,
+            times,
+            run,
+        } => evolve::branch_from(&root, &trial_dir, turn, times, &run),
         Command::Summarize { job_dir } => {
             let trials = trial::read_job(&job_dir)?;
             let summary = stats::summarize(&trials);

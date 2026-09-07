@@ -7,7 +7,10 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -28,26 +31,28 @@ use rig::{
 use rig_ecs::bus::Handlers;
 use serde_json::{Value, json};
 
-/// Output longer than this is cut in the middle, keeping the head and tail.
-const MAX_OUTPUT_CHARS: usize = 30_000;
 const DEFAULT_BASH_TIMEOUT_SECS: u64 = 120;
 const MAX_BASH_TIMEOUT_SECS: u64 = 600;
 
-/// The tools, in the order the agent is granted them (and so the order the
-/// model sees them). A replay orders its replayers the same way.
-pub const NAMES: [&str; 6] = ["read_file", "write_file", "edit_file", "list_files", "grep", "bash"];
+/// The tools, in the order granted to the agent and advertised in replay.
+pub const NAMES: [&str; 6] = [
+    "read_file",
+    "write_file",
+    "edit_file",
+    "list_files",
+    "grep",
+    "bash",
+];
 
-/// Register every tool; the entities, in [`NAMES`] order, are what the
-/// agent is granted.
+/// Register every tool; the entities are returned in [`NAMES`] order.
 pub fn register_all(handlers: &mut Handlers, root: &Path) -> Vec<Entity> {
     let root: Arc<PathBuf> = Arc::new(root.to_path_buf());
     let mut entities = Vec::new();
-    let mut add = |name: &str, tool: ToolFn<_>| {
-        match handlers.register(rig::effect::tool_key(name), tool) {
+    let mut add =
+        |name: &str, tool: ToolFn<_>| match handlers.register(rig::effect::tool_key(name), tool) {
             Ok(entity) => entities.push(entity),
             Err(report) => tracing::error!("could not register tool {name}: {report}"),
-        }
-    };
+        };
     add("read_file", read_file(root.clone()));
     add("write_file", write_file(root.clone()));
     add("edit_file", edit_file(root.clone()));
@@ -79,7 +84,8 @@ fn tool(
             Ok(text) => text,
             Err(error) => format!("error: {error}"),
         };
-        Box::pin(async move { Ok(ToolOutput::text(truncate(text))) })
+        // Record the complete handler output; steer shapes history after recording.
+        Box::pin(async move { Ok(ToolOutput::text(text)) })
     });
     ToolFn::new(name, description, parameters, callback)
 }
@@ -102,27 +108,10 @@ where
                 Ok(text) => text,
                 Err(error) => format!("error: {error}"),
             };
-            Ok(ToolOutput::text(truncate(text)))
+            Ok(ToolOutput::text(text))
         })
     });
     ToolFn::new(name, description, parameters, callback)
-}
-
-fn truncate(text: String) -> String {
-    if text.chars().count() <= MAX_OUTPUT_CHARS {
-        return text;
-    }
-    let half = MAX_OUTPUT_CHARS / 2;
-    let head: String = text.chars().take(half).collect();
-    let tail: String = text
-        .chars()
-        .rev()
-        .take(half)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect();
-    format!("{head}\n\n[... output truncated in the middle ...]\n\n{tail}")
 }
 
 fn resolve(root: &Path, path: &str) -> PathBuf {
@@ -169,7 +158,10 @@ fn read_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
                 out.push_str(&format!("{:>6}\t{line}\n", index + 1));
             }
             if offset - 1 + limit < total {
-                out.push_str(&format!("[{total} lines total; showing {offset}..{}]\n", offset - 1 + limit));
+                out.push_str(&format!(
+                    "[{total} lines total; showing {offset}..{}]\n",
+                    offset - 1 + limit
+                ));
             }
             if out.is_empty() {
                 out.push_str("(empty file)");
@@ -200,7 +192,11 @@ fn write_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
             }
             std::fs::write(&path, content)
                 .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-            Ok(format!("wrote {} bytes to {}", content.len(), path.display()))
+            Ok(format!(
+                "wrote {} bytes to {}",
+                content.len(),
+                path.display()
+            ))
         },
     )
 }
@@ -246,7 +242,11 @@ fn edit_file(root: Arc<PathBuf>) -> ToolFn<Callback> {
             };
             std::fs::write(&path, &after)
                 .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-            Ok(format!("{count} replacement(s) in {}\n{}", path.display(), context_after_edit(&after, new)))
+            Ok(format!(
+                "{count} replacement(s) in {}\n{}",
+                path.display(),
+                context_after_edit(&before, &after, old, new)
+            ))
         },
     )
 }
@@ -338,7 +338,11 @@ fn grep(root: Arc<PathBuf>) -> ToolFn<Callback> {
             let limit = args["limit"].as_u64().unwrap_or(200) as usize;
             let mut out = String::new();
             let mut count = 0usize;
-            'files: for entry in ignore::WalkBuilder::new(&dir).hidden(false).build().flatten() {
+            'files: for entry in ignore::WalkBuilder::new(&dir)
+                .hidden(false)
+                .build()
+                .flatten()
+            {
                 if !entry.file_type().is_some_and(|t| t.is_file()) {
                     continue;
                 }
@@ -447,11 +451,50 @@ impl Capture {
     }
 }
 
-fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Capture> {
+#[cfg(unix)]
+fn drain(
+    mut pipe: impl Read + std::os::fd::AsRawFd + Send + 'static,
+    stop: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<Capture> {
     std::thread::spawn(move || {
         let mut capture = Capture::default();
         let mut buffer = [0u8; 8192];
-        loop {
+        while !stop.load(Ordering::Acquire) {
+            // Poll before reading so even a detached descendant holding a
+            // pipe open cannot keep the reader alive past cancellation.
+            let mut fd = libc::pollfd {
+                fd: pipe.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let ready = unsafe { libc::poll(&mut fd, 1, 25) };
+            if ready == 0 {
+                continue;
+            }
+            if ready < 0 {
+                if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                break;
+            }
+            match pipe.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => capture.push(&buffer[..n]),
+            }
+        }
+        capture
+    })
+}
+
+#[cfg(not(unix))]
+fn drain(
+    mut pipe: impl Read + Send + 'static,
+    stop: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<Capture> {
+    std::thread::spawn(move || {
+        let mut capture = Capture::default();
+        let mut buffer = [0u8; 8192];
+        while !stop.load(Ordering::Acquire) {
             match pipe.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => capture.push(&buffer[..n]),
@@ -465,12 +508,17 @@ fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Captur
 /// captures as they arrive, wait on a dedicated thread, kill the whole
 /// group at the deadline, and hand the result back through a oneshot so
 /// the caller's future never blocks a pool thread.
-fn run_shell(root: &Path, command: &str, timeout: Duration) -> impl std::future::Future<Output = Result<String, String>> + Send {
+fn run_shell(
+    root: &Path,
+    command: &str,
+    timeout: Duration,
+) -> impl std::future::Future<Output = Result<String, String>> + Send {
     let (sender, receiver) = futures::channel::oneshot::channel();
     let root = root.to_path_buf();
     let command = command.to_owned();
     std::thread::spawn(move || {
-        let _ = sender.send(run_shell_blocking(&root, &command, timeout));
+        let result = run_shell_blocking(&root, &command, timeout, || sender.is_canceled());
+        let _ = sender.send(result);
     });
     async move {
         receiver
@@ -479,7 +527,12 @@ fn run_shell(root: &Path, command: &str, timeout: Duration) -> impl std::future:
     }
 }
 
-fn run_shell_blocking(root: &Path, command: &str, timeout: Duration) -> Result<String, String> {
+fn run_shell_blocking(
+    root: &Path,
+    command: &str,
+    timeout: Duration,
+    cancelled: impl Fn() -> bool,
+) -> Result<String, String> {
     let mut cmd = Command::new("bash");
     cmd.arg("-c")
         .arg(command)
@@ -490,31 +543,52 @@ fn run_shell_blocking(root: &Path, command: &str, timeout: Duration) -> Result<S
     #[cfg(unix)]
     cmd.process_group(0);
     let mut child = cmd.spawn().map_err(|e| format!("cannot start bash: {e}"))?;
-    let stdout = child.stdout.take().map(drain);
-    let stderr = child.stderr.take().map(drain);
+    let stop_readers = Arc::new(AtomicBool::new(false));
+    let stdout = child.stdout.take().map(|p| drain(p, stop_readers.clone()));
+    let stderr = child.stderr.take().map(|p| drain(p, stop_readers.clone()));
     let started = Instant::now();
     let mut killed = false;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if started.elapsed() >= timeout => {
-                #[cfg(unix)]
-                {
-                    let pgid = child.id() as i32;
-                    unsafe {
-                        kill(-pgid, 9);
-                    }
-                }
-                let _ = child.kill();
-                killed = true;
-                break child.wait().ok();
+    let mut status = None;
+    let mut wait_error = None;
+    loop {
+        if status.is_none() {
+            match child.try_wait() {
+                Ok(found) => status = found,
+                Err(error) => wait_error = Some(format!("waiting for bash: {error}")),
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(25)),
-            Err(error) => return Err(format!("waiting for bash: {error}")),
         }
-    };
-    let stdout = stdout.and_then(|t| t.join().ok()).map(Capture::render).unwrap_or_default();
-    let stderr = stderr.and_then(|t| t.join().ok()).map(Capture::render).unwrap_or_default();
+        let drained = stdout.as_ref().is_none_or(|t| t.is_finished())
+            && stderr.as_ref().is_none_or(|t| t.is_finished());
+        if status.is_some() && drained {
+            break;
+        }
+        // A shell may exit while its children still own the pipes. Keep
+        // the deadline alive until the entire captured command has finished.
+        if started.elapsed() >= timeout || cancelled() || wait_error.is_some() {
+            #[cfg(unix)]
+            unsafe {
+                kill(-(child.id() as i32), 9);
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+            stop_readers.store(true, Ordering::Release);
+            killed = true;
+            status = None;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let stdout = stdout
+        .and_then(|t| t.join().ok())
+        .map(Capture::render)
+        .unwrap_or_default();
+    let stderr = stderr
+        .and_then(|t| t.join().ok())
+        .map(Capture::render)
+        .unwrap_or_default();
+    if let Some(error) = wait_error {
+        return Err(error);
+    }
     let mut out = String::new();
     if !stdout.is_empty() {
         out.push_str(&stdout);
@@ -533,10 +607,12 @@ fn run_shell_blocking(root: &Path, command: &str, timeout: Duration) -> Result<S
         out.push_str(&format!("[killed after {}s timeout]\n", timeout.as_secs()));
     }
     let code = status.and_then(|s| s.code());
-    out.push_str(&format!("[exit code: {}]", code.map_or("signal".to_owned(), |c| c.to_string())));
+    out.push_str(&format!(
+        "[exit code: {}]",
+        code.map_or("signal".to_owned(), |c| c.to_string())
+    ));
     Ok(out)
 }
-
 
 /// Above this many lines, an unranged read returns an outline.
 const OUTLINE_THRESHOLD_LINES: usize = 2000;
@@ -547,17 +623,34 @@ const OUTLINE_MAX_ENTRIES: usize = 300;
 fn outline(path: &Path, text: &str, total: usize) -> String {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let patterns: &[&str] = match ext {
-        "rs" => &[r"^\s*(pub(\([^)]*\))?\s+)?(async\s+)?(unsafe\s+)?(fn|struct|enum|trait|impl|mod|const|static|type|macro_rules!)\b"],
+        "rs" => &[
+            r"^\s*(pub(\([^)]*\))?\s+)?(async\s+)?(unsafe\s+)?(fn|struct|enum|trait|impl|mod|const|static|type|macro_rules!)\b",
+        ],
         "py" => &[r"^\s*(async\s+)?(def|class)\b"],
-        "js" | "jsx" | "ts" | "tsx" | "mjs" => &[r"^\s*(export\s+)?(default\s+)?(async\s+)?(function|class|interface|type|enum)\b", r"^\s*(export\s+)?(const|let|var)\s+\w+\s*=\s*(async\s*)?(\(|function|\w+\s*=>)"],
+        "js" | "jsx" | "ts" | "tsx" | "mjs" => &[
+            r"^\s*(export\s+)?(default\s+)?(async\s+)?(function|class|interface|type|enum)\b",
+            r"^\s*(export\s+)?(const|let|var)\s+\w+\s*=\s*(async\s*)?(\(|function|\w+\s*=>)",
+        ],
         "go" => &[r"^(func|type)\b"],
-        "c" | "h" | "cc" | "cpp" | "hpp" | "cxx" => &[r"^[A-Za-z_][\w:<>*&\s]*\s\**[A-Za-z_]\w*\s*\([^;]*$", r"^\s*(struct|class|enum|union|namespace|typedef)\b", r"^#define\s+\w+"],
-        "java" | "kt" | "scala" | "cs" => &[r"^\s*(public|private|protected|static|final|abstract|override|open|sealed|data|internal)\b.*\b(class|interface|enum|object|fun|void|[A-Z]\w*)\b.*[({]\s*$", r"^\s*(class|interface|enum|object|fun|def)\b"],
+        "c" | "h" | "cc" | "cpp" | "hpp" | "cxx" => &[
+            r"^[A-Za-z_][\w:<>*&\s]*\s\**[A-Za-z_]\w*\s*\([^;]*$",
+            r"^\s*(struct|class|enum|union|namespace|typedef)\b",
+            r"^#define\s+\w+",
+        ],
+        "java" | "kt" | "scala" | "cs" => &[
+            r"^\s*(public|private|protected|static|final|abstract|override|open|sealed|data|internal)\b.*\b(class|interface|enum|object|fun|void|[A-Z]\w*)\b.*[({]\s*$",
+            r"^\s*(class|interface|enum|object|fun|def)\b",
+        ],
         "rb" => &[r"^\s*(def|class|module)\b"],
         "sh" | "bash" => &[r"^\s*(function\s+)?[A-Za-z_]\w*\s*\(\)\s*\{?"],
-        _ => &[r"^\s*(pub\s+)?(fn|def|class|function|struct|enum|trait|impl|interface|type|module|func)\b"],
+        _ => &[
+            r"^\s*(pub\s+)?(fn|def|class|function|struct|enum|trait|impl|interface|type|module|func)\b",
+        ],
     };
-    let regexes: Vec<regex::Regex> = patterns.iter().filter_map(|p| regex::Regex::new(p).ok()).collect();
+    let regexes: Vec<regex::Regex> = patterns
+        .iter()
+        .filter_map(|p| regex::Regex::new(p).ok())
+        .collect();
     let mut out = format!(
         "{} has {total} lines; showing an outline. Read a range with offset and limit.\n",
         path.display()
@@ -569,7 +662,9 @@ fn outline(path: &Path, text: &str, total: usize) -> String {
             out.push_str(&format!("{:>6}\t{shown}\n", index + 1));
             entries += 1;
             if entries >= OUTLINE_MAX_ENTRIES {
-                out.push_str(&format!("[outline stopped after {OUTLINE_MAX_ENTRIES} entries]\n"));
+                out.push_str(&format!(
+                    "[outline stopped after {OUTLINE_MAX_ENTRIES} entries]\n"
+                ));
                 break;
             }
         }
@@ -580,21 +675,19 @@ fn outline(path: &Path, text: &str, total: usize) -> String {
     out
 }
 
-/// Five lines around each place `new` now occurs in the edited text, with
-/// line numbers, so the model sees the edit as the file reads.
-fn context_after_edit(after: &str, new: &str) -> String {
+/// Five lines around each actual replacement, including deletions.
+fn context_after_edit(before: &str, after: &str, old: &str, new: &str) -> String {
+    if after.is_empty() {
+        return "(file is now empty)\n".to_owned();
+    }
     let lines: Vec<&str> = after.lines().collect();
     let mut out = String::new();
     let mut shown_until = 0usize;
-    let mut positions: Vec<usize> = Vec::new();
-    if new.is_empty() {
-        return String::new();
-    }
-    let mut from = 0;
-    while let Some(found) = after[from..].find(new) {
-        positions.push(from + found);
-        from += found + new.len().max(1);
-    }
+    let positions: Vec<usize> = before
+        .match_indices(old)
+        .enumerate()
+        .map(|(index, (offset, _))| offset - index * old.len() + index * new.len())
+        .collect();
     for pos in positions.iter().take(20) {
         let line = after[..*pos].matches('\n').count();
         let end_line = line + new.matches('\n').count();
@@ -621,8 +714,17 @@ mod rewrite_tests {
 
     #[test]
     fn a_huge_output_comes_back_bounded_with_head_and_tail() {
-        let out = futures::executor::block_on(run_shell(Path::new("."), "yes abcdefghij | head -c 20000000", Duration::from_secs(60))).unwrap();
-        assert!(out.len() < CAPTURE_HEAD + CAPTURE_TAIL + 200, "len {}", out.len());
+        let out = futures::executor::block_on(run_shell(
+            Path::new("."),
+            "yes abcdefghij | head -c 20000000",
+            Duration::from_secs(60),
+        ))
+        .unwrap();
+        assert!(
+            out.len() < CAPTURE_HEAD + CAPTURE_TAIL + 200,
+            "len {}",
+            out.len()
+        );
         assert!(out.starts_with("abcdefghij\n"));
         assert!(out.contains("bytes omitted"));
         assert!(out.ends_with("[exit code: 0]"));
@@ -646,22 +748,40 @@ mod rewrite_tests {
         let (slow_out, fast_out) = futures::executor::block_on(futures::future::join(slow, fast));
         assert!(fast_out.unwrap().starts_with("hi\n"));
         let when = fast_done.lock().unwrap().unwrap();
-        assert!(when < Duration::from_millis(1500), "fast command resolved after {when:?}");
+        assert!(
+            when < Duration::from_millis(1500),
+            "fast command resolved after {when:?}"
+        );
         assert!(slow_out.unwrap().contains("[killed after 2s timeout]"));
     }
 
     #[test]
     fn a_pipeline_is_killed_as_a_group_at_the_timeout() {
         let start = Instant::now();
-        let out = futures::executor::block_on(run_shell(Path::new("."), "sleep 10 | cat", Duration::from_secs(1))).unwrap();
+        let out = futures::executor::block_on(run_shell(
+            Path::new("."),
+            "sleep 10 | cat",
+            Duration::from_secs(1),
+        ))
+        .unwrap();
         assert!(start.elapsed() < Duration::from_secs(4));
         assert!(out.contains("[killed after 1s timeout]"));
     }
 
     #[test]
     fn edits_report_the_surrounding_lines() {
-        let after = (1..=30).map(|i| if i == 15 { "let x = 2;".to_owned() } else { format!("line {i}") }).collect::<Vec<_>>().join("\n");
-        let ctx = context_after_edit(&after, "let x = 2;");
+        let after = (1..=30)
+            .map(|i| {
+                if i == 15 {
+                    "let x = 2;".to_owned()
+                } else {
+                    format!("line {i}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let before = after.replace("let x = 2;", "let x = 1;");
+        let ctx = context_after_edit(&before, &after, "let x = 1;", "let x = 2;");
         assert!(ctx.contains("    10\tline 10"));
         assert!(ctx.contains("    15\tlet x = 2;"));
         assert!(ctx.contains("    20\tline 20"));
@@ -682,5 +802,78 @@ mod rewrite_tests {
         assert!(out.contains("2500 lines"));
         assert_eq!(out.matches("pub fn function_").count(), 5);
         assert!(out.contains("  2001\tpub fn function_2000"));
+    }
+
+    #[test]
+    fn context_tracks_actual_replacement_when_new_text_is_common() {
+        let before = format!("{}old\nend\n", "same\n".repeat(100));
+        let after = before.replace("old", "same");
+        let context = context_after_edit(&before, &after, "old", "same");
+        assert!(context.contains("   101\tsame"));
+        assert!(!context.contains("     1\tsame"));
+    }
+
+    #[test]
+    fn deletion_keeps_context_and_accounts_for_prior_replacements() {
+        let before = "one\nremove\ntwo\nremove\nthree\n";
+        let after = before.replace("remove\n", "");
+        let context = context_after_edit(before, &after, "remove\n", "");
+        assert!(context.contains("     2\ttwo"));
+        assert!(context.contains("     3\tthree"));
+        assert!(context_after_edit("all", "", "all", "").contains("empty"));
+    }
+
+    #[test]
+    fn background_child_cannot_outlive_the_capture_deadline() {
+        let start = Instant::now();
+        let result = futures::executor::block_on(run_shell(
+            Path::new("."),
+            "sleep 30 &",
+            Duration::from_millis(200),
+        ))
+        .unwrap();
+        assert!(start.elapsed() < Duration::from_secs(3));
+        assert!(result.contains("timeout"));
+        assert!(!result.contains("[exit code: 0]"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn detached_descendant_cannot_keep_capture_open() {
+        let started = Instant::now();
+        let result = futures::executor::block_on(run_shell(
+            Path::new("."),
+            "python3 -c 'import subprocess; subprocess.Popen([\"sleep\", \"3\"], start_new_session=True)'",
+            Duration::from_millis(200),
+        )).unwrap();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(result.contains("timeout"), "{result}");
+    }
+
+    #[test]
+    fn dropping_shell_future_terminates_the_command_group() {
+        let root = std::env::temp_dir().join(format!(
+            "rigcoder-cancel-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let future = run_shell(
+            &root,
+            "echo started > started; sleep 1; echo late > late",
+            Duration::from_secs(30),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !root.join("started").exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(root.join("started").exists());
+        drop(future);
+        std::thread::sleep(Duration::from_millis(1200));
+        assert!(!root.join("late").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

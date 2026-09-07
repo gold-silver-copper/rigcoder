@@ -47,23 +47,57 @@ pub struct Conversation {
 /// Transient provider failures are retried this many times, with backoff.
 pub const MAX_PROVIDER_RETRIES: usize = 3;
 
+impl Conversation {
+    pub fn has_pending_retry(&self) -> bool {
+        self.retry_at.is_some()
+    }
+
+    /// A provider backoff still belongs to the current user request.
+    pub fn is_busy(&self) -> bool {
+        self.active.is_some() || self.has_pending_retry()
+    }
+}
+
 /// One thing that happened, in the order it happened.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
-    User { text: String },
+    User {
+        text: String,
+    },
     /// Assistant text; a streaming answer grows the last one of these.
-    Assistant { text: String },
-    ToolCall { name: String, args: String },
-    ToolResult { name: String, output: String, ok: bool },
-    Settled { answer: String },
+    Assistant {
+        text: String,
+    },
+    ToolCall {
+        name: String,
+        args: String,
+    },
+    ToolResult {
+        name: String,
+        output: String,
+        ok: bool,
+    },
+    Settled {
+        answer: String,
+    },
     Failed(String),
     /// The run failed on a transient provider error and will be submitted again.
-    Retrying { reason: String, attempt: usize, wait_secs: u64 },
+    Retrying {
+        reason: String,
+        attempt: usize,
+        wait_secs: u64,
+    },
     /// A tool call the gate refused; the model reads the reason as the result.
-    Denied { name: String, reason: String },
+    Denied {
+        name: String,
+        reason: String,
+    },
     /// A tool call waiting for approval.
-    Held { name: String, args: String },
+    Held {
+        name: String,
+        args: String,
+    },
     /// The run's token usage, summed over its completions; written once
     /// when the run ends, before `Settled` or `Failed`.
     Usage {
@@ -99,42 +133,102 @@ impl Transcript {
 /// Start a run over the agent with `prompt`, after the history so far.
 /// Refused (returns `None`) while a run is in flight or the agent is missing.
 pub fn submit(world: &mut World, prompt: &str) -> Option<Entity> {
+    if world.resource::<Conversation>().is_busy() {
+        return None;
+    }
+    world.resource_mut::<Conversation>().provider_retries = 0;
+    start_run(world, prompt, true)
+}
+
+fn start_run(world: &mut World, prompt: &str, announce: bool) -> Option<Entity> {
     let agent = world.get_resource::<AgentHandle>()?.agent;
     if world.resource::<Conversation>().active.is_some() {
         return None;
     }
     let history = world.resource::<Conversation>().history.clone();
-    world.resource_mut::<Transcript>().push(Event::User {
-        text: prompt.to_owned(),
-    });
+    // Recorded handlers retain their old descriptors. Include the current
+    // implementation and steering configuration in the declared policy so
+    // replay cannot silently approve a changed tool or custom system.
+    let policy = rig_effect_log::stable_hash(&(
+        env!("CARGO_PKG_VERSION"),
+        include_str!("lib.rs"),
+        include_str!("tools.rs"),
+        include_str!("steer.rs"),
+        include_str!("session.rs"),
+        world.resource::<crate::steer::Steer>(),
+        world
+            .get_resource::<crate::steer::Scope>()
+            .filter(|scope| scope.enabled()),
+    ))
+    .expect("policy contains only serializable strings and settings");
+    world
+        .entity_mut(agent)
+        .insert(rig_ecs::agent::PolicyVersion(format!(
+            "rigcoder-{policy:016x}"
+        )));
+    if announce {
+        world.resource_mut::<Transcript>().push(Event::User {
+            text: prompt.to_owned(),
+        });
+    }
     {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.last = Some((prompt.to_owned(), history.clone()));
     }
     let run = spawn_run(world, agent, &history, prompt, true, None);
+    {
+        let mut conversation = world.resource_mut::<Conversation>();
+        conversation.active = Some(run);
+        conversation.runs += 1;
+    }
     // The run's program identity goes into the effect log under its scope:
     // every granted tool as a required row, so a replay advertises the same
     // tools even where the record never called them.
-    world.entity_mut(run).insert(rig_ecs::bus::Scope("rigcoder".to_owned()));
-    if let Some(recorder) = world.get_resource::<rig_ecs::bus::EffectLogResource>().map(|r| r.0.clone()) {
+    world
+        .entity_mut(run)
+        .insert(rig_ecs::bus::Scope("rigcoder".to_owned()));
+    let compatible = world.resource_scope(|world, setup: Mut<crate::Setup>| match &setup.mode {
+        crate::Mode::Live => Ok(()),
+        crate::Mode::Replay(log) => rig_ecs::replay::check_replayable(world, run, log),
+    });
+    if let Err(report) = compatible {
+        world
+            .entity_mut(run)
+            .insert(Failed(rig_ecs::agent::Failure::Provider(report)));
+        return Some(run);
+    }
+    if let Some(recorder) = world
+        .get_resource::<rig_ecs::bus::EffectLogResource>()
+        .map(|r| r.0.clone())
+    {
         rig_ecs::replay::stamp_run(world, run, &recorder);
     }
-    let mut conversation = world.resource_mut::<Conversation>();
-    conversation.active = Some(run);
-    conversation.runs += 1;
     Some(run)
 }
 
 /// Stop the run in flight: `Cancelled` on the run ends it `Failed(Cancelled)`.
 pub fn cancel(world: &mut World, reason: &str) {
+    if world
+        .resource_mut::<Conversation>()
+        .retry_at
+        .take()
+        .is_some()
+    {
+        world.resource_mut::<Conversation>().last = None;
+        world
+            .resource_mut::<Transcript>()
+            .push(Event::Failed(format!("cancelled: {reason}")));
+    }
     if let Some(run) = world.resource::<Conversation>().active {
         world.entity_mut(run).insert(Cancelled(reason.to_owned()));
     }
 }
 
 /// A fresh tool child, seen in `Gate` before the bus dispatches it.
+type UnansweredNewEffect = (Added<PendingEffect>, Without<EffectOutcome>);
+
 pub fn announce_tool_calls(
-    calls: Query<(&PendingEffect, &ToolCallSlot), (Added<PendingEffect>, Without<EffectOutcome>)>,
+    calls: Query<(&PendingEffect, &ToolCallSlot), UnansweredNewEffect>,
     mut transcript: ResMut<Transcript>,
 ) {
     for (effect, slot) in &calls {
@@ -224,16 +318,22 @@ pub fn on_failed(
     }
     finish(run, &utterances, &mut conversation);
     record_usage(run, &usage, &mut transcript);
-    let failure = failures.get(run).ok().map(|Failed(failure)| failure.clone());
-    let reason = failure.as_ref().map_or_else(|| "unknown".to_owned(), |f| format!("{f:?}"));
-    // A transient provider failure (a stream that ended early, a rate limit,
-    // a retryable report) is not the end: the same prompt goes again after
-    // a backoff, up to MAX_PROVIDER_RETRIES, with the history restored to
-    // what it was before the failed run.
+    let failure = failures
+        .get(run)
+        .ok()
+        .map(|Failed(failure)| failure.clone());
+    let reason = failure
+        .as_ref()
+        .map_or_else(|| "unknown".to_owned(), |f| format!("{f:?}"));
+    // A whole-prompt retry is safe only before this request has produced
+    // tool calls. Completed tools may have irreversible side effects, so a
+    // later provider failure must preserve their history and end the run.
     if let Some(rig_ecs::agent::Failure::Provider(report)) = &failure
         && conversation.provider_retries < MAX_PROVIDER_RETRIES
         && transient(report)
         && let Some((_, history)) = conversation.last.clone()
+        && !conversation.history.iter().skip(history.len()).any(|parts| matches!(parts,
+            MessageParts::Assistant { content, .. } if content.iter().any(|part| matches!(part, AssistantContent::ToolCall(_)))))
     {
         conversation.provider_retries += 1;
         let wait = std::time::Duration::from_secs(2u64.pow(conversation.provider_retries as u32));
@@ -309,9 +409,20 @@ fn transient(report: &rig::error::ErrorReport) -> bool {
         return true;
     }
     let text = report.message.to_lowercase();
-    ["stream ended", "terminal record", "rate limit", "overloaded", "timed out", "timeout", "connection reset", "connection closed", "eof", "temporarily"]
-        .iter()
-        .any(|needle| text.contains(needle))
+    [
+        "stream ended",
+        "terminal record",
+        "rate limit",
+        "overloaded",
+        "timed out",
+        "timeout",
+        "connection reset",
+        "connection closed",
+        "eof",
+        "temporarily",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
         || matches!(report.kind, ErrorKind::Timeout)
 }
 
@@ -320,25 +431,245 @@ fn transient(report: &rig::error::ErrorReport) -> bool {
 pub fn resubmit_when_due(world: &mut World) {
     let due = {
         let conversation = world.resource::<Conversation>();
-        conversation.active.is_none() && conversation.retry_at.is_some_and(|at| std::time::Instant::now() >= at)
+        conversation.active.is_none()
+            && conversation
+                .retry_at
+                .is_some_and(|at| std::time::Instant::now() >= at)
     };
     if !due {
         return;
     }
-    let (prompt, history) = {
+    let prompt = {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.retry_at = None;
-        let Some((prompt, history)) = conversation.last.clone() else { return };
+        let Some((prompt, history)) = conversation.last.clone() else {
+            return;
+        };
         conversation.history = history.clone();
-        (prompt, history)
+        prompt
     };
-    let Some(agent) = world.get_resource::<AgentHandle>().map(|h| h.agent) else { return };
-    let run = spawn_run(world, agent, &history, &prompt, true, None);
-    world.entity_mut(run).insert(rig_ecs::bus::Scope("rigcoder".to_owned()));
-    if let Some(recorder) = world.get_resource::<rig_ecs::bus::EffectLogResource>().map(|r| r.0.clone()) {
-        rig_ecs::replay::stamp_run(world, run, &recorder);
+    if start_run(world, &prompt, false).is_none() {
+        world.resource_mut::<Transcript>().push(Event::Failed(
+            "could not retry: no agent is registered".to_owned(),
+        ));
     }
-    let mut conversation = world.resource_mut::<Conversation>();
-    conversation.active = Some(run);
-    conversation.runs += 1;
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    use bevy_app::{App, PreStartup};
+    use rig::{
+        completion::{CompletionResponse, ModelRef, ProviderCapabilities},
+        effect::{FamilyDescriptor, HandlerDescriptor, HandlerKey},
+        error::{ErrorKind, ErrorReport},
+        serve::{OutcomeSink, Serve},
+    };
+    use rig_ecs::bus::Handlers;
+    use std::{collections::VecDeque, sync::Mutex, time::Instant};
+
+    type Answer = Result<Vec<AssistantContent>, ErrorReport>;
+    struct Scripted(Mutex<VecDeque<Answer>>);
+    impl Serve for Scripted {
+        type Family = rig::effect::family::Completion;
+        fn descriptor(&self) -> HandlerDescriptor {
+            HandlerDescriptor {
+                key: HandlerKey::from(crate::model::MODEL_KEY),
+                family: FamilyDescriptor::Completion {
+                    model: ModelRef::new("scripted"),
+                    capabilities: ProviderCapabilities::default(),
+                },
+                layers: Vec::new(),
+            }
+        }
+        async fn serve(&self, _: EffectKind, sink: OutcomeSink) {
+            let answer = self
+                .0
+                .lock()
+                .unwrap()
+                .pop_front()
+                .expect("unexpected extra provider call");
+            sink.resolve(answer.map(|content| {
+                Outcome::Completion(CompletionResponse::new(
+                    content,
+                    rig::completion::Usage::new(),
+                    "scripted",
+                ))
+            }))
+            .await;
+        }
+    }
+    #[derive(Resource)]
+    struct Model(Mutex<Option<Scripted>>);
+    fn register(mut handlers: Handlers, model: Res<Model>) {
+        if let Some(model) = model.0.lock().unwrap().take() {
+            handlers.register(crate::model::MODEL_KEY, model).unwrap();
+        }
+    }
+    fn app(dir: &std::path::Path, mode: crate::Mode, answers: Option<Vec<Answer>>) -> App {
+        let mut app = App::new();
+        app.add_plugins(crate::RigcoderPlugin {
+            workspace: dir.to_owned(),
+            model: crate::ModelChoice::parse("gemini", None).unwrap(),
+            max_turns: 8,
+            mode,
+            prompt_override: None,
+        });
+        if let Some(answers) = answers {
+            app.insert_resource(Model(Mutex::new(Some(Scripted(Mutex::new(
+                answers.into(),
+            ))))))
+            .add_systems(PreStartup, register);
+        }
+        app.update();
+        app
+    }
+    fn transient_failure() -> Answer {
+        Err(ErrorReport::new(ErrorKind::Timeout, "timed out"))
+    }
+    fn done() -> Answer {
+        Ok(vec![AssistantContent::text("done")])
+    }
+    fn drive(app: &mut App) {
+        for _ in 0..2_000 {
+            app.update();
+            // Advance only the application's retry deadline; no wall-clock
+            // backoff is needed to test the state transition deterministically.
+            if app.world().resource::<Conversation>().has_pending_retry() {
+                app.world_mut().resource_mut::<Conversation>().retry_at = Some(Instant::now());
+            }
+            if !app.world().resource::<Conversation>().is_busy() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        panic!("run did not terminate");
+    }
+    fn scratch(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("rigcoder-retry-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+    use std::path::PathBuf;
+
+    #[test]
+    fn retry_keeps_both_recorded_attempts_and_replays_them() {
+        let dir = scratch("replay");
+        let mut live = app(
+            &dir,
+            crate::Mode::Live,
+            Some(vec![transient_failure(), done()]),
+        );
+        submit(live.world_mut(), "finish").unwrap();
+        drive(&mut live);
+        let log = crate::effect_log(live.world());
+        assert_eq!(log.records.len(), 2);
+        assert_eq!(live.world().resource::<Conversation>().runs, 2);
+        let mut replay = app(&dir, crate::Mode::Replay(log.into()), None);
+        submit(replay.world_mut(), "finish").unwrap();
+        drive(&mut replay);
+        assert_eq!(replay.world().resource::<Conversation>().runs, 2);
+        assert!(
+            replay
+                .world()
+                .resource::<Transcript>()
+                .events
+                .iter()
+                .any(|e| matches!(e, Event::Settled { answer } if answer == "done"))
+        );
+    }
+
+    #[test]
+    fn a_provider_failure_after_a_tool_is_not_retried_or_reexecuted() {
+        let dir = scratch("side-effects");
+        let command = Ok(vec![AssistantContent::tool_call(
+            "append",
+            "bash",
+            serde_json::json!({"command": "printf x >> count.txt"}),
+        )]);
+        let mut app = app(
+            &dir,
+            crate::Mode::Live,
+            Some(vec![
+                command,
+                transient_failure(),
+                transient_failure(),
+                done(),
+            ]),
+        );
+        submit(app.world_mut(), "append once").unwrap();
+        drive(&mut app);
+        assert_eq!(std::fs::read_to_string(dir.join("count.txt")).unwrap(), "x");
+        assert_eq!(app.world().resource::<Conversation>().runs, 1);
+        assert!(
+            !app.world()
+                .resource::<Transcript>()
+                .events
+                .iter()
+                .any(|e| matches!(e, Event::Retrying { .. }))
+        );
+        // Earlier conversation tools do not prevent a safe retry of a new
+        // request that fails before doing tool work of its own.
+        submit(app.world_mut(), "a new request").unwrap();
+        drive(&mut app);
+        assert_eq!(app.world().resource::<Conversation>().runs, 3);
+        assert_eq!(std::fs::read_to_string(dir.join("count.txt")).unwrap(), "x");
+    }
+
+    #[test]
+    fn a_backoff_is_busy_and_can_be_canceled_without_a_hidden_resubmission() {
+        let dir = scratch("cancel");
+        let mut app = app(&dir, crate::Mode::Live, Some(vec![transient_failure()]));
+        submit(app.world_mut(), "first").unwrap();
+        for _ in 0..2_000 {
+            app.update();
+            if app.world().resource::<Conversation>().has_pending_retry() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(app.world().resource::<Conversation>().has_pending_retry());
+        assert!(submit(app.world_mut(), "second").is_none());
+        cancel(app.world_mut(), "stop during backoff");
+        resubmit_when_due(app.world_mut());
+        assert!(!app.world().resource::<Conversation>().is_busy());
+        assert_eq!(app.world().resource::<Conversation>().runs, 1);
+        assert!(
+            app.world().resource::<Transcript>().events.iter().any(
+                |e| matches!(e, Event::Failed(reason) if reason.contains("stop during backoff"))
+            )
+        );
+    }
+
+    #[test]
+    fn each_new_user_request_gets_its_own_retry_budget() {
+        let dir = scratch("budget");
+        let mut app = app(
+            &dir,
+            crate::Mode::Live,
+            Some(vec![
+                transient_failure(),
+                done(),
+                transient_failure(),
+                done(),
+            ]),
+        );
+        submit(app.world_mut(), "first").unwrap();
+        drive(&mut app);
+        submit(app.world_mut(), "second").unwrap();
+        drive(&mut app);
+        let attempts: Vec<_> = app
+            .world()
+            .resource::<Transcript>()
+            .events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Retrying { attempt, .. } => Some(*attempt),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(attempts, vec![1, 1]);
+    }
 }

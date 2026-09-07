@@ -90,8 +90,25 @@ struct Event {
 }
 
 const DELIBERATION: &[&str] = &[
-    "let me ", "i'll ", "i will ", "next, i", "next i", "should i", "i should ", "now i", "i need to ", "i'm going to ", "let's ", "first, i",
-    "wait", "what if", "hmm", "which one", "or should", "let's compare", "argument for",
+    "let me ",
+    "i'll ",
+    "i will ",
+    "next, i",
+    "next i",
+    "should i",
+    "i should ",
+    "now i",
+    "i need to ",
+    "i'm going to ",
+    "let's ",
+    "first, i",
+    "wait",
+    "what if",
+    "hmm",
+    "which one",
+    "or should",
+    "let's compare",
+    "argument for",
 ];
 
 /// The facts of one transcript.
@@ -103,7 +120,9 @@ pub fn facts(transcript: &str) -> TrialFacts {
     let mut seen_edit = false;
     f.calls_before_first_edit = u64::MAX;
     for line in transcript.lines() {
-        let Ok(e) = serde_json::from_str::<Event>(line) else { continue };
+        let Ok(e) = serde_json::from_str::<Event>(line) else {
+            continue;
+        };
         match e.kind.as_str() {
             "tool_call" => {
                 f.tool_calls += 1;
@@ -123,15 +142,25 @@ pub fn facts(transcript: &str) -> TrialFacts {
             }
             "tool_result" => {
                 let entry = f.by_tool.entry(e.name.clone()).or_default();
-                if e.ok { entry.0 += 1 } else { entry.1 += 1 }
+                if e.ok {
+                    entry.0 += 1
+                } else {
+                    entry.1 += 1
+                }
                 if e.output.contains("[killed after") {
                     f.timeouts += 1;
                 }
-                if e.output.contains("output truncated in the middle") {
+                if e.output.contains("output truncated in the middle")
+                    || e.output.contains(" bytes omitted ...]")
+                {
                     f.truncations += 1;
                 }
                 let lower = e.output.to_lowercase();
-                if lower.contains("cannot read") || lower.contains("no such file") || lower.contains("not found in") || lower.contains("old_string not found") {
+                if lower.contains("cannot read")
+                    || lower.contains("no such file")
+                    || lower.contains("not found in")
+                    || lower.contains("old_string not found")
+                {
                     f.missing_paths += 1;
                 }
             }
@@ -151,7 +180,11 @@ pub fn facts(transcript: &str) -> TrialFacts {
 }
 
 fn mean(values: impl Iterator<Item = f64>, n: usize) -> f64 {
-    if n == 0 { 0.0 } else { values.sum::<f64>() / n as f64 }
+    if n == 0 {
+        0.0
+    } else {
+        values.sum::<f64>() / n as f64
+    }
 }
 
 pub fn aggregate(trials: &[&TrialFacts]) -> Aggregate {
@@ -173,11 +206,25 @@ pub fn aggregate(trials: &[&TrialFacts]) -> Aggregate {
         truncations: mean(trials.iter().map(|t| t.truncations as f64), n),
         repeated_calls: mean(trials.iter().map(|t| t.repeated_calls as f64), n),
         missing_paths: mean(trials.iter().map(|t| t.missing_paths as f64), n),
-        ended_deliberating: mean(trials.iter().map(|t| if t.ended_deliberating { 1.0 } else { 0.0 }), n),
-        no_settle: mean(trials.iter().map(|t| if t.no_settle { 1.0 } else { 0.0 }), n),
+        ended_deliberating: mean(
+            trials
+                .iter()
+                .map(|t| if t.ended_deliberating { 1.0 } else { 0.0 }),
+            n,
+        ),
+        no_settle: mean(
+            trials.iter().map(|t| if t.no_settle { 1.0 } else { 0.0 }),
+            n,
+        ),
         calls_before_first_edit: mean(
-            trials.iter().filter(|t| t.calls_before_first_edit != u64::MAX).map(|t| t.calls_before_first_edit as f64),
-            trials.iter().filter(|t| t.calls_before_first_edit != u64::MAX).count(),
+            trials
+                .iter()
+                .filter(|t| t.calls_before_first_edit != u64::MAX)
+                .map(|t| t.calls_before_first_edit as f64),
+            trials
+                .iter()
+                .filter(|t| t.calls_before_first_edit != u64::MAX)
+                .count(),
         ),
         input_tokens: mean(trials.iter().map(|t| t.input_tokens as f64), n),
         by_tool,
@@ -191,8 +238,12 @@ fn reward_of(trial_dir: &Path) -> f64 {
     {
         return reward;
     }
-    let Ok(text) = std::fs::read_to_string(trial_dir.join("result.json")) else { return 0.0 };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else { return 0.0 };
+    let Ok(text) = std::fs::read_to_string(trial_dir.join("result.json")) else {
+        return 0.0;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return 0.0;
+    };
     value["reward"]
         .as_f64()
         .or_else(|| value["verifier_result"]["rewards"]["reward"].as_f64())
@@ -202,14 +253,19 @@ fn reward_of(trial_dir: &Path) -> f64 {
 /// Digest every trial under `job_dir`.
 pub fn job(job_dir: &Path) -> Result<Digest> {
     let mut trials = Vec::new();
-    for entry in std::fs::read_dir(job_dir).with_context(|| format!("reading {}", job_dir.display()))? {
+    for entry in
+        std::fs::read_dir(job_dir).with_context(|| format!("reading {}", job_dir.display()))?
+    {
         let dir = entry?.path();
         let transcript = dir.join("agent").join("transcript.jsonl");
         if !transcript.is_file() {
             continue;
         }
         let mut f = facts(&std::fs::read_to_string(&transcript)?);
-        f.trial = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        f.trial = dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         f.task = f.trial.split("__").next().unwrap_or_default().to_owned();
         f.reward = reward_of(&dir);
         trials.push(f);
@@ -217,36 +273,86 @@ pub fn job(job_dir: &Path) -> Result<Digest> {
     trials.sort_by(|a, b| a.trial.cmp(&b.trial));
     let failed: Vec<&TrialFacts> = trials.iter().filter(|t| t.reward < 1.0).collect();
     let passed: Vec<&TrialFacts> = trials.iter().filter(|t| t.reward >= 1.0).collect();
-    Ok(Digest { failed: aggregate(&failed), passed: aggregate(&passed), trials })
+    Ok(Digest {
+        failed: aggregate(&failed),
+        passed: aggregate(&passed),
+        trials,
+    })
 }
 
 /// The digest as the first section of a report.
 pub fn render(d: &Digest) -> String {
     let mut out = String::new();
-    out.push_str(&format!("## Digest: {} failed trial(s) vs {} passed\n\n", d.failed.trials, d.passed.trials));
+    out.push_str(&format!(
+        "## Digest: {} failed trial(s) vs {} passed\n\n",
+        d.failed.trials, d.passed.trials
+    ));
     out.push_str("### What failed trials did more of\n\n| fact (mean per trial) | failed | passed |\n|---|---|---|\n");
     let rows: [(&str, f64, f64); 9] = [
         ("tool calls", d.failed.tool_calls, d.passed.tool_calls),
         ("bash timeouts", d.failed.timeouts, d.passed.timeouts),
-        ("truncated results", d.failed.truncations, d.passed.truncations),
-        ("repeated identical calls", d.failed.repeated_calls, d.passed.repeated_calls),
-        ("results naming a missing path", d.failed.missing_paths, d.passed.missing_paths),
-        ("ended in deliberation, not a summary", d.failed.ended_deliberating, d.passed.ended_deliberating),
-        ("ended without settling", d.failed.no_settle, d.passed.no_settle),
-        ("calls before the first edit", d.failed.calls_before_first_edit, d.passed.calls_before_first_edit),
+        (
+            "truncated results",
+            d.failed.truncations,
+            d.passed.truncations,
+        ),
+        (
+            "repeated identical calls",
+            d.failed.repeated_calls,
+            d.passed.repeated_calls,
+        ),
+        (
+            "results naming a missing path",
+            d.failed.missing_paths,
+            d.passed.missing_paths,
+        ),
+        (
+            "ended in deliberation, not a summary",
+            d.failed.ended_deliberating,
+            d.passed.ended_deliberating,
+        ),
+        (
+            "ended without settling",
+            d.failed.no_settle,
+            d.passed.no_settle,
+        ),
+        (
+            "calls before the first edit",
+            d.failed.calls_before_first_edit,
+            d.passed.calls_before_first_edit,
+        ),
         ("input tokens", d.failed.input_tokens, d.passed.input_tokens),
     ];
     let mut sorted: Vec<&(&str, f64, f64)> = rows.iter().collect();
     sorted.sort_by(|a, b| {
-        let ra = if a.2 > 0.0 { a.1 / a.2 } else if a.1 > 0.0 { f64::INFINITY } else { 1.0 };
-        let rb = if b.2 > 0.0 { b.1 / b.2 } else if b.1 > 0.0 { f64::INFINITY } else { 1.0 };
+        let ra = if a.2 > 0.0 {
+            a.1 / a.2
+        } else if a.1 > 0.0 {
+            f64::INFINITY
+        } else {
+            1.0
+        };
+        let rb = if b.2 > 0.0 {
+            b.1 / b.2
+        } else if b.1 > 0.0 {
+            f64::INFINITY
+        } else {
+            1.0
+        };
         rb.total_cmp(&ra)
     });
     for (name, failed, passed) in sorted {
         out.push_str(&format!("| {name} | {failed:.2} | {passed:.2} |\n"));
     }
-    out.push_str("\n### Calls per tool (mean per trial)\n\n| tool | failed | passed |\n|---|---|---|\n");
-    let mut tools: Vec<&String> = d.failed.by_tool.keys().chain(d.passed.by_tool.keys()).collect();
+    out.push_str(
+        "\n### Calls per tool (mean per trial)\n\n| tool | failed | passed |\n|---|---|---|\n",
+    );
+    let mut tools: Vec<&String> = d
+        .failed
+        .by_tool
+        .keys()
+        .chain(d.passed.by_tool.keys())
+        .collect();
     tools.sort();
     tools.dedup();
     for tool in tools {
@@ -258,10 +364,21 @@ pub fn render(d: &Digest) -> String {
     }
     out.push_str("\n### Failed trials\n\n| trial | calls | timeouts | truncated | repeats | missing paths | ending | last tool |\n|---|---|---|---|---|---|---|---|\n");
     for t in d.trials.iter().filter(|t| t.reward < 1.0) {
-        let ending = if t.no_settle { "no settle" } else if t.ended_deliberating { "deliberating" } else { "summary" };
+        let ending = if t.no_settle {
+            "no settle"
+        } else if t.ended_deliberating {
+            "deliberating"
+        } else {
+            "summary"
+        };
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {ending} | {} |\n",
-            t.trial, t.tool_calls, t.timeouts, t.truncations, t.repeated_calls, t.missing_paths,
+            t.trial,
+            t.tool_calls,
+            t.timeouts,
+            t.truncations,
+            t.repeated_calls,
+            t.missing_paths,
             t.last_tool.as_deref().unwrap_or("-")
         ));
     }
@@ -292,7 +409,14 @@ mod tests {
         line("tool_call", &[("name", name.into()), ("args", args.into())])
     }
     fn result(name: &str, output: &str, ok: bool) -> String {
-        line("tool_result", &[("name", name.into()), ("output", output.into()), ("ok", ok.into())])
+        line(
+            "tool_result",
+            &[
+                ("name", name.into()),
+                ("output", output.into()),
+                ("ok", ok.into()),
+            ],
+        )
     }
 
     #[test]
@@ -300,17 +424,34 @@ mod tests {
         let t = [
             line("user", &[("text", "do it".into())]),
             call("bash", "{\"command\":\"find /\"}"),
-            result("bash", "...\n[killed after 120s timeout]\n[exit code: signal]", true),
+            result(
+                "bash",
+                "...\n[killed after 120s timeout]\n[exit code: signal]",
+                true,
+            ),
             call("read_file", "{\"path\":\"x\"}"),
             result("read_file", "error: cannot read /app/x: No such file", true),
             call("read_file", "{\"path\":\"x\"}"),
             result("read_file", "error: cannot read /app/x: No such file", true),
             call("bash", "{\"command\":\"cat big\"}"),
-            result("bash", "head\n\n[... output truncated in the middle ...]\n\ntail", true),
+            result(
+                "bash",
+                "head\n\n[... output truncated in the middle ...]\n\ntail",
+                true,
+            ),
             call("edit_file", "{\"path\":\"a\"}"),
             result("edit_file", "1 replacement(s)", true),
-            line("assistant", &[("text", "Should I use cwe-93 or CWE-93? Let me think.".into())]),
-            line("usage", &[("input_tokens", 100.into()), ("output_tokens", 7.into())]),
+            line(
+                "assistant",
+                &[(
+                    "text",
+                    "Should I use cwe-93 or CWE-93? Let me think.".into(),
+                )],
+            ),
+            line(
+                "usage",
+                &[("input_tokens", 100.into()), ("output_tokens", 7.into())],
+            ),
             line("settled", &[("answer", "".into())]),
         ]
         .join("\n");
@@ -330,11 +471,25 @@ mod tests {
 
     #[test]
     fn a_summary_ending_is_not_deliberation_and_a_failed_run_did_not_settle() {
-        let ok = [call("bash", "{}"), result("bash", "ok", true), line("assistant", &[("text", "Fixed add() and ran the test; it passes.".into())]), line("settled", &[])].join("\n");
+        let ok = [
+            call("bash", "{}"),
+            result("bash", "ok", true),
+            line(
+                "assistant",
+                &[("text", "Fixed add() and ran the test; it passes.".into())],
+            ),
+            line("settled", &[]),
+        ]
+        .join("\n");
         let f = facts(&ok);
         assert!(!f.ended_deliberating);
         assert!(!f.no_settle);
-        let failed = [call("bash", "{}"), result("bash", "ok", true), line("failed", &[])].join("\n");
+        let failed = [
+            call("bash", "{}"),
+            result("bash", "ok", true),
+            line("failed", &[]),
+        ]
+        .join("\n");
         let f = facts(&failed);
         assert!(f.no_settle);
         assert_eq!(f.calls_before_first_edit, u64::MAX);
@@ -342,15 +497,36 @@ mod tests {
 
     #[test]
     fn aggregate_means_and_render_order() {
-        let mut a = facts(&[call("bash", "{}"), result("bash", "[killed after 1s timeout]", true), line("settled", &[])].join("\n"));
+        let mut a = facts(
+            &[
+                call("bash", "{}"),
+                result("bash", "[killed after 1s timeout]", true),
+                line("settled", &[]),
+            ]
+            .join("\n"),
+        );
         a.reward = 0.0;
-        let mut b = facts(&[call("bash", "{}"), result("bash", "fine", true), line("settled", &[])].join("\n"));
+        let mut b = facts(
+            &[
+                call("bash", "{}"),
+                result("bash", "fine", true),
+                line("settled", &[]),
+            ]
+            .join("\n"),
+        );
         b.reward = 1.0;
-        let d = Digest { failed: aggregate(&[&a]), passed: aggregate(&[&b]), trials: vec![a, b] };
+        let d = Digest {
+            failed: aggregate(&[&a]),
+            passed: aggregate(&[&b]),
+            trials: vec![a, b],
+        };
         assert_eq!(d.failed.timeouts, 1.0);
         assert_eq!(d.passed.timeouts, 0.0);
         let text = render(&d);
-        let first_row = text.lines().find(|l| l.starts_with("| ") && !l.starts_with("| fact")).unwrap();
+        let first_row = text
+            .lines()
+            .find(|l| l.starts_with("| ") && !l.starts_with("| fact"))
+            .unwrap();
         assert!(first_row.starts_with("| bash timeouts"), "{first_row}");
     }
 }
@@ -365,7 +541,14 @@ fn deliberating(text: &str) -> bool {
     }
     let questions = trimmed.matches('?').count();
     let lower = trimmed.to_lowercase();
-    let tail: String = lower.chars().rev().take(1500).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: String = lower
+        .chars()
+        .rev()
+        .take(1500)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     let cut_off = trimmed.chars().count() > 200
         && !trimmed.ends_with(['.', '!', '`', '"', '*', ')', ']', '>']);
     questions >= 2 || DELIBERATION.iter().any(|p| tail.contains(p)) || cut_off
@@ -373,7 +556,7 @@ fn deliberating(text: &str) -> bool {
 
 #[cfg(test)]
 mod deliberation_tests {
-    use super::deliberating;
+    use super::{deliberating, facts};
 
     #[test]
     fn the_real_gen1_ending_is_deliberation() {
@@ -386,8 +569,18 @@ mod deliberation_tests {
 
     #[test]
     fn a_summary_is_not() {
-        assert!(!deliberating("Fixed the header validation in bottle.py and wrote /app/report.jsonl; all 367 tests pass."));
-        assert!(!deliberating("Done. The test suite passes (`pytest -q`: 12 passed)."));
+        assert!(!deliberating(
+            "Fixed the header validation in bottle.py and wrote /app/report.jsonl; all 367 tests pass."
+        ));
+        assert!(!deliberating(
+            "Done. The test suite passes (`pytest -q`: 12 passed)."
+        ));
         assert!(!deliberating(""));
+    }
+
+    #[test]
+    fn bounded_shell_capture_is_counted_as_truncated() {
+        let transcript = serde_json::json!({"kind":"tool_result", "name":"bash", "ok":true, "output":"head\n[... 19976000 bytes omitted ...]\ntail"}).to_string();
+        assert_eq!(facts(&transcript).truncations, 1);
     }
 }

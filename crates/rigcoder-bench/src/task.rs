@@ -46,7 +46,9 @@ struct Timeout {
 
 impl Default for Timeout {
     fn default() -> Self {
-        Self { timeout_sec: default_timeout() }
+        Self {
+            timeout_sec: default_timeout(),
+        }
     }
 }
 
@@ -89,7 +91,8 @@ impl Task {
         let dir = tasks_dir.join(name);
         let toml_text = std::fs::read_to_string(dir.join("task.toml"))
             .with_context(|| format!("no task.toml under {}", dir.display()))?;
-        let parsed: TaskToml = toml::from_str(&toml_text).with_context(|| format!("{name}/task.toml"))?;
+        let parsed: TaskToml =
+            toml::from_str(&toml_text).with_context(|| format!("{name}/task.toml"))?;
         let instruction = std::fs::read_to_string(dir.join("instruction.md"))
             .with_context(|| format!("{name}/instruction.md"))?;
         let dockerfile = std::fs::read_to_string(dir.join("environment").join("Dockerfile"))
@@ -98,7 +101,7 @@ impl Task {
             .lines()
             .filter_map(|line| line.trim().strip_prefix("WORKDIR"))
             .map(|rest| rest.trim().to_owned())
-            .last()
+            .next_back()
             .unwrap_or_else(|| "/app".to_owned());
         Ok(Self {
             name: name.to_owned(),

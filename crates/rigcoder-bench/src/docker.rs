@@ -32,16 +32,39 @@ fn run(cmd: &mut Command, what: &str) -> Result<Output> {
 }
 
 pub fn available() -> Result<()> {
-    let out = run(docker().arg("version").arg("--format").arg("{{.Server.Version}}"), "version")?;
+    host_timeout()?;
+    let out = run(
+        docker()
+            .arg("version")
+            .arg("--format")
+            .arg("{{.Server.Version}}"),
+        "version",
+    )?;
     if out.code != 0 {
         bail!("docker daemon unreachable: {}", out.stderr.trim());
     }
     Ok(())
 }
 
+/// Homebrew installs GNU coreutils as `gtimeout` on macOS. Check for the
+/// required implementation before starting a job, not midway through builds.
+fn host_timeout() -> Result<&'static str> {
+    for executable in ["timeout", "gtimeout"] {
+        if let Ok(output) = Command::new(executable).arg("--version").output()
+            && output.status.success()
+            && String::from_utf8_lossy(&output.stdout).contains("GNU coreutils")
+        {
+            return Ok(executable);
+        }
+    }
+    bail!(
+        "GNU timeout is required for image builds: install coreutils (on macOS: brew install coreutils) and put timeout or gtimeout on PATH"
+    )
+}
+
 /// Build the task image from `environment/`, natively for this daemon.
 pub fn build(context: &Path, tag: &str, timeout: Duration) -> Result<Output> {
-    let mut cmd = Command::new("timeout");
+    let mut cmd = Command::new(host_timeout()?);
     cmd.arg("--signal=KILL")
         .arg(timeout.as_secs().to_string())
         .arg("docker")
@@ -55,8 +78,25 @@ pub fn build(context: &Path, tag: &str, timeout: Duration) -> Result<Output> {
 /// Start a container that idles until removed.
 pub fn start(name: &str, image: &str, workdir: &str, cpus: f64, memory: &str) -> Result<()> {
     let mut cmd = docker();
-    cmd.args(["run", "-d", "--name", name, "--cpus", &cpus.to_string(), "--memory", memory, "-w", workdir])
-        .args(["--entrypoint", "sh", image, "-c", "while true; do sleep 3600; done"]);
+    cmd.args([
+        "run",
+        "-d",
+        "--name",
+        name,
+        "--cpus",
+        &cpus.to_string(),
+        "--memory",
+        memory,
+        "-w",
+        workdir,
+    ])
+    .args([
+        "--entrypoint",
+        "sh",
+        image,
+        "-c",
+        "while true; do sleep 3600; done",
+    ]);
     let out = run(&mut cmd, "run")?;
     if out.code != 0 {
         bail!("docker run failed: {}", out.stderr.trim());
@@ -69,17 +109,31 @@ pub fn remove(name: &str) {
 }
 
 pub fn copy_in(name: &str, from: &Path, to: &str) -> Result<()> {
-    let out = run(docker().arg("cp").arg(from).arg(format!("{name}:{to}")), "cp in")?;
+    let out = run(
+        docker().arg("cp").arg(from).arg(format!("{name}:{to}")),
+        "cp in",
+    )?;
     if out.code != 0 {
-        bail!("docker cp {} -> {to}: {}", from.display(), out.stderr.trim());
+        bail!(
+            "docker cp {} -> {to}: {}",
+            from.display(),
+            out.stderr.trim()
+        );
     }
     Ok(())
 }
 
 pub fn copy_out(name: &str, from: &str, to: &Path) -> Result<()> {
-    let out = run(docker().arg("cp").arg(format!("{name}:{from}")).arg(to), "cp out")?;
+    let out = run(
+        docker().arg("cp").arg(format!("{name}:{from}")).arg(to),
+        "cp out",
+    )?;
     if out.code != 0 {
-        bail!("docker cp {from} -> {}: {}", to.display(), out.stderr.trim());
+        bail!(
+            "docker cp {from} -> {}: {}",
+            to.display(),
+            out.stderr.trim()
+        );
     }
     Ok(())
 }
@@ -87,14 +141,26 @@ pub fn copy_out(name: &str, from: &str, to: &Path) -> Result<()> {
 /// Run a shell command in the container as root, with a hard timeout
 /// enforced inside the container (coreutils `timeout`, present in every
 /// base image the dataset uses), and `env` exported to it.
-pub fn exec(name: &str, workdir: &str, env: &[(&str, &str)], script: &str, timeout: Duration) -> Result<Output> {
+pub fn exec(
+    name: &str,
+    workdir: &str,
+    env: &[(&str, &str)],
+    script: &str,
+    timeout: Duration,
+) -> Result<Output> {
     let mut cmd = docker();
     cmd.args(["exec", "-w", workdir]);
     for (key, value) in env {
         cmd.arg("-e").arg(format!("{key}={value}"));
     }
-    cmd.arg(name)
-        .args(["timeout", "--signal=KILL", &timeout.as_secs().to_string(), "bash", "-c", script]);
+    cmd.arg(name).args([
+        "timeout",
+        "--signal=KILL",
+        &timeout.as_secs().to_string(),
+        "bash",
+        "-c",
+        script,
+    ]);
     run(&mut cmd, "exec")
 }
 
