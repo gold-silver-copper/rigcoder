@@ -13,6 +13,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
+          components: rustfmt, clippy
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
       - uses: Swatinem/rust-cache@v2
       - name: Prepare repository-repair process isolation
@@ -36,6 +37,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
+          components: rustfmt
       - name: Prepare Linux process isolation
         if: runner.os == 'Linux'
         run: bash .github/scripts/setup-verifier-sandbox.sh
