@@ -319,6 +319,18 @@ impl Scope {
     pub fn bash_paths(command: &str) -> Vec<String> {
         Self::bash_paths_in(std::path::Path::new("/nonexistent"), command)
     }
+
+    /// Can this command change files? Reads (`cat`, `ls`, `grep`, a `cargo
+    /// check`) are not the scope's business; redirections and the usual
+    /// writing commands are.
+    pub fn bash_writes(command: &str) -> bool {
+        if command.contains('>') {
+            return true;
+        }
+        let writers = ["tee", "rm", "mv", "cp", "touch", "mkdir", "rmdir", "truncate", "dd", "install", "ln", "patch", "chmod", "chown", "sed -i", "sed -E -i", "perl -pi", "perl -i", "perl -0pi", "git checkout", "git reset", "git clean", "git stash", "git apply", "git rm", "git mv", "git commit", "git push", "cargo fmt", "cargo fix", "rustfmt"];
+        let padded = format!(" {command} ");
+        writers.iter().any(|w| padded.contains(&format!(" {w} ")) || padded.contains(&format!(";{w} ")) || padded.contains(&format!("&{w} ")) || padded.contains(&format!("|{w} ")) || padded.contains(&format!("({w} ")))
+    }
 }
 
 /// Deny a file write or a bash command whose paths break the scope.
@@ -334,7 +346,7 @@ pub fn gate_scope(
         let Ok(value) = serde_json::from_str::<serde_json::Value>(args) else { continue };
         let paths: Vec<String> = match slot.name.as_str() {
             "write_file" | "edit_file" => value["path"].as_str().map(|p| vec![p.to_owned()]).unwrap_or_default(),
-            "bash" => value["command"].as_str().map(|c| Scope::bash_paths_in(&scope.root, c)).unwrap_or_default(),
+            "bash" => value["command"].as_str().filter(|c| Scope::bash_writes(c)).map(|c| Scope::bash_paths_in(&scope.root, c)).unwrap_or_default(),
             _ => continue,
         };
         if let Some((path, why)) = scope.violation(paths.iter().map(String::as_str)) {
@@ -391,5 +403,16 @@ mod scope_tests {
         let s = scope();
         assert!(s.violation(paths.iter().map(String::as_str)).is_some());
         assert!(s.violation(Scope::bash_paths("cargo check --workspace").iter().map(String::as_str)).is_none());
+    }
+
+    #[test]
+    fn only_writing_commands_are_scoped() {
+        assert!(!Scope::bash_writes("cat harness/ledger.jsonl | head"));
+        assert!(!Scope::bash_writes("ls ~/.cargo/git/checkouts && grep -rn foo crates/"));
+        assert!(!Scope::bash_writes("cargo check --workspace"));
+        assert!(Scope::bash_writes("echo x > harness/ledger.jsonl"));
+        assert!(Scope::bash_writes("sed -i s/a/b/ crates/rigcoder/src/prompt.md"));
+        assert!(Scope::bash_writes("cd x && rm -rf harness"));
+        assert!(Scope::bash_writes("git checkout -- harness/ledger.jsonl"));
     }
 }
