@@ -59,8 +59,16 @@ Rules:
 """
 
 
+def redact(arg: str) -> str:
+    """`KEY=value` arguments that look like secrets print as `KEY=***`."""
+    key, sep, value = arg.partition("=")
+    if sep and key.isupper() and any(word in key for word in ("KEY", "TOKEN", "SECRET")):
+        return f"{key}=***"
+    return arg
+
+
 def sh(cmd: list[str] | str, *, dry: bool, cwd: Path = ROOT, env: dict | None = None, check=True) -> subprocess.CompletedProcess:
-    text = cmd if isinstance(cmd, str) else " ".join(shlex.quote(c) for c in cmd)
+    text = cmd if isinstance(cmd, str) else " ".join(shlex.quote(redact(c)) for c in cmd)
     print(f"$ {text}", flush=True)
     if dry:
         return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -81,9 +89,13 @@ def evaluate(args, gen: int) -> tuple[float, dict[str, float], Path]:
         cmd += ["-i", pattern]
     for pattern in args.exclude:
         cmd += ["-x", pattern]
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
-        if os.environ.get(key):
-            cmd += ["--ae", f"{key}={os.environ[key]}"]
+    if args.force_build:
+        cmd.append("--force-build")
+    # Only the key the benchmarked provider needs crosses into the container.
+    provider = args.model.split("/", 1)[0]
+    key = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider)
+    if key and os.environ.get(key):
+        cmd += ["--ae", f"{key}={os.environ[key]}"]
     sh(cmd, dry=args.dry_run, env={"PYTHONPATH": str(ROOT)}, check=False)
     job_dir = RUNS / job
     if args.dry_run:
@@ -190,11 +202,13 @@ def main() -> int:
     p.add_argument("--dataset", default="terminal-bench@2.0")
     p.add_argument("-i", "--include", action="append", default=[], help="task name glob (repeatable)")
     p.add_argument("-x", "--exclude", action="append", default=[])
-    p.add_argument("-m", "--model", default="anthropic/claude-opus-5", help="provider/model the benchmarked agent uses")
-    p.add_argument("--meta-provider", default="anthropic")
+    p.add_argument("-m", "--model", default="gemini/gemini-3.8-flash", help="provider/model the benchmarked agent uses")
+    p.add_argument("--meta-provider", default="gemini")
     p.add_argument("--meta-model", default=None, help="model the improvement step uses (default: provider default)")
     p.add_argument("-n", "--n-concurrent", type=int, default=4)
     p.add_argument("--no-build", action="store_true")
+    p.add_argument("--force-build", action=argparse.BooleanOptionalAction, default=True,
+                   help="harbor --force-build: build task environments natively instead of pulling amd64 images")
     p.add_argument("--no-improve", action="store_true", help="evaluate only")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
