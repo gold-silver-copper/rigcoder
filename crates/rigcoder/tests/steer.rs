@@ -464,3 +464,292 @@ fn scope_resolves_symlinks_before_parent_components_and_rejects_hard_links() {
             .is_none()
     );
 }
+
+fn approval_app(
+    dir: &std::path::Path,
+    mode: rigcoder::approval::ApprovalMode,
+    calls: Vec<AssistantContent>,
+) -> App {
+    let mut app = App::new();
+    app.add_plugins(RigcoderPlugin::live(
+        dir.to_path_buf(),
+        ModelChoice::parse("gemini", None).unwrap(),
+        8,
+    ))
+    .insert_resource(mode)
+    .insert_resource(ScriptedModel(Mutex::new(Some(Scripted {
+        turns: Mutex::new(vec![calls, vec![AssistantContent::text("done")]].into()),
+        seen: Arc::new(Mutex::new(Vec::new())),
+    }))))
+    .add_systems(PreStartup, register_scripted);
+    app.update();
+    rigcoder::submit(app.world_mut(), "perform the requested operation").unwrap();
+    app
+}
+
+fn advance_until(app: &mut App, condition: impl Fn(&World) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !condition(app.world()) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "run did not reach the expected state: {:?}",
+            app.world().resource::<Transcript>().events
+        );
+        app.update();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
+#[test]
+fn rust_edit_approval_shows_formatted_bytes_and_repeated_gates_cannot_release_it() {
+    use rigcoder::approval::{ApprovalMode, Approvals};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("main.rs");
+    let before = format!("fn main() {{{}let x = 1; }}\n", " ".repeat(1000));
+    std::fs::write(&path, &before).unwrap();
+    let mut app = approval_app(
+        dir.path(),
+        ApprovalMode::Ask,
+        vec![call(
+            "edit_file",
+            serde_json::json!({"path":"main.rs", "old_string":"1", "new_string":"2"}),
+        )],
+    );
+    advance_until(&mut app, |world| {
+        !world.resource::<Approvals>().pending.is_empty()
+    });
+    let request = app.world().resource::<Approvals>().pending[0].clone();
+    let preview = request.file.as_ref().unwrap();
+    assert_eq!(preview.after, "fn main() {\n    let x = 2;\n}\n");
+    assert_eq!(request.operation_id.len(), 64);
+    assert!(preview.before_sha256.is_some());
+    assert!(preview.diff.contains("let x = 2;"));
+    for _ in 0..30 {
+        app.update();
+    }
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+    assert_eq!(app.world().resource::<Approvals>().pending.len(), 1);
+    assert!(
+        app.world_mut()
+            .resource_mut::<Approvals>()
+            .decide(&request.operation_id, true)
+    );
+    advance_until(&mut app, |world| {
+        !world.resource::<rigcoder::Conversation>().is_busy()
+    });
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), preview.after);
+    assert_eq!(app.world().resource::<Transcript>().events.iter().filter(|event| matches!(event, Event::ToolResult { name, ok: true, .. } if name == "edit_file")).count(), 1);
+    assert!(
+        !app.world_mut()
+            .resource_mut::<Approvals>()
+            .decide(&request.operation_id, true)
+    );
+}
+
+#[test]
+fn denied_cancelled_changed_arguments_and_stale_sources_cannot_use_an_old_approval() {
+    use rigcoder::approval::{ApprovalMode, Approvals};
+    for scenario in ["deny", "cancel", "arguments", "source"] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("file.txt");
+        std::fs::write(&path, "before").unwrap();
+        let mut app = approval_app(
+            dir.path(),
+            ApprovalMode::Ask,
+            vec![call(
+                "write_file",
+                serde_json::json!({"path":"file.txt", "content":"after"}),
+            )],
+        );
+        advance_until(&mut app, |world| {
+            !world.resource::<Approvals>().pending.is_empty()
+        });
+        let id = app.world().resource::<Approvals>().pending[0]
+            .operation_id
+            .clone();
+        match scenario {
+            "deny" => assert!(
+                app.world_mut()
+                    .resource_mut::<Approvals>()
+                    .decide(&id, false)
+            ),
+            "cancel" => {
+                rigcoder::cancel(app.world_mut(), "cancel at approval");
+            }
+            "arguments" => {
+                let world = app.world_mut();
+                let mut calls = world.query::<(
+                    &rig_ecs::agent::ToolCallSlot,
+                    &mut rig_ecs::bus::PendingEffect,
+                )>();
+                for (slot, mut effect) in calls.iter_mut(world) {
+                    if slot.name == "write_file"
+                        && let EffectKind::ToolCall { args, .. } = &mut effect.kind
+                    {
+                        *args = serde_json::json!({"path":"other.txt", "content":"unapproved"})
+                            .to_string();
+                    }
+                }
+                assert!(world.resource_mut::<Approvals>().decide(&id, true));
+            }
+            "source" => {
+                std::fs::write(&path, "external").unwrap();
+                assert!(
+                    app.world_mut()
+                        .resource_mut::<Approvals>()
+                        .decide(&id, true)
+                );
+            }
+            _ => unreachable!(),
+        }
+        advance_until(&mut app, |world| {
+            !world.resource::<rigcoder::Conversation>().is_busy()
+        });
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            if scenario == "source" {
+                "external"
+            } else {
+                "before"
+            },
+            "{scenario}"
+        );
+        assert!(!dir.path().join("other.txt").exists());
+        assert!(
+            !app.world_mut()
+                .resource_mut::<Approvals>()
+                .decide(&id, true)
+        );
+    }
+}
+
+#[test]
+fn approval_holds_preserve_tool_concurrency_and_use_distinct_operation_ids() {
+    use rigcoder::approval::{ApprovalMode, Approvals};
+    let dir = tempfile::tempdir().unwrap();
+    let calls = (0..6)
+        .map(|index| {
+            call(
+                "write_file",
+                serde_json::json!({"path":format!("{index}.txt"), "content":index.to_string()}),
+            )
+        })
+        .collect();
+    let mut app = approval_app(dir.path(), ApprovalMode::Ask, calls);
+    let agent = app.world().resource::<rigcoder::AgentHandle>().agent;
+    app.world_mut()
+        .entity_mut(agent)
+        .insert(rig_ecs::agent::ToolPolicy { concurrency: 1 });
+    let mut ids = std::collections::HashSet::new();
+    for index in 0..6 {
+        advance_until(&mut app, |world| {
+            !world.resource::<Approvals>().pending.is_empty()
+        });
+        assert_eq!(app.world().resource::<Approvals>().pending.len(), 1);
+        let request = app.world().resource::<Approvals>().pending[0].clone();
+        assert!(ids.insert(request.operation_id.clone()));
+        assert!(!dir.path().join(format!("{index}.txt")).exists());
+        for later in index + 1..6 {
+            assert!(!dir.path().join(format!("{later}.txt")).exists());
+        }
+        app.world_mut().resource_mut::<Approvals>().approve_next();
+    }
+    advance_until(&mut app, |world| {
+        !world.resource::<rigcoder::Conversation>().is_busy()
+    });
+    for index in 0..6 {
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(format!("{index}.txt"))).unwrap(),
+            index.to_string()
+        );
+    }
+}
+
+#[test]
+fn deny_mode_refuses_files_and_commands_without_asking() {
+    use rigcoder::approval::{ApprovalMode, Approvals};
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = approval_app(
+        dir.path(),
+        ApprovalMode::Deny,
+        vec![
+            call(
+                "write_file",
+                serde_json::json!({"path":"new/sub/file", "content":"after"}),
+            ),
+            call("bash", serde_json::json!({"command":"touch command-ran"})),
+        ],
+    );
+    advance_until(&mut app, |world| {
+        !world.resource::<rigcoder::Conversation>().is_busy()
+    });
+    assert!(app.world().resource::<Approvals>().pending.is_empty());
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn cancelling_an_issued_bash_command_stops_its_later_mutation() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = approval_app(
+        dir.path(),
+        rigcoder::approval::ApprovalMode::Auto,
+        vec![call(
+            "bash",
+            serde_json::json!({"command":"touch started; sleep 1; touch unapproved-late-write"}),
+        )],
+    );
+    advance_until(&mut app, |_| dir.path().join("started").exists());
+    rigcoder::cancel(app.world_mut(), "cancel running command");
+    advance_until(&mut app, |world| {
+        !world.resource::<rigcoder::Conversation>().is_busy()
+    });
+    std::thread::sleep(std::time::Duration::from_millis(1200));
+    assert!(!dir.path().join("unapproved-late-write").exists());
+}
+
+#[test]
+fn cancellation_between_approval_and_dispatch_prevents_the_write() {
+    use rig_ecs::bus::{BusSet, RigSchedule, ToolInputs};
+    use rigcoder::approval::{ApprovalMode, Approvals, PolicyHold};
+    #[derive(Resource, Default)]
+    struct CancelledBeforeDispatch(bool);
+    fn cancel_approved(world: &mut World) {
+        if world.resource::<CancelledBeforeDispatch>().0 {
+            return;
+        }
+        let approved = world
+            .query_filtered::<&rig_ecs::agent::ToolCallSlot, (
+                With<ToolInputs>,
+                Without<PolicyHold>,
+                Without<rig_ecs::bus::Issued>,
+            )>()
+            .iter(world)
+            .any(|slot| slot.name == "write_file");
+        if approved {
+            world.resource_mut::<CancelledBeforeDispatch>().0 = true;
+            rigcoder::cancel(world, "cancel approved call before dispatch");
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = approval_app(
+        dir.path(),
+        ApprovalMode::Ask,
+        vec![call(
+            "write_file",
+            serde_json::json!({"path": "new.txt", "content": "after"}),
+        )],
+    );
+    app.init_resource::<CancelledBeforeDispatch>().add_systems(
+        RigSchedule,
+        cancel_approved.after(BusSet::Gate).before(BusSet::Dispatch),
+    );
+    advance_until(&mut app, |world| {
+        !world.resource::<Approvals>().pending.is_empty()
+    });
+    app.world_mut().resource_mut::<Approvals>().approve_next();
+    advance_until(&mut app, |world| {
+        !world.resource::<rigcoder::Conversation>().is_busy()
+    });
+    assert!(app.world().resource::<CancelledBeforeDispatch>().0);
+    assert!(!dir.path().join("new.txt").exists());
+}

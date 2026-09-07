@@ -7,11 +7,33 @@
 
 use std::{
     fs::{self, Metadata},
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use crate::steer::Scope;
+
+// Serialize this product's commits, including calls from different worlds.
+// External writers still require a workspace execution boundary.
+static APPLICATION_LOCK: Mutex<()> = Mutex::new(());
+pub(crate) const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FilePreview {
+    pub path: PathBuf,
+    pub before_sha256: Option<String>,
+    pub after_sha256: String,
+    /// Exact UTF-8 contents that application will write.
+    pub after: String,
+    /// A display diff; binary source bytes are identified by their digest.
+    pub diff: String,
+}
+
+pub(crate) fn digest(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
 
 pub(crate) struct FileSource {
     requested: PathBuf,
@@ -61,7 +83,17 @@ fn read_source(path: &Path) -> io::Result<Option<(Vec<u8>, Metadata)>> {
         }
     }
     validate_extended_metadata(path)?;
-    Ok(Some((fs::read(path)?, metadata)))
+    if metadata.len() > MAX_FILE_BYTES {
+        return Err(io::Error::other("file mutation exceeds the 16 MiB limit"));
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(io::Error::other("file grew past the 16 MiB mutation limit"));
+    }
+    Ok(Some((bytes, metadata)))
 }
 
 // Atomic replacement cannot silently discard an ACL, extended attributes or
@@ -157,6 +189,9 @@ fn same_metadata(before: &Metadata, current: &Metadata) -> bool {
 }
 
 impl FileSource {
+    pub(crate) fn path(&self) -> &Path {
+        &self.resolved
+    }
     pub(crate) fn read(path: &Path) -> io::Result<Self> {
         #[cfg(unix)]
         {
@@ -219,7 +254,53 @@ impl FileSource {
 }
 
 impl PreparedFileChange {
+    pub(crate) fn preview(&self) -> io::Result<FilePreview> {
+        let before = self
+            .source
+            .before
+            .as_ref()
+            .map(|(bytes, _)| bytes.as_slice());
+        let after = std::str::from_utf8(&self.after)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        let diff = match before.map(std::str::from_utf8).transpose() {
+            Ok(before) => similar::TextDiff::configure()
+                .timeout(std::time::Duration::from_millis(250))
+                .diff_lines(before.unwrap_or(""), after)
+                .unified_diff()
+                .header("before", "after")
+                .to_string(),
+            Err(_) => {
+                "Binary source replaced by the exact UTF-8 contents shown in after".to_owned()
+            }
+        };
+        Ok(FilePreview {
+            path: self.source.resolved.clone(),
+            before_sha256: before.map(digest),
+            after_sha256: digest(&self.after),
+            after: after.to_owned(),
+            diff,
+        })
+    }
+
+    #[cfg(test)]
     pub(crate) fn apply(self) -> io::Result<()> {
+        self.apply_if(|| true)
+    }
+
+    pub(crate) fn apply_if(self, authorized: impl Fn() -> bool) -> io::Result<()> {
+        let _guard = APPLICATION_LOCK
+            .lock()
+            .map_err(|_| io::Error::other("file application lock poisoned"))?;
+        let check_authorized = || {
+            if authorized() {
+                Ok(())
+            } else {
+                Err(io::Error::other(
+                    "file operation was cancelled before commit",
+                ))
+            }
+        };
+        check_authorized()?;
         self.source.validate()?;
         let path = &self.source.resolved;
         let parent = path
@@ -242,6 +323,7 @@ impl PreparedFileChange {
         validate_extended_metadata(staged.path())?;
         staged.as_file().sync_all()?;
         self.source.validate()?;
+        check_authorized()?;
         if self.source.before.is_none() {
             staged
                 .persist_noclobber(path)

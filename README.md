@@ -35,6 +35,14 @@ run in flight, arrows and PgUp/PgDn scroll the transcript, End follows the
 stream again, Ctrl+C quits. Set `RIGCODER_LOG=path` to get tracing output in a
 file (the terminal is the screen).
 
+The TUI asks before file writes, edits and bash commands. Review the operation,
+source/result digests, formatted diff and exact resulting contents; with an
+empty input, `y` approves the displayed operation and `n` denies it. The CLI
+offers `--approve auto|deny|ask` (default `auto`). In `ask` mode, provide the task
+as an argument or through `--task-file` so stdin remains available for decisions.
+Only `y` or `yes` approves; EOF denies pending and subsequent requests. Waiting
+for a decision does not block the agent schedule or its timeout/cancellation.
+
 Model selection: `RIGCODER_PROVIDER` (`anthropic` default, or `openai`) and
 `RIGCODER_MODEL` (defaults `claude-opus-5` / `gpt-5.6-sol`); the CLI also takes
 `--provider` and `--model`. Other CLI flags: `--max-turns`, `--timeout-secs`,
@@ -65,12 +73,17 @@ approval, a `Judge` system can rewrite a result, a `Scene` can checkpoint a
 run mid-task, and an `EffectLog` can replay one.
 
 File writes and edits prepare their contents without changing the workspace,
-then recheck the original file before an atomic replacement. On macOS and Linux,
+format Rust before approval, then recheck the original file before an atomic
+replacement. Source and resulting files are limited to 16 MiB. Approval binds
+one invocation to its arguments and prepared bytes; changed arguments, stale
+sources, cancellation and reused decisions cannot authorize another write.
+Cancellation also stops an issued bash process. On macOS and Linux,
 new files use private Unix permission bits; replacements preserve ordinary
 permission bits and ownership. Read-only, hard-linked, set-ID, ACL-bearing and
 extended-attribute-bearing targets are refused, as are replacements that would
-change ownership or inherit unsupported metadata. This does not yet provide
-file approval, a mutation ledger, or exclusion of concurrent external writers.
+change ownership or inherit unsupported metadata. Pending approvals are currently
+runtime state: durable approval checkpoints, a mutation ledger and exclusion of
+concurrent external writers remain part of the unfinished migration.
 
 ## Dependency pin
 

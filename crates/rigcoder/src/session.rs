@@ -38,7 +38,12 @@ pub struct Conversation {
     pub runs: usize,
     /// The last prompt and the history it was submitted after, so a run
     /// that fails on a transient provider error can be submitted again.
-    last: Option<(String, Vec<MessageParts>, crate::RunSettings)>,
+    last: Option<(
+        String,
+        Vec<MessageParts>,
+        crate::RunSettings,
+        crate::approval::ApprovalMode,
+    )>,
     /// A resubmission due at this instant.
     retry_at: Option<std::time::Instant>,
     pub provider_retries: usize,
@@ -138,7 +143,8 @@ pub fn submit(world: &mut World, prompt: &str) -> Option<Entity> {
     }
     world.resource_mut::<Conversation>().provider_retries = 0;
     let settings = world.resource::<crate::RunSettings>().clone();
-    start_run(world, prompt, true, settings)
+    let approval = *world.resource::<crate::approval::ApprovalMode>();
+    start_run(world, prompt, true, settings, approval)
 }
 
 fn start_run(
@@ -146,6 +152,7 @@ fn start_run(
     prompt: &str,
     announce: bool,
     settings: crate::RunSettings,
+    approval: crate::approval::ApprovalMode,
 ) -> Option<Entity> {
     let agent = world.get_resource::<AgentHandle>()?.agent;
     if world.resource::<Conversation>().active.is_some() {
@@ -177,9 +184,11 @@ fn start_run(
         include_str!("checkpoint.rs"),
         include_str!("tools.rs"),
         include_str!("file_change.rs"),
+        include_str!("approval.rs"),
         include_str!("steer.rs"),
         include_str!("session.rs"),
         &settings,
+        approval,
         world.resource::<crate::steer::Steer>(),
         world
             .get_resource::<crate::steer::Scope>()
@@ -198,12 +207,18 @@ fn start_run(
     }
     {
         let mut conversation = world.resource_mut::<Conversation>();
-        conversation.last = Some((prompt.to_owned(), history.clone(), settings.clone()));
+        conversation.last = Some((
+            prompt.to_owned(),
+            history.clone(),
+            settings.clone(),
+            approval,
+        ));
     }
     let run = spawn_run(world, agent, &history, prompt, settings.stream, None);
-    world
-        .entity_mut(run)
-        .insert(crate::RunConfiguration(settings));
+    world.entity_mut(run).insert((
+        crate::RunConfiguration(settings),
+        crate::approval::RunApproval(approval),
+    ));
     {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.active = Some(run);
@@ -362,7 +377,7 @@ pub fn on_failed(
     if let Some(rig_ecs::agent::Failure::Provider(report)) = &failure
         && conversation.provider_retries < settings.get(run).map_or(0, |s| usize::from(s.0.provider_retries))
         && transient(report)
-        && let Some((_, history, _)) = conversation.last.clone()
+        && let Some((_, history, _, _)) = conversation.last.clone()
         && !conversation.history.iter().skip(history.len()).any(|parts| matches!(parts,
             MessageParts::Assistant { content, .. } if content.iter().any(|part| matches!(part, AssistantContent::ToolCall(_)))))
     {
@@ -477,16 +492,16 @@ pub fn resubmit_when_due(world: &mut World) {
     if !due {
         return;
     }
-    let (prompt, settings) = {
+    let (prompt, settings, approval) = {
         let mut conversation = world.resource_mut::<Conversation>();
         conversation.retry_at = None;
-        let Some((prompt, history, settings)) = conversation.last.clone() else {
+        let Some((prompt, history, settings, approval)) = conversation.last.clone() else {
             return;
         };
         conversation.history = history.clone();
-        (prompt, settings)
+        (prompt, settings, approval)
     };
-    if start_run(world, &prompt, false, settings).is_none() {
+    if start_run(world, &prompt, false, settings, approval).is_none() {
         world.resource_mut::<Transcript>().push(Event::Failed(
             "could not retry: no agent is registered".to_owned(),
         ));
@@ -610,9 +625,17 @@ mod retry_tests {
             Some(vec![transient_failure(), transient_failure(), done()]),
         );
         live.insert_resource(settings(512, false, 1));
+        live.insert_resource(crate::approval::ApprovalMode::Ask);
         submit(live.world_mut(), "first").unwrap();
         live.insert_resource(settings(1024, true, 3));
+        live.insert_resource(crate::approval::ApprovalMode::Auto);
         drive(&mut live);
+        assert!(
+            live.world_mut()
+                .query::<&crate::approval::RunApproval>()
+                .iter(live.world())
+                .all(|mode| mode.0 == crate::approval::ApprovalMode::Ask)
+        );
         let log = crate::effect_log(live.world());
         assert_eq!(log.records.len(), 2, "one original attempt and one retry");
         for record in log.iter() {

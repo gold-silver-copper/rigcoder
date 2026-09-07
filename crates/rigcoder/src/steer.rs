@@ -11,7 +11,9 @@
 //! The rules live in the [`Steer`] resource, so the settings lane tunes
 //! them and the systems lane changes the systems.
 
-use std::{collections::VecDeque, path::PathBuf};
+use std::path::PathBuf;
+
+pub use crate::approval::Approvals;
 
 use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
@@ -87,34 +89,6 @@ mod tests {
             assert!(result.output().render().contains("result cut"));
         }
     }
-
-    #[test]
-    fn canceled_holds_leave_the_approval_queue_and_keep_their_outcome() {
-        let mut world = World::new();
-        let entity = world
-            .spawn((
-                Held,
-                EffectOutcome(Err(ErrorReport::new(ErrorKind::Cancelled, "cancelled"))),
-            ))
-            .id();
-        world.insert_resource(Approvals {
-            pending: VecDeque::from([(entity, "bash".to_owned(), "touch file".to_owned())]),
-            denied: vec![entity],
-            ..Default::default()
-        });
-        world.run_system_once(resolve_holds).unwrap();
-        assert!(world.resource::<Approvals>().pending.is_empty());
-        assert_eq!(
-            world
-                .get::<EffectOutcome>(entity)
-                .unwrap()
-                .0
-                .as_ref()
-                .unwrap_err()
-                .kind,
-            ErrorKind::Cancelled
-        );
-    }
 }
 
 impl Default for Steer {
@@ -170,28 +144,6 @@ struct Compiled {
     invalid: Option<String>,
 }
 
-/// A held call waiting for a decision, and the decisions made.
-#[derive(Resource, Default, Debug)]
-pub struct Approvals {
-    /// Calls waiting, oldest first: (effect entity, tool name, arguments).
-    pub pending: VecDeque<(Entity, String, String)>,
-    pub approved: Vec<Entity>,
-    pub denied: Vec<Entity>,
-}
-
-impl Approvals {
-    pub fn approve_next(&mut self) {
-        if let Some((entity, ..)) = self.pending.pop_front() {
-            self.approved.push(entity);
-        }
-    }
-    pub fn deny_next(&mut self) {
-        if let Some((entity, ..)) = self.pending.pop_front() {
-            self.denied.push(entity);
-        }
-    }
-}
-
 /// Deliverable retries spent, per run (saved with a scene).
 #[derive(Component, Default, serde::Serialize, serde::Deserialize)]
 pub struct DeliverableRetries(pub usize);
@@ -203,10 +155,13 @@ impl Plugin for SteerPlugin {
         app.init_resource::<Steer>()
             .init_resource::<Compiled>()
             .init_resource::<Approvals>()
+            .init_resource::<crate::approval::ApprovalMode>()
+            .add_observer(crate::approval::cancel_outcome)
+            .add_observer(crate::approval::cancel_run)
             .add_systems(
                 RigSchedule,
                 (
-                    (compile, gate_scope, gate_bash, resolve_holds)
+                    (compile, gate_scope, gate_bash, crate::approval::gate)
                         .chain()
                         .in_set(BusSet::Gate),
                     shape_results.in_set(BusSet::Judge),
@@ -257,7 +212,6 @@ fn gate_bash(
     fresh: Query<(Entity, &PendingEffect, &ToolCallSlot), Ungated>,
     compiled: Res<Compiled>,
     steer: Res<Steer>,
-    mut approvals: ResMut<Approvals>,
     mut transcript: ResMut<Transcript>,
     mut commands: Commands,
 ) {
@@ -291,48 +245,10 @@ fn gate_bash(
             });
             continue;
         }
-        if compiled.hold.iter().any(|r| r.is_match(&command)) {
-            commands.entity(entity).insert(Held);
-            transcript.push(Event::Held {
-                name: slot.name.clone(),
-                args: command.clone(),
-            });
-            if steer.auto_approve {
-                approvals.approved.push(entity);
-            } else {
-                approvals
-                    .pending
-                    .push_back((entity, slot.name.clone(), command));
-            }
-        }
-    }
-}
-
-/// Apply the decisions: an approved hold goes on, a denied one is answered.
-fn resolve_holds(
-    mut approvals: ResMut<Approvals>,
-    held: Query<Entity, (With<Held>, Without<EffectOutcome>)>,
-    mut commands: Commands,
-) {
-    // Cancellation resolves held effects too. Do not let an old approval
-    // overwrite that outcome or stay at the front of the UI's queue.
-    approvals
-        .pending
-        .retain(|(entity, ..)| held.contains(*entity));
-    for entity in approvals.approved.drain(..) {
-        if held.contains(entity) {
-            commands.entity(entity).remove::<Held>();
-        }
-    }
-    for entity in approvals.denied.drain(..) {
-        if held.contains(entity) {
+        if !steer.auto_approve && compiled.hold.iter().any(|r| r.is_match(&command)) {
             commands
                 .entity(entity)
-                .remove::<Held>()
-                .insert(EffectOutcome(Err(ErrorReport::new(
-                    ErrorKind::Denied,
-                    "denied by the reviewer",
-                ))));
+                .insert(crate::approval::BashNeedsApproval);
         }
     }
 }

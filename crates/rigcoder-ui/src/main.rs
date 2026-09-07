@@ -32,9 +32,11 @@ struct Ui {
     outbox: Option<String>,
     stop: bool,
     /// Transcript scroll offset in rendered lines; `follow` pins it to the end.
-    scroll: u16,
+    scroll: usize,
     follow: bool,
     frame: usize,
+    displayed_approval: Option<String>,
+    approval_view: Option<ApprovalView>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -72,6 +74,7 @@ fn main() -> anyhow::Result<()> {
             ],
             ..Default::default()
         })
+        .insert_resource(rigcoder::approval::ApprovalMode::Ask)
         .add_systems(PreUpdate, keys)
         .add_systems(Update, (deliver, draw).chain())
         .run();
@@ -109,10 +112,14 @@ fn keys(
             }
             KeyCode::Esc if busy => ui.stop = true,
             KeyCode::Char('y') if !approvals.pending.is_empty() && ui.input.is_empty() => {
-                approvals.approve_next()
+                if let Some(id) = &ui.displayed_approval {
+                    approvals.decide(id, true);
+                }
             }
             KeyCode::Char('n') if !approvals.pending.is_empty() && ui.input.is_empty() => {
-                approvals.deny_next()
+                if let Some(id) = &ui.displayed_approval {
+                    approvals.decide(id, false);
+                }
             }
             KeyCode::Backspace => {
                 ui.input.pop();
@@ -134,7 +141,7 @@ fn keys(
 
 fn scroll_by(ui: &mut Ui, delta: i32) {
     ui.follow = false;
-    ui.scroll = (ui.scroll as i32 + delta).max(0) as u16;
+    ui.scroll = ui.scroll.saturating_add_signed(delta as isize);
 }
 
 /// The exclusive step: send what the UI queued, or stop the run.
@@ -158,11 +165,18 @@ fn draw(
     conversation: Res<Conversation>,
     workspace: Res<Workspace>,
     model: Res<ModelChoice>,
+    approvals: Res<rigcoder::approval::Approvals>,
 ) -> Result {
     ui.frame = ui.frame.wrapping_add(1);
     let busy = conversation.is_busy();
     let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"][(ui.frame / 3) % 10];
     let input_lines = ui.input.lines().count().clamp(1, 8) as u16 + 2;
+    let request = approvals.pending.front();
+    let displayed = request.map(|request| request.operation_id.clone());
+    if displayed != ui.displayed_approval {
+        ui.follow = displayed.is_none();
+        ui.scroll = 0;
+    }
     context.draw(|frame| {
         let [status, body, input, help] = Layout::vertical([
             Constraint::Length(1),
@@ -191,31 +205,76 @@ fn draw(
             status,
         );
 
-        let text = render_transcript(&transcript.events);
         let inner = Rect {
             width: body.width.saturating_sub(2),
             height: body.height.saturating_sub(2),
             ..body
         };
-        let paragraph = Paragraph::new(text).wrap(Wrap { trim: false });
-        let total = paragraph.line_count(inner.width) as u16;
-        let max_scroll = total.saturating_sub(inner.height);
-        if ui.follow || ui.scroll > max_scroll {
-            ui.scroll = max_scroll;
+        if let Some(request) = request {
+            if ui
+                .approval_view
+                .as_ref()
+                .is_none_or(|view| view.id != request.operation_id || view.width != inner.width)
+            {
+                ui.approval_view = Some(ApprovalView {
+                    id: request.operation_id.clone(),
+                    width: inner.width,
+                    lines: wrap_review(&request.terminal_preview(), inner.width),
+                });
+            }
+            let total = ui.approval_view.as_ref().unwrap().lines.len();
+            let max_scroll = total.saturating_sub(usize::from(inner.height));
+            if ui.follow || ui.scroll > max_scroll {
+                ui.scroll = max_scroll;
+            }
+            let visible: Vec<_> = ui
+                .approval_view
+                .as_ref()
+                .unwrap()
+                .lines
+                .iter()
+                .skip(ui.scroll)
+                .take(usize::from(inner.height))
+                .map(|line| Line::from(line.as_str()))
+                .collect();
+            let title = format!(
+                " approval: y applies, n denies  {}/{} ",
+                ui.scroll
+                    .saturating_add(usize::from(inner.height))
+                    .min(total),
+                total
+            );
+            frame.render_widget(
+                Paragraph::new(visible).block(Block::new().borders(Borders::ALL).title(title)),
+                body,
+            );
+        } else {
+            ui.approval_view = None;
+            let paragraph =
+                Paragraph::new(render_transcript(&transcript.events)).wrap(Wrap { trim: false });
+            let total = paragraph.line_count(inner.width).min(usize::from(u16::MAX));
+            let max_scroll = total.saturating_sub(usize::from(inner.height));
+            if ui.follow || ui.scroll > max_scroll {
+                ui.scroll = max_scroll;
+            }
+            let title = format!(
+                " transcript  {}/{} ",
+                ui.scroll
+                    .saturating_add(usize::from(inner.height))
+                    .min(total),
+                total
+            );
+            frame.render_widget(
+                paragraph
+                    .scroll((ui.scroll as u16, 0))
+                    .block(Block::new().borders(Borders::ALL).title(title)),
+                body,
+            );
         }
-        let title = format!(
-            " transcript  {}/{} ",
-            (ui.scroll + inner.height).min(total),
-            total
-        );
-        frame.render_widget(
-            paragraph
-                .scroll((ui.scroll, 0))
-                .block(Block::new().borders(Borders::ALL).title(title)),
-            body,
-        );
 
-        let prompt_title = if busy {
+        let prompt_title = if request.is_some() {
+            " Review the operation above; y approves, n denies (empty input) "
+        } else if busy {
             " Esc stops the run "
         } else {
             " prompt "
@@ -243,7 +302,37 @@ fn draw(
             help,
         );
     })?;
+    ui.displayed_approval = displayed;
     Ok(())
+}
+
+struct ApprovalView {
+    id: String,
+    width: u16,
+    lines: Vec<String>,
+}
+
+// Pre-wrap once per operation/terminal width, then draw only the viewport.
+// usize offsets make the complete review accessible beyond ratatui's u16 scroll.
+fn wrap_review(text: &str, width: u16) -> Vec<String> {
+    let width = usize::from(width.max(1));
+    let mut lines = Vec::new();
+    for source in text.split('\n') {
+        let span = Span::raw(source);
+        let mut line = String::new();
+        let mut used = 0;
+        for grapheme in span.styled_graphemes(Style::default()) {
+            let cells = Span::raw(grapheme.symbol).width();
+            if used + cells > width && !line.is_empty() {
+                lines.push(std::mem::take(&mut line));
+                used = 0;
+            }
+            line.push_str(grapheme.symbol);
+            used += cells;
+        }
+        lines.push(line);
+    }
+    lines
 }
 
 /// The transcript as styled lines: prompts, streamed answers, tool calls
@@ -347,6 +436,11 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
             }
         }
     }
+    for line in &mut lines {
+        for span in &mut line.spans {
+            span.content = rigcoder::approval::terminal_text(&span.content).into();
+        }
+    }
     Text::from(lines)
 }
 
@@ -357,4 +451,24 @@ fn one_line(text: &str, max: usize) -> String {
         out.push('…');
     }
     out
+}
+
+#[cfg(test)]
+mod approval_tests {
+    use super::*;
+
+    #[test]
+    fn large_and_wrapped_reviews_keep_the_tail_accessible() {
+        let text = format!("{}{}tail", "a\nb\nc\n".repeat(40_000), "x".repeat(160_000));
+        let lines = wrap_review(&text, 2);
+        assert!(lines.len() > usize::from(u16::MAX));
+        assert_eq!(lines[lines.len() - 2..], ["ta", "il"]);
+        let mut ui = Ui {
+            scroll: 65_535,
+            ..Default::default()
+        };
+        scroll_by(&mut ui, 20);
+        assert_eq!(ui.scroll, 65_555);
+        assert_eq!(lines.concat(), text.replace('\n', ""));
+    }
 }

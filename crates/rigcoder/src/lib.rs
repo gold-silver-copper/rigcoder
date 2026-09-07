@@ -6,6 +6,7 @@
 //! and the CLI show is read off components as the bus writes them; nothing
 //! here awaits.
 
+pub mod approval;
 pub mod checkpoint;
 mod file_change;
 pub mod model;
@@ -190,6 +191,7 @@ pub fn setup(
     let _ =
         extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
     let _ = extensions.register_component::<RunConfiguration>("rigcoder.run_settings");
+    let _ = extensions.register_component::<approval::RunApproval>("rigcoder.run_approval");
     let (model, tools) = match &setup.mode {
         Mode::Replay(_) => {
             let model = bound

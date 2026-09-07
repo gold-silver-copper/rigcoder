@@ -41,6 +41,9 @@ struct Args {
     /// Print tool output in full instead of the first lines.
     #[arg(long)]
     verbose: bool,
+    /// Approve mutating tools automatically, deny them, or ask on stdin.
+    #[arg(long, value_parser = ["auto", "deny", "ask"], default_value = "auto")]
+    approve: String,
     /// A file the task must produce; a text-only answer while it is missing is retried (repeatable).
     #[arg(long = "deliverable")]
     deliverables: Vec<PathBuf>,
@@ -79,6 +82,104 @@ struct Args {
 
 #[derive(Resource)]
 struct Resume(Option<rig_ecs::agent::scene::WorldScene>);
+
+#[derive(Resource)]
+struct ApprovalInput {
+    requests: std::sync::mpsc::Sender<String>,
+    replies: std::sync::Mutex<std::sync::mpsc::Receiver<(String, Option<bool>)>>,
+    waiting: Option<String>,
+    closed: bool,
+}
+
+fn read_approval_lines(
+    mut input: impl std::io::BufRead,
+    requests: std::sync::mpsc::Receiver<String>,
+    replies: std::sync::mpsc::Sender<(String, Option<bool>)>,
+) {
+    for id in requests {
+        let mut line = String::new();
+        let decision = match input.read_line(&mut line) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => Some(matches!(
+                line.trim().to_ascii_lowercase().as_str(),
+                "y" | "yes"
+            )),
+        };
+        if replies.send((id, decision)).is_err() || decision.is_none() {
+            break;
+        }
+    }
+}
+
+impl ApprovalInput {
+    fn new() -> Self {
+        let (requests, receiver) = std::sync::mpsc::channel();
+        let (sender, replies) = std::sync::mpsc::channel();
+        std::thread::spawn(move || read_approval_lines(std::io::stdin().lock(), receiver, sender));
+        Self {
+            requests,
+            replies: std::sync::Mutex::new(replies),
+            waiting: None,
+            closed: false,
+        }
+    }
+}
+
+fn handle_approval_input(
+    mut input: ResMut<ApprovalInput>,
+    mut approvals: ResMut<rigcoder::approval::Approvals>,
+) {
+    let replies: Vec<_> = input
+        .replies
+        .get_mut()
+        .expect("only the ECS host owns this receiver")
+        .try_iter()
+        .collect();
+    for (id, decision) in replies {
+        if input.waiting.as_ref() == Some(&id) {
+            input.waiting = None;
+        }
+        match decision {
+            Some(approve) => {
+                approvals.decide(&id, approve);
+            }
+            None => {
+                input.closed = true;
+                eprintln!(
+                    "rigcoder: approval input closed; pending and future mutations are denied"
+                );
+            }
+        }
+    }
+    if input.closed {
+        while !approvals.pending.is_empty() {
+            approvals.deny_next();
+        }
+    } else if input.waiting.is_none()
+        && let Some(request) = approvals.pending.front()
+    {
+        eprintln!(
+            "{}Approve this operation? [y/N]",
+            request.terminal_preview()
+        );
+        input.waiting = Some(request.operation_id.clone());
+        if input.requests.send(request.operation_id.clone()).is_err() {
+            input.closed = true;
+        }
+    }
+}
+
+fn validate_approval_input(args: &Args) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        args.approve != "ask"
+            || args.task.is_some()
+            || args.task_file.is_some()
+            || args.resume.is_some()
+            || args.replay.is_some(),
+        "--approve ask needs a task argument or --task-file; stdin cannot supply both the task and approval decisions"
+    );
+    Ok(())
+}
 
 #[derive(Resource)]
 struct EffectLogOut {
@@ -170,6 +271,7 @@ fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
+    validate_approval_input(&args)?;
     let replay_log: Option<rigcoder::EffectLog> = match &args.replay {
         Some(path) => Some(serde_json::from_str(&std::fs::read_to_string(path)?)?),
         None => None,
@@ -274,6 +376,11 @@ fn main() -> anyhow::Result<()> {
     .insert_resource(checkpoint)
     .insert_resource(Resume(resume_scene))
     .insert_resource(steer)
+    .insert_resource(match args.approve.as_str() {
+        "deny" => rigcoder::approval::ApprovalMode::Deny,
+        "ask" => rigcoder::approval::ApprovalMode::Ask,
+        _ => rigcoder::approval::ApprovalMode::Auto,
+    })
     .insert_resource(scope)
     .insert_resource(Cli {
         task,
@@ -285,6 +392,10 @@ fn main() -> anyhow::Result<()> {
     })
     .add_systems(PostStartup, start)
     .add_systems(Update, (report, watchdog));
+    if args.approve == "ask" {
+        app.insert_resource(ApprovalInput::new())
+            .add_systems(Update, handle_approval_input);
+    }
     app.insert_resource(EffectLogOut {
         path: effect_log_path,
         written: false,
@@ -317,7 +428,7 @@ fn start(world: &mut World) {
 
 /// Print what happened since the last tick; exit when the run ends.
 fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWriter<AppExit>) {
-    let mut stdout = std::io::stdout().lock();
+    let mut stdout = Vec::new();
     while cli.printed < transcript.events.len() {
         let event = &transcript.events[cli.printed];
         // A streaming answer grows in place while it is the last event:
@@ -401,6 +512,8 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
         }
     }
     let _ = stdout.flush();
+    let safe = rigcoder::approval::terminal_text(&String::from_utf8_lossy(&stdout));
+    let _ = std::io::stdout().lock().write_all(safe.as_bytes());
 }
 
 fn watchdog(world: &mut World) {
@@ -423,6 +536,53 @@ fn short(text: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asking_for_approval_cannot_also_consume_the_task_from_stdin() {
+        assert!(
+            validate_approval_input(
+                &Args::try_parse_from(["rigcoder", "--approve", "ask"]).unwrap()
+            )
+            .is_err()
+        );
+        assert!(
+            validate_approval_input(
+                &Args::try_parse_from(["rigcoder", "--approve", "ask", "task"]).unwrap()
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_approval_input(
+                &Args::try_parse_from(["rigcoder", "--approve", "ask", "--task-file", "task.txt"])
+                    .unwrap()
+            )
+            .is_ok()
+        );
+        assert!(Args::try_parse_from(["rigcoder", "--approve", "maybe"]).is_err());
+    }
+
+    #[test]
+    fn approval_input_binds_lines_to_ids_and_reports_eof() {
+        let (requests, receive_requests) = std::sync::mpsc::channel();
+        let (replies, receive_replies) = std::sync::mpsc::channel();
+        for id in ["first", "second", "third"] {
+            requests.send(id.to_owned()).unwrap();
+        }
+        drop(requests);
+        read_approval_lines(
+            std::io::Cursor::new("yes\nnot yes\n"),
+            receive_requests,
+            replies,
+        );
+        assert_eq!(
+            receive_replies.into_iter().collect::<Vec<_>>(),
+            vec![
+                ("first".to_owned(), Some(true)),
+                ("second".to_owned(), Some(false)),
+                ("third".to_owned(), None)
+            ]
+        );
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("rigcoder-log-{name}-{}", std::process::id()));
