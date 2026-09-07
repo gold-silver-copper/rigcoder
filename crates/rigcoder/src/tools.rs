@@ -11,6 +11,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn kill(pid: i32, sig: i32) -> i32;
+}
+
 use bevy_ecs::prelude::*;
 use rig::{
     serve::adapters::ToolFn,
@@ -366,15 +374,16 @@ fn bash(root: Arc<PathBuf>) -> ToolFn<Callback> {
 
 /// Spawn, drain both pipes on threads, poll for exit, kill at the deadline.
 fn run_shell(root: &Path, command: &str, timeout: Duration) -> Result<String, String> {
-    let mut child = Command::new("bash")
-        .arg("-c")
+    let mut cmd = Command::new("bash");
+    cmd.arg("-c")
         .arg(command)
         .current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("cannot start bash: {e}"))?;
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    cmd.process_group(0);
+    let mut child = cmd.spawn().map_err(|e| format!("cannot start bash: {e}"))?;
     let stdout = child.stdout.take().map(drain);
     let stderr = child.stderr.take().map(drain);
     let started = Instant::now();
@@ -383,6 +392,13 @@ fn run_shell(root: &Path, command: &str, timeout: Duration) -> Result<String, St
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) if started.elapsed() >= timeout => {
+                #[cfg(unix)]
+                {
+                    let pgid = child.id() as i32;
+                    unsafe {
+                        kill(-pgid, 9);
+                    }
+                }
                 let _ = child.kill();
                 killed = true;
                 break child.wait().ok();
@@ -421,4 +437,21 @@ fn drain(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<String
         let _ = pipe.read_to_end(&mut buffer);
         String::from_utf8_lossy(&buffer).into_owned()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pipeline_timeout_kills_process_group() {
+        let start = Instant::now();
+        let result = run_shell(
+            Path::new("."),
+            "sleep 10 | cat",
+            Duration::from_secs(1),
+        ).unwrap();
+        assert!(start.elapsed() < Duration::from_secs(4));
+        assert!(result.contains("[killed after 1s timeout]"));
+    }
 }
