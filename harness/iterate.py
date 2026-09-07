@@ -81,7 +81,7 @@ def evaluate(args, gen: int) -> tuple[float, dict[str, float], Path]:
         cmd += ["-i", pattern]
     for pattern in args.exclude:
         cmd += ["-x", pattern]
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
         if os.environ.get(key):
             cmd += ["--ae", f"{key}={os.environ[key]}"]
     sh(cmd, dry=args.dry_run, env={"PYTHONPATH": str(ROOT)}, check=False)

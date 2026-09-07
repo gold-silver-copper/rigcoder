@@ -23,7 +23,7 @@ struct Args {
     /// Workspace directory (default: the current directory).
     #[arg(long, short = 'C')]
     cwd: Option<PathBuf>,
-    /// Provider: anthropic or openai.
+    /// Provider: anthropic, openai or gemini.
     #[arg(long, default_value = "anthropic", env = "RIGCODER_PROVIDER")]
     provider: String,
     /// Model name (provider default when absent).

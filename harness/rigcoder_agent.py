@@ -91,7 +91,7 @@ class RigcoderAgent(BaseInstalledAgent):
         }
         if model:
             env["RIGCODER_MODEL"] = model
-        for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"):
+        for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"):
             value = self._extra_env.get(key) or os.environ.get(key)
             if value:
                 env[key] = value
