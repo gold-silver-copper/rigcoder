@@ -107,7 +107,7 @@ impl Plugin for SteerPlugin {
             .add_systems(
                 RigSchedule,
                 (
-                    (compile, gate_bash, resolve_holds).chain().in_set(BusSet::Gate),
+                    (compile, gate_scope, gate_bash, resolve_holds).chain().in_set(BusSet::Gate),
                     shape_results.in_set(BusSet::Judge),
                     demand_deliverables.in_set(RigSet::Judge),
                 ),
@@ -245,5 +245,118 @@ fn demand_deliverables(
                 missing.join(", ")
             )),
         });
+    }
+}
+
+/// Where the agent may write. Empty `allow` means anywhere not denied. A
+/// `write_file`, `edit_file` or `bash` call naming a path outside `allow`
+/// or inside `deny` is denied with a reason the model reads, before
+/// dispatch: the improvement loop's lane is enforced here, not by a
+/// `git checkout` afterwards.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct Scope {
+    pub root: PathBuf,
+    pub allow: Vec<PathBuf>,
+    pub deny: Vec<PathBuf>,
+}
+
+impl Scope {
+    fn normalise(&self, path: &str) -> PathBuf {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() { p.to_path_buf() } else { self.root.join(p) }
+    }
+
+    fn under(path: &std::path::Path, prefix: &std::path::Path) -> bool {
+        path.starts_with(prefix)
+    }
+
+    /// The first path that breaks the scope, with the rule it broke.
+    pub fn violation<'a>(&self, paths: impl Iterator<Item = &'a str>) -> Option<(String, String)> {
+        if self.allow.is_empty() && self.deny.is_empty() {
+            return None;
+        }
+        for raw in paths {
+            let path = self.normalise(raw);
+            if let Some(denied) = self.deny.iter().find(|d| Self::under(&path, d)) {
+                return Some((raw.to_owned(), format!("under the denied path {}", denied.display())));
+            }
+            if !self.allow.is_empty() && !self.allow.iter().any(|a| Self::under(&path, a) || Self::under(a, &path)) {
+                return Some((raw.to_owned(), "outside the allowed paths".to_owned()));
+            }
+        }
+        None
+    }
+
+    /// Paths a bash command might write: every token that looks like a
+    /// path, conservatively (anything with a `/` or a file extension that
+    /// is not a flag), plus redirection targets.
+    pub fn bash_paths(command: &str) -> Vec<String> {
+        command
+            .split(|c: char| c.is_whitespace() || c == ';' || c == '|' || c == '&' || c == '(' || c == ')' || c == '\'' || c == '"' || c == '`')
+            .map(|t| t.trim_start_matches(['>', '<']))
+            .filter(|t| !t.is_empty() && !t.starts_with('-') && !t.starts_with('$') && (t.contains('/') || (t.contains('.') && !t.ends_with('.'))))
+            .filter(|t| !t.starts_with("http://") && !t.starts_with("https://") && !t.contains("://"))
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+/// Deny a file write or a bash command whose paths break the scope.
+pub fn gate_scope(
+    fresh: Query<(Entity, &PendingEffect, &ToolCallSlot), (Without<Issued>, Without<EffectOutcome>, Without<Held>)>,
+    scope: Option<Res<Scope>>,
+    mut transcript: ResMut<Transcript>,
+    mut commands: Commands,
+) {
+    let Some(scope) = scope else { return };
+    for (entity, effect, slot) in &fresh {
+        let EffectKind::ToolCall { args, .. } = &effect.kind else { continue };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(args) else { continue };
+        let paths: Vec<String> = match slot.name.as_str() {
+            "write_file" | "edit_file" => value["path"].as_str().map(|p| vec![p.to_owned()]).unwrap_or_default(),
+            "bash" => value["command"].as_str().map(Scope::bash_paths).unwrap_or_default(),
+            _ => continue,
+        };
+        if let Some((path, why)) = scope.violation(paths.iter().map(String::as_str)) {
+            let reason = format!("{path} is {why}; this run may only change: {}", scope.allow.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "));
+            commands
+                .entity(entity)
+                .insert(EffectOutcome(Err(ErrorReport::new(ErrorKind::Denied, format!("denied: {reason}")))));
+            transcript.push(Event::Denied { name: slot.name.clone(), reason });
+        }
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    fn scope() -> Scope {
+        Scope {
+            root: PathBuf::from("/repo"),
+            allow: vec![PathBuf::from("/repo/crates/rigcoder/src/prompt.md"), PathBuf::from("/repo/crates/rigcoder/src/tools/")],
+            deny: vec![PathBuf::from("/repo/harness/"), PathBuf::from("/repo/Cargo.toml")],
+        }
+    }
+
+    #[test]
+    fn allowed_denied_and_outside() {
+        let s = scope();
+        assert!(s.violation(["crates/rigcoder/src/prompt.md"].into_iter()).is_none());
+        assert!(s.violation(["crates/rigcoder/src/tools/bash.rs"].into_iter()).is_none());
+        assert_eq!(s.violation(["harness/iterate.rs"].into_iter()).unwrap().1, "under the denied path /repo/harness/");
+        assert_eq!(s.violation(["crates/rigcoder/src/lib.rs"].into_iter()).unwrap().1, "outside the allowed paths");
+        assert!(s.violation(["/repo/Cargo.toml"].into_iter()).is_some());
+    }
+
+    #[test]
+    fn bash_paths_are_found_conservatively() {
+        let paths = Scope::bash_paths("cargo check --workspace && echo x > harness/ledger.jsonl; sed -i s/a/b/ crates/rigcoder/src/prompt.md");
+        assert!(paths.contains(&"harness/ledger.jsonl".to_owned()), "{paths:?}");
+        assert!(paths.contains(&"crates/rigcoder/src/prompt.md".to_owned()), "{paths:?}");
+        assert!(!paths.iter().any(|p| p.starts_with("--")), "{paths:?}");
+        let s = scope();
+        assert!(s.violation(paths.iter().map(String::as_str)).is_some());
+        assert!(s.violation(Scope::bash_paths("cargo check --workspace").iter().map(String::as_str)).is_none());
     }
 }

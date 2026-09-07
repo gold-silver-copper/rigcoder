@@ -71,6 +71,10 @@ fn call(name: &str, args: serde_json::Value) -> AssistantContent {
 /// Run `prompt` against a scripted model with the given steering rules;
 /// returns the transcript and every request the model saw.
 fn run_scripted(workspace: &std::path::Path, steer: Steer, script: Vec<Vec<AssistantContent>>, prompt: &'static str) -> (Vec<Event>, Vec<Vec<MessageParts>>) {
+    run_scripted_with(workspace, steer, None, script, prompt)
+}
+
+fn run_scripted_with(workspace: &std::path::Path, steer: Steer, scope: Option<rigcoder::steer::Scope>, script: Vec<Vec<AssistantContent>>, prompt: &'static str) -> (Vec<Event>, Vec<Vec<MessageParts>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let captured: Arc<Mutex<Vec<Event>>> = Arc::new(Mutex::new(Vec::new()));
     let model = Scripted { turns: Mutex::new(script.into()), seen: seen.clone() };
@@ -80,7 +84,11 @@ fn run_scripted(workspace: &std::path::Path, steer: Steer, script: Vec<Vec<Assis
         RigcoderPlugin::live(workspace.to_path_buf(), ModelChoice::parse("gemini", None).unwrap(), 8),
     ))
     .insert_resource(steer)
-    .insert_resource(ScriptedModel(Mutex::new(Some(model))))
+    .insert_resource(ScriptedModel(Mutex::new(Some(model))));
+    if let Some(scope) = scope {
+        app.insert_resource(scope);
+    }
+    app
     .add_systems(PreStartup, register_scripted)
     .add_systems(PostStartup, move |world: &mut World| {
         rigcoder::submit(world, prompt);
@@ -153,4 +161,35 @@ fn a_text_only_answer_with_a_deliverable_missing_is_retried_then_accepted() {
     let second = format!("{:?}", seen[1]);
     assert!(second.contains("Not finished") && second.contains("report.jsonl"), "{second}");
     assert_eq!(seen.len(), 3);
+}
+
+#[test]
+fn a_write_outside_the_scope_is_denied_before_it_happens_and_inside_goes_through() {
+    let dir = scratch("scope");
+    std::fs::create_dir_all(dir.join("harness")).unwrap();
+    std::fs::create_dir_all(dir.join("crates/rigcoder/src")).unwrap();
+    std::fs::write(dir.join("harness/iterate.rs"), "untouched\n").unwrap();
+    let mut app_scope = rigcoder::steer::Scope::default();
+    app_scope.root = dir.clone();
+    app_scope.allow = vec![dir.join("crates/rigcoder/src/prompt.md")];
+    app_scope.deny = vec![dir.join("harness/")];
+    let (events, _) = run_scripted_with(
+        &dir,
+        Steer::default(),
+        Some(app_scope),
+        vec![
+            vec![
+                call("write_file", serde_json::json!({"path": "harness/iterate.rs", "content": "hacked\n"})),
+                call("bash", serde_json::json!({"command": "echo x >> harness/ledger.jsonl"})),
+                call("write_file", serde_json::json!({"path": "crates/rigcoder/src/prompt.md", "content": "be careful\n"})),
+            ],
+            vec![AssistantContent::text("done")],
+        ],
+        "improve yourself",
+    );
+    let denied: Vec<&Event> = events.iter().filter(|e| matches!(e, Event::Denied { .. })).collect();
+    assert_eq!(denied.len(), 2, "{events:?}");
+    assert_eq!(std::fs::read_to_string(dir.join("harness/iterate.rs")).unwrap(), "untouched\n");
+    assert!(!dir.join("harness/ledger.jsonl").exists());
+    assert_eq!(std::fs::read_to_string(dir.join("crates/rigcoder/src/prompt.md")).unwrap(), "be careful\n");
 }

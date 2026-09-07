@@ -68,6 +68,12 @@ struct Args {
     /// Resume a saved scene in a fresh world (the workspace must already be as it was).
     #[arg(long)]
     resume: Option<PathBuf>,
+    /// A path (file or directory) the agent may write; anything else is denied before dispatch (repeatable).
+    #[arg(long = "allow")]
+    allow: Vec<PathBuf>,
+    /// A path the agent may never write, even inside an allowed one (repeatable).
+    #[arg(long = "deny-path")]
+    deny_paths: Vec<PathBuf>,
 }
 
 #[derive(Resource)]
@@ -174,6 +180,8 @@ fn main() -> anyhow::Result<()> {
     steer.deny.extend(args.deny.iter().map(|p| (p.clone(), "denied by a --deny rule".to_owned())));
     steer.hold.extend(args.hold.iter().cloned());
     steer.auto_approve = true;
+    let absolute = |p: &PathBuf| if p.is_absolute() { p.clone() } else { workspace.join(p) };
+    let scope = rigcoder::steer::Scope { root: workspace.clone(), allow: args.allow.iter().map(absolute).collect(), deny: args.deny_paths.iter().map(absolute).collect() };
     eprintln!("rigcoder: {model} in {}", workspace.display());
 
     let effect_log_path = args.effect_log.clone();
@@ -198,6 +206,7 @@ fn main() -> anyhow::Result<()> {
         .insert_resource(checkpoint)
         .insert_resource(Resume(resume_scene))
         .insert_resource(steer)
+        .insert_resource(scope)
         .insert_resource(Cli {
             task,
             printed: 0,

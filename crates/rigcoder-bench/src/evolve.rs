@@ -186,6 +186,9 @@ pub struct IterateArgs {
     /// Force one lane for every generation instead of choosing from the digest.
     #[arg(long, value_enum)]
     pub lane: Option<Lane>,
+    /// Open a pull request on the rigcoder repository for every kept generation.
+    #[arg(long)]
+    pub pr: bool,
 }
 
 pub fn provider_key(provider: &str) -> Option<&'static str> {
@@ -345,6 +348,7 @@ fn entry(root: &Path, generation: Option<usize>, slice: &str, decision: Option<D
         model: args.model.clone(),
         attempts: args.attempts,
         lane: None,
+        meta_commit: None,
         job_dir: job_dir.display().to_string(),
         time: now(),
         summary,
@@ -362,23 +366,27 @@ fn improve(root: &Path, args: &IterateArgs, report_path: &Path, lane: Lane, gene
         .replace("{mutable}", &lane.files().join(", "))
         .replace("{forbidden}", &META_FORBIDDEN.join(", "))
         .replace("{note}", &note.display().to_string());
-    let host_bin = std::env::var("RIGCODER_HOST_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| root.join("target").join("release").join("rigcoder"));
-    if !host_bin.is_file() {
-        println!("$ cargo build --release -p rigcoder-cli");
-        let status = Command::new("cargo").args(["build", "--release", "-p", "rigcoder-cli"]).current_dir(root).status()?;
-        if !status.success() {
-            bail!("building the host rigcoder failed");
-        }
-    }
-    println!("$ {} --cwd {} (meta task, {} chars)", host_bin.display(), root.display(), task.len());
+    let host_bin = host_binary(root)?;
+    println!("$ {} --cwd {} (meta task, {} chars, lane {})", host_bin.display(), root.display(), task.len(), lane.name());
     let mut cmd = Command::new(&host_bin);
     cmd.arg("--cwd")
         .arg(root)
         .args(["--max-turns", "80", "--timeout-secs", "1800", "--transcript"])
         .arg(report_path.with_file_name("improve-transcript.jsonl"))
-        .arg(&task)
+        .arg("--effect-log")
+        .arg(report_path.with_file_name("improve-effects.json"))
+        .arg("--checkpoint")
+        .arg(report_path.with_file_name("improve-scenes"));
+    // The lane is enforced at dispatch: writes outside it are denied before
+    // they happen. The revert below is the second line, and logs when it fires.
+    for file in lane.files() {
+        cmd.arg("--allow").arg(file);
+    }
+    cmd.arg("--allow").arg(&note);
+    for denied in ["harness/", "Cargo.toml", "Cargo.lock", "crates/rigcoder-bench/", ".github/"] {
+        cmd.arg("--deny-path").arg(denied);
+    }
+    cmd.arg(&task)
         .env("RIGCODER_PROVIDER", &args.meta_provider)
         .current_dir(root);
     if let Some(model) = &args.meta_model {
@@ -390,7 +398,7 @@ fn improve(root: &Path, args: &IterateArgs, report_path: &Path, lane: Lane, gene
     let changed = git(root, &["diff", "--name-only"])?;
     let outside: Vec<&str> = changed.lines().filter(|f| !covered(lane.files(), f)).collect();
     if !outside.is_empty() {
-        println!("meta agent touched non-mutable files, reverting: {outside:?}");
+        println!("SCOPE GATE MISSED: meta agent touched files outside its lane, reverting: {outside:?}");
         let mut argv = vec!["checkout", "--"];
         argv.extend(outside);
         git(root, &argv)?;
@@ -434,6 +442,8 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
     let slice = slice_name(run_args);
     let mut previous_lane: Option<Lane> = ledger::read(root)?.iter().rev().find_map(|e| e.lane);
     let mut lane_this_generation: Option<Lane> = None;
+    // The commit the meta agent ran as when it produced this generation.
+    let mut meta_commit: Option<String> = None;
 
     for generation in 0..args.generations {
         if !run_args.no_build {
@@ -442,8 +452,10 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         let (records, job_dir) = evaluate(root, run_args, &format!("generation-{generation:03}"), &tasks)?;
         let summary = stats::summarize(&records);
         let decision = stats::keep_decision(summary.score, summary.ci_low, best.0, best.1);
+        let best_before = best;
         let mut e = entry(root, Some(generation), &slice, Some(decision), best, run_args, &job_dir, summary.clone())?;
         e.lane = lane_this_generation;
+        e.meta_commit = meta_commit.clone();
         match decision {
             Decision::Kept | Decision::Tie => {
                 best = (summary.score, summary.ci_low);
@@ -456,6 +468,12 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
                     let message = format!("evolve: generation {generation} scored {:.3} [{:.3}, {:.3}] ({decision:?})", summary.score, summary.ci_low, summary.ci_high);
                     git(root, &["commit", "-q", "-m", &message])?;
                     e.commit = git(root, &["rev-parse", "--short", "HEAD"])?;
+                    // The improver runs as the improved agent from here on.
+                    rebuild_host(root)?;
+                    if args.pr {
+                        let note = lane_this_generation.map(|l| root.join("harness").join("notes").join(format!("gen-{generation:03}-{}.md", l.name())));
+                        open_pr(root, generation, lane_this_generation, &summary, best_before, note.as_deref())?;
+                    }
                 }
             }
             Decision::Reverted => {
@@ -472,6 +490,7 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         let digest = crate::digest::job(&job_dir).ok();
         let lane = args.lane.unwrap_or_else(|| Lane::choose(digest.as_ref(), previous_lane));
         println!("generation {}: lane {}", generation + 1, lane.name());
+        meta_commit = Some(git(root, &["rev-parse", "--short", "HEAD"])?);
         improve(root, &args, &report_path, lane, generation + 1)?;
         previous_lane = Some(lane);
         lane_this_generation = Some(lane);
@@ -580,5 +599,63 @@ pub fn branch_from(root: &Path, trial_dir: &Path, turn: usize, times: usize, arg
     std::fs::create_dir_all(&out_dir)?;
     let passed = trial::branch_from(&task, trial_dir, turn, times, &binary, provider, model, key_name.zip(key_value.as_deref()), args.max_turns, &out_dir)?;
     println!("branch from turn {turn}: {passed}/{times} passed; runs under {}", out_dir.display());
+    Ok(())
+}
+
+/// The host `rigcoder` the improve step runs as: `RIGCODER_HOST_BIN`, or
+/// `target/release/rigcoder`, built when missing.
+fn host_binary(root: &Path) -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("RIGCODER_HOST_BIN") {
+        return Ok(PathBuf::from(path));
+    }
+    let host_bin = root.join("target").join("release").join("rigcoder");
+    if !host_bin.is_file() {
+        rebuild_host(root)?;
+    }
+    Ok(host_bin)
+}
+
+/// Rebuild the host binary so the next improve step runs as the improved
+/// agent: improvements compound into the improver.
+fn rebuild_host(root: &Path) -> Result<()> {
+    if std::env::var("RIGCODER_HOST_BIN").is_ok() {
+        return Ok(());
+    }
+    println!("$ cargo build --release -p rigcoder-cli");
+    let status = Command::new("cargo").args(["build", "--release", "-p", "rigcoder-cli"]).current_dir(root).status()?;
+    if !status.success() {
+        bail!("building the host rigcoder failed");
+    }
+    Ok(())
+}
+
+/// A pull request for a kept generation: the note as the body, the ledger
+/// delta in the title.
+fn open_pr(root: &Path, generation: usize, lane: Option<Lane>, summary: &Summary, best_before: (f64, f64), note: Option<&Path>) -> Result<()> {
+    let branch = git(root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let _ = git(root, &["push", "-q", "-u", "origin", &branch]);
+    let title = format!(
+        "evolve: gen {generation:03} {} {:.3} [{:.3}] (was {:.3} [{:.3}])",
+        lane.map_or("baseline", Lane::name),
+        summary.score,
+        summary.ci_low,
+        best_before.0.max(0.0),
+        best_before.1.max(0.0)
+    );
+    let mut body = format!(
+        "Generation {generation}: score {:.3} (95% CI {:.3}–{:.3}), pass@1 {:.3}, pass@k {:.3}, {} trials of {} tasks; before: {:.3} [{:.3}].\n\n",
+        summary.score, summary.ci_low, summary.ci_high, summary.pass1, summary.passk, summary.trials, summary.tasks, best_before.0.max(0.0), best_before.1.max(0.0)
+    );
+    if let Some(text) = note.and_then(|n| std::fs::read_to_string(n).ok()) {
+        body.push_str("## The agent's note\n\n");
+        body.push_str(&text);
+    }
+    let status = Command::new("gh")
+        .args(["pr", "create", "--base", "main", "--head", &branch, "--title", &title, "--body", &body])
+        .current_dir(root)
+        .status()?;
+    if !status.success() {
+        println!("gh pr create failed (is the branch pushed and gh authenticated?)");
+    }
     Ok(())
 }

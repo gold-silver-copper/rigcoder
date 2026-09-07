@@ -22,6 +22,9 @@ pub struct Entry {
     /// The lane whose self-edit this generation measured (None for a baseline or holdout).
     #[serde(default)]
     pub lane: Option<crate::evolve::Lane>,
+    /// The commit the meta agent ran as when it produced this generation's edit.
+    #[serde(default)]
+    pub meta_commit: Option<String>,
     pub job_dir: String,
     pub time: u64,
     #[serde(flatten)]

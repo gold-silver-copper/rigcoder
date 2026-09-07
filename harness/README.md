@@ -82,12 +82,23 @@ pins record → replay → diverge and checkpoint → resume.
 ## The improve step
 
 Runs the host `rigcoder` (`target/release/rigcoder`) on this repository with
-a meta-task and `report.md` from the failed trials. It may only edit the
-files in `MUTABLE` (the prompt, the tools, the agent settings, the
-transcript shaping, the CLI); anything else it touches is reverted, and a
-change that does not `cargo check` is reverted. Kept generations are
-commits on the `evolve` branch with the note in `improvement.md` beside the
-job.
+a meta-task, `report.md` from the failed trials, and one lane (prompt,
+tools, settings, shaping or systems) chosen from the digest or forced with
+`--lane`. The lane is enforced at dispatch: the agent runs with `--allow`
+for the lane's files and `--deny-path` for `harness/`, the Cargo manifests,
+the bench crate and `.github/`, so a write or a bash command naming any
+other path is denied before it happens, with the reason as the tool result.
+The `git checkout` of anything outside the lane afterwards is a second line
+and logs `SCOPE GATE MISSED` when it fires. A change that does not
+`cargo check` is reverted. The improve step records its own effect log and
+checkpoints beside the job, so a bad self-edit can be replayed and inspected
+like a benchmark trial.
+
+Kept generations are commits on the `evolve` branch with the note in
+`harness/notes/gen-NNN-<lane>.md`; after each kept generation the host
+binary is rebuilt, so the next improve step runs as the improved agent, and
+the ledger records `meta_commit`, the commit the improver ran as.
+`--pr` opens a pull request per kept generation with the note as its body.
 
 ## Running on macOS with colima
 
