@@ -55,14 +55,14 @@ harbor run -d terminal-bench@2.0 -a harness.rigcoder_agent:RigcoderAgent \
 
 ## Baseline (2026-09-06)
 
-`gemini/gemini-3.1-pro-preview`, four tasks, one attempt each:
+Four tasks, one attempt each, reward and tool calls / wall time:
 
-| task | reward | tool calls | time |
-|---|---|---|---|
-| fix-git | 1.0 | 14 | 49 s |
-| openssl-selfsigned-cert | 1.0 | 22 | 93 s |
-| sqlite-db-truncate | 1.0 | 17 | 110 s |
-| regex-log | 1.0 | 22 | 213 s |
+| task | gemini-3.1-pro-preview | gemini-3.8-flash (default) |
+|---|---|---|
+| fix-git | 1.0, 14 calls, 49 s | 1.0, 24 calls, 26 s |
+| openssl-selfsigned-cert | 1.0, 22 calls, 93 s | 1.0, 50 calls, 137 s |
+| sqlite-db-truncate | 1.0, 17 calls, 110 s | 1.0, 19 calls, 43 s |
+| regex-log | 1.0, 22 calls, 213 s | 1.0, 55 calls, 218 s |
 
 regex-log first scored 0: its bare `ubuntu:24.04` image has no CA store and
 rig's default transport panicked instead of returning an error. The adapter
