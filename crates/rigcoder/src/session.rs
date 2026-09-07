@@ -10,7 +10,7 @@ use rig::{
     message::{AssistantContent, UserContent},
 };
 use rig_ecs::{
-    agent::{MessageParts, Order, Parts, RunResult, ToolCallSlot, Utterance},
+    agent::{MessageParts, Order, Parts, RunResult, ToolCallSlot, Usage, Utterance},
     bus::PendingEffect,
     prelude::*,
     systems::spawn_run,
@@ -49,6 +49,14 @@ pub enum Event {
     ToolResult { name: String, output: String, ok: bool },
     Settled { answer: String },
     Failed(String),
+    /// The run's token usage, summed over its completions; written once
+    /// when the run ends, before `Settled` or `Failed`.
+    Usage {
+        input_tokens: u64,
+        output_tokens: u64,
+        cached_input_tokens: u64,
+        total_tokens: u64,
+    },
 }
 
 #[derive(Resource, Debug, Default)]
@@ -157,6 +165,7 @@ pub fn stream_text(
 pub fn on_settled(
     settled: On<Add, Settled>,
     results: Query<&RunResult>,
+    usage: Query<&Usage>,
     utterances: Query<(&ChildOf, &Order, &Parts), With<Utterance>>,
     mut conversation: ResMut<Conversation>,
     mut transcript: ResMut<Transcript>,
@@ -167,6 +176,7 @@ pub fn on_settled(
     }
     let answer = results.get(run).map(|r| r.0.clone()).unwrap_or_default();
     finish(run, &utterances, &mut conversation);
+    record_usage(run, &usage, &mut transcript);
     // A non-streamed answer was never shown; a streamed one already was.
     if !matches!(transcript.events.last(), Some(Event::Assistant { .. })) && !answer.is_empty() {
         transcript.append_text(&answer);
@@ -177,6 +187,7 @@ pub fn on_settled(
 pub fn on_failed(
     failed: On<Add, Failed>,
     failures: Query<&Failed>,
+    usage: Query<&Usage>,
     utterances: Query<(&ChildOf, &Order, &Parts), With<Utterance>>,
     mut conversation: ResMut<Conversation>,
     mut transcript: ResMut<Transcript>,
@@ -186,11 +197,23 @@ pub fn on_failed(
         return;
     }
     finish(run, &utterances, &mut conversation);
+    record_usage(run, &usage, &mut transcript);
     let reason = failures
         .get(run)
         .map(|Failed(failure)| format!("{failure:?}"))
         .unwrap_or_else(|_| "unknown".to_owned());
     transcript.push(Event::Failed(reason));
+}
+
+fn record_usage(run: Entity, usage: &Query<&Usage>, transcript: &mut Transcript) {
+    if let Ok(Usage(wire)) = usage.get(run) {
+        transcript.push(Event::Usage {
+            input_tokens: wire.input_tokens,
+            output_tokens: wire.output_tokens,
+            cached_input_tokens: wire.cached_input_tokens,
+            total_tokens: wire.total_tokens,
+        });
+    }
 }
 
 /// The run's utterances, in order, become the history; the run is over.

@@ -158,6 +158,17 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
                 let _ = writeln!(stdout, "[failed] {reason}");
                 exit.write(AppExit::error());
             }
+            Event::Usage {
+                input_tokens,
+                output_tokens,
+                cached_input_tokens,
+                ..
+            } => {
+                let _ = writeln!(
+                    stdout,
+                    "[usage] in={input_tokens} out={output_tokens} cached={cached_input_tokens}"
+                );
+            }
         }
     }
     let _ = stdout.flush();

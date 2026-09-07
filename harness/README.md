@@ -12,12 +12,25 @@ and lets rigcoder edit itself between generations.
 - `build-linux.sh`: cross-builds that binary in a `rust:1.95` Docker container
   (cargo caches in named volumes), into `harness/bin/`.
 - `iterate.py`: the loop. Build, evaluate, keep-or-revert, improve, repeat.
-  The improve step runs the host `rigcoder` on this repository with a
+  Evaluation runs `-k` attempts per task (default 3) on the dev slice and
+  reports the mean reward, pass@1, pass@k and a 95% Wilson interval on the
+  per-trial pass rate. A generation is kept when its lower bound is at least
+  the best kept lower bound and its mean has not dropped; a tie keeps and is
+  recorded as one; anything else is reverted. At the end of a run the best
+  kept generation is scored on the holdout slice, which the meta agent never
+  sees. The improve step runs the host `rigcoder` on this repository with a
   meta-task and a report of the failed trials; it may only edit the files in
   `MUTABLE` (the prompt, the tools, the agent settings, the transcript shaping,
   the CLI), and a change that does not `cargo check` is reverted.
   Kept generations are commits on the `evolve` branch; `ledger.jsonl` records
-  every generation's score and rewards.
+  every generation: scores, interval, decision, per-task attempts, and per-trial
+  cost (tokens from the agent's `usage` transcript event, tool calls, wall time).
+- `slices/dev.txt` and `slices/holdout.txt`: the task sets. Dev is what the
+  loop optimizes on (20 tasks); holdout (10 tasks, disjoint) is the check
+  that it learned something general. `--slice holdout --no-improve` scores
+  holdout alone. Keep them disjoint and never let the meta agent read holdout.
+- `tests/`: unit tests for the keep rule and the summary metrics
+  (`python3 -m pytest harness/tests`).
 
 ## First run
 
@@ -25,14 +38,14 @@ and lets rigcoder edit itself between generations.
 uv tool install harbor
 export ANTHROPIC_API_KEY=...
 ./harness/build-linux.sh
-# baseline, no self-edit:
-python3 harness/iterate.py --generations 1 --no-improve -i 'hello-*' -n 2
+# baseline on the dev slice, 3 attempts per task, then holdout, no self-edit:
+python3 harness/iterate.py --generations 1 --no-improve -k 3
 # then let it iterate:
-python3 harness/iterate.py --generations 5 -i 'hello-*' -i 'fix-*' -n 4
+python3 harness/iterate.py --generations 5 -k 3
 ```
 
-`-i` globs select tasks from `terminal-bench@2.0`; run the full set by
-omitting them. Results land in `harness/runs/<job>/`, with `report.md` and
+`--slice` picks a task set from `harness/slices/`; `-i` names explicit tasks
+instead. Results land in `harness/runs/<job>/`, with `report.md` and
 `improvement.md` per generation.
 
 ## Running on macOS with colima

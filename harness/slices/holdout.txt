@@ -1,0 +1,13 @@
+# Holdout slice: never shown to the meta agent (iterate.py denies it and
+# excludes these trials from every report). Same criteria as dev.txt,
+# disjoint from it.
+protein-assembly              # hard 1800
+feal-linear-cryptanalysis     # hard 1800
+llm-inference-batching-scheduler # hard 1800
+path-tracing-reverse          # hard 1800
+build-cython-ext              # medium 900
+gcode-to-text                 # medium 900
+merge-diff-arc-agi-task       # medium 900
+multi-source-data-merger      # medium 900
+large-scale-text-editing      # medium 1200
+dna-insert                    # medium 1800

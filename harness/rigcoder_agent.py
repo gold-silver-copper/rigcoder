@@ -122,6 +122,11 @@ class RigcoderAgent(BaseInstalledAgent):
         events = [json.loads(line) for line in transcript.read_text().splitlines() if line.strip()]
         tool_calls = sum(1 for e in events if e.get("kind") == "tool_call")
         failed = [e for e in events if e.get("kind") == "failed"]
+        usage = [e for e in events if e.get("kind") == "usage"]
+        if usage:
+            context.n_input_tokens = sum(e.get("input_tokens", 0) for e in usage)
+            context.n_output_tokens = sum(e.get("output_tokens", 0) for e in usage)
+            context.n_cache_tokens = sum(e.get("cached_input_tokens", 0) for e in usage)
         context.metadata = {
             "events": len(events),
             "tool_calls": tool_calls,

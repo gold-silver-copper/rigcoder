@@ -277,6 +277,9 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
                 lines.push(Line::from(Span::styled(format!("run failed: {reason}"), Style::new().fg(Color::Red).bold())));
                 lines.push(Line::default());
             }
+            Event::Usage { input_tokens, output_tokens, .. } => {
+                lines.push(Line::from(Span::styled(format!("tokens: {input_tokens} in, {output_tokens} out"), Style::new().dim())));
+            }
         }
     }
     Text::from(lines)

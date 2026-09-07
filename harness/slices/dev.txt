@@ -1,0 +1,24 @@
+# Dev slice: the meta agent may see these trials. One task per line; the
+# comment carries difficulty and the task's agent timeout in seconds.
+# Criteria: timeout <= 1800, multi-arch base image, no GPU / large model /
+# QEMU / Windows. The six tasks of the first evolve run are included.
+cancel-async-tasks            # hard 900
+fix-code-vulnerability        # hard 900
+password-recovery             # hard 900
+write-compressor              # hard 900
+git-leak-recovery             # medium 900
+db-wal-recovery               # medium 900
+configure-git-webserver       # hard 900
+polyglot-rust-c               # hard 900
+sparql-university             # hard 900
+feal-differential-cryptanalysis # hard 1800
+make-mips-interpreter         # hard 1800
+path-tracing                  # hard 1800
+chess-best-move               # medium 900
+crack-7z-hash                 # medium 900
+extract-elf                   # medium 900
+git-multibranch               # medium 900
+headless-terminal             # medium 900
+kv-store-grpc                 # medium 900
+constraints-scheduling        # medium 1200
+custom-memory-heap-crash      # medium 1800
