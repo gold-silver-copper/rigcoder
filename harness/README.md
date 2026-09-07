@@ -19,6 +19,18 @@ sits in between: a trial is six `docker` calls.
     let rigcoder edit itself, repeat; then score the best kept generation on
     the holdout slice.
   - `ledger`: the ledger as a table. `summarize <job>`: one job's metrics.
+  - `digest <job>`: the failure digest (what failed trials did more of than
+    passed ones), also written as `digest.json`.
+  - `replay <trial> [--prompt-file P]`: replay a recorded trial on this
+    machine through the host `rigcoder`: the model and the tools answer from
+    `agent/effects.json`, nothing is called and nothing is written. Exit 0
+    means the current prompt and tools reproduce the recorded requests; exit
+    3 prints the first request that differed and the turn. That is the cheap
+    check for "did this edit change the trajectory" before paying for a run.
+  - `branch-from <trial> <turn> [--times N]`: resume a trial recorded with
+    `run --checkpoint` from that turn in fresh containers (workspace restored
+    from the checkpoint tarball, scene loaded) and count verifier passes: the
+    fast inner loop for one failed trial.
 - `build-linux.sh`: cross-builds the Linux `rigcoder` in a `rust:1.95` Docker
   container into `harness/bin/` (gitignored).
 - `slices/dev.txt` (20 tasks) and `slices/holdout.txt` (10, disjoint): the
@@ -41,6 +53,31 @@ recorded as one; anything else reverts the mutable files. Unit tests in
 Every trial records tokens (from rigcoder's `usage` transcript event), tool
 calls, wall time and any harness-side error, in `result.json` and summed on
 the ledger line.
+
+## Steering systems
+
+rigcoder's tool calls are effect entities, so three small systems in
+`crates/rigcoder/src/steer.rs` do what hooks would: a `BusSet::Gate` system
+denies bash commands on a deny list (`find /`, recursive greps of `/`,
+`rm -rf /`) with a reason the model reads, or holds ones on a hold list for
+approval (automatic in the CLI, `y`/`n` in the TUI); a `BusSet::Judge` system
+cuts over-long tool results to head and tail for history while the record
+keeps the full answer; a `RigSet::Judge` system turns a text-only answer
+while a `--deliverable` file is missing into a retry naming the files. The
+rules live in the `Steer` resource (the settings lane); the systems are the
+systems lane. `crates/rigcoder/tests/steer.rs` pins them.
+
+## Recording, replay, checkpoints
+
+Every run records an effect log (`--effect-log`, always on in trials). A
+log replays through a fresh world with replayers bound for every recorded
+key; each run is stamped with its granted tools and a `PolicyVersion`, so a
+replay advertises the same tools in the same order. `--checkpoint DIR` saves
+the run graph as a scene after every turn, only in the pass where the
+turn's tool batch has landed (a scene saved with a batch out would re-issue
+the calls on load), and `--checkpoint-tar` snapshots the workspace beside
+it. `--resume SCENE` continues in a fresh world. `crates/rigcoder/tests/replay.rs`
+pins record → replay → diverge and checkpoint → resume.
 
 ## The improve step
 

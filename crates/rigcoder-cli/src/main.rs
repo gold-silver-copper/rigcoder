@@ -163,8 +163,10 @@ fn main() -> anyhow::Result<()> {
     let workspace = match args.cwd {
         Some(dir) => dir,
         None => std::env::current_dir()?,
-    }
-    .canonicalize()?;
+    };
+    // A replay never touches the directory: the path only has to be the
+    // string the recorded preamble carried (a container's /app, say).
+    let workspace = if args.replay.is_some() { workspace } else { workspace.canonicalize()? };
     let model = ModelChoice::parse(&args.provider, args.model)?;
     let transcript = args.transcript.map(std::fs::File::create).transpose()?;
     let mut steer = rigcoder::steer::Steer::default();

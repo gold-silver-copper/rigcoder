@@ -533,8 +533,16 @@ pub fn replay(root: &Path, trial_dir: &Path, prompt_file: Option<&Path>, host_bi
         bail!("no effect log at {}", log.display());
     }
     let host_bin = host_bin.map(Path::to_path_buf).unwrap_or_else(|| root.join("target").join("release").join("rigcoder"));
-    let scratch = std::env::temp_dir().join(format!("rigcoder-replay-{}", now()));
-    std::fs::create_dir_all(&scratch)?;
+    // The recorded preamble names the container's workdir; the replay must
+    // say the same string, and never touches it.
+    let workdir = trial_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.split("__").next())
+        .and_then(|task| Task::load(&root.join("harness").join("tasks"), task).ok())
+        .map(|t| t.workdir)
+        .unwrap_or_else(|| "/app".to_owned());
+    let scratch = PathBuf::from(&workdir);
     let mut cmd = Command::new(&host_bin);
     cmd.arg("--cwd").arg(&scratch).arg("--replay").arg(&log).arg("--provider").arg("gemini");
     if let Some(prompt) = prompt_file {
@@ -542,7 +550,6 @@ pub fn replay(root: &Path, trial_dir: &Path, prompt_file: Option<&Path>, host_bi
     }
     println!("$ {} --cwd {} --replay {}{}", host_bin.display(), scratch.display(), log.display(), prompt_file.map_or(String::new(), |p| format!(" --prompt-file {}", p.display())));
     let status = cmd.status()?;
-    let _ = std::fs::remove_dir_all(&scratch);
     match status.code() {
         Some(0) => {
             println!("no divergence: the recorded trajectory reproduces under the current prompt and tools");
