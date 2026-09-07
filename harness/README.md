@@ -35,9 +35,39 @@ python3 harness/iterate.py --generations 5 -i 'hello-*' -i 'fix-*' -n 4
 omitting them. Results land in `harness/runs/<job>/`, with `report.md` and
 `improvement.md` per generation.
 
-## Status
+## Running on macOS with colima
 
-Written against Harbor 0.22 (the API surveyed in `references/harbor`), not
-yet executed end to end on this machine: the loop's Harbor invocation,
-result parsing and revert logic need a first real run to confirm the trial
-directory layout. The CLI it drives is smoke-tested locally.
+Harbor's prebuilt task images are amd64-only; pass `--force-build` so the
+environments are built natively from their Dockerfiles and the arm64 binary
+matches. If the docker CLI config points at Docker Desktop's credential
+helper, give harbor and the build script an empty config plus the colima
+socket:
+
+```sh
+colima start pi --cpu 8 --memory 16
+mkdir -p /tmp/dockercfg && echo '{"cliPluginsExtraDirs":["/opt/homebrew/lib/docker/cli-plugins"]}' > /tmp/dockercfg/config.json
+export DOCKER_CONFIG=/tmp/dockercfg DOCKER_HOST=unix://$HOME/.colima/pi/docker.sock
+export PYTHONPATH=$PWD RIGCODER_TIMEOUT_SECS=800
+harbor run -d terminal-bench@2.0 -a harness.rigcoder_agent:RigcoderAgent \
+  -m gemini/gemini-3.1-pro-preview --ae GEMINI_API_KEY=$GEMINI_API_KEY \
+  -i fix-git -i regex-log -n 4 --force-build -o harness/runs
+```
+
+## Baseline (2026-09-06)
+
+`gemini/gemini-3.1-pro-preview`, four tasks, one attempt each:
+
+| task | reward | tool calls | time |
+|---|---|---|---|
+| fix-git | 1.0 | 14 | 49 s |
+| openssl-selfsigned-cert | 1.0 | 22 | 93 s |
+| sqlite-db-truncate | 1.0 | 17 | 110 s |
+| regex-log | 1.0 | 22 | 213 s |
+
+regex-log first scored 0: its bare `ubuntu:24.04` image has no CA store and
+rig's default transport panicked instead of returning an error. The adapter
+now installs `ca-certificates`, and the panic is fixed upstream in
+[rig PR #2471](https://github.com/0xPlaygrounds/rig/pull/2471).
+
+`iterate.py` (the self-edit loop) has not been run yet; the Harbor
+invocation and result parsing it wraps are the ones above.
