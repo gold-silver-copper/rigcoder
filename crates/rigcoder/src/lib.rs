@@ -127,6 +127,12 @@ impl Plugin for RigcoderPlugin {
                 ),
             )
             .add_systems(bevy_app::Update, session::resubmit_when_due)
+            .add_systems(
+                RigSchedule,
+                session::resubmit_when_due
+                    .after(checkpoint::save_between_turns)
+                    .before(RigSet::Settle),
+            )
             .add_observer(session::announce_tool_results)
             .add_observer(session::on_settled)
             .add_observer(session::on_failed);

@@ -154,13 +154,13 @@ pub fn covered(files: &[&str], path: &str) -> bool {
 
 const META_TASK: &str = "You are improving rigcoder, the coding agent in this repository, so it scores higher on Terminal-Bench.
 
-Read {report} first: it opens with a digest of what failed trials did more of than passed ones, then every failed trial in full (instruction, transcript, verifier output).
+Read {report} first for the failure digest and evidence (instructions, transcripts, verifier output). Oversized reports link report.full.md; read relevant ranges there when the excerpt omits needed evidence.
 
 This generation works in the {lane} lane: {levers}. You may only edit these files: {mutable}. Nothing else.
 
 Rules:
 - Make one coherent improvement aimed at the failure patterns the digest shows, not many unrelated tweaks.
-- Do not touch the harness/ directory, the rigcoder-bench crate, Cargo.toml files, or the model choice. Do not read {forbidden}.
+- Do not touch the harness/ directory except the requested note, the rigcoder-bench crate, Cargo.toml files, or the model choice. Do not read {forbidden}.
 - Use read_file, list_files and grep to inspect the repository, and write_file/edit_file for changes. Bash is disabled in this scoped improvement run. The trusted harness will run cargo check --workspace after validating the edit; finish with your note once the file changes are ready.
 - Finish with a short note: what you changed and which failures it targets. Write that note to {note}.
 ";

@@ -311,6 +311,7 @@ pub fn on_failed(
     utterances: Query<(&ChildOf, &Order, &Parts), With<Utterance>>,
     mut conversation: ResMut<Conversation>,
     mut transcript: ResMut<Transcript>,
+    setup: Res<crate::Setup>,
 ) {
     let run = failed.event().entity;
     if conversation.active != Some(run) {
@@ -336,7 +337,14 @@ pub fn on_failed(
             MessageParts::Assistant { content, .. } if content.iter().any(|part| matches!(part, AssistantContent::ToolCall(_)))))
     {
         conversation.provider_retries += 1;
-        let wait = std::time::Duration::from_secs(2u64.pow(conversation.provider_retries as u32));
+        // Replay delivery checks for missing requests at quiescence. The
+        // recorded causal continuation must occur in this schedule pass;
+        // wall-clock backoff is a live-provider concern.
+        let wait = if matches!(setup.mode, crate::Mode::Replay(_)) {
+            std::time::Duration::ZERO
+        } else {
+            std::time::Duration::from_secs(2u64.pow(conversation.provider_retries as u32))
+        };
         conversation.history = history;
         conversation.retry_at = Some(std::time::Instant::now() + wait);
         transcript.push(Event::Retrying { reason: reason.clone(), attempt: conversation.provider_retries, wait_secs: wait.as_secs() });
@@ -452,6 +460,8 @@ pub fn resubmit_when_due(world: &mut World) {
         world.resource_mut::<Transcript>().push(Event::Failed(
             "could not retry: no agent is registered".to_owned(),
         ));
+    } else {
+        world.resource_mut::<rig_ecs::bus::Progress>().mark();
     }
 }
 
@@ -567,10 +577,25 @@ mod retry_tests {
         let log = crate::effect_log(live.world());
         assert_eq!(log.records.len(), 2);
         assert_eq!(live.world().resource::<Conversation>().runs, 2);
-        let mut replay = app(&dir, crate::Mode::Replay(log.into()), None);
-        submit(replay.world_mut(), "finish").unwrap();
+        let mut replay = App::new();
+        replay
+            .add_plugins(crate::RigcoderPlugin {
+                workspace: dir,
+                model: crate::ModelChoice::parse("gemini", None).unwrap(),
+                max_turns: 8,
+                mode: crate::Mode::Replay(log.into()),
+                prompt_override: None,
+            })
+            .add_systems(bevy_app::PostStartup, |world: &mut World| {
+                submit(world, "finish").unwrap();
+            });
         drive(&mut replay);
-        assert_eq!(replay.world().resource::<Conversation>().runs, 2);
+        assert_eq!(
+            replay.world().resource::<Conversation>().runs,
+            2,
+            "{:?}",
+            replay.world().resource::<Transcript>().events
+        );
         assert!(
             replay
                 .world()
