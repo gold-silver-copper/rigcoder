@@ -91,6 +91,7 @@ struct Event {
 
 const DELIBERATION: &[&str] = &[
     "let me ", "i'll ", "i will ", "next, i", "next i", "should i", "i should ", "now i", "i need to ", "i'm going to ", "let's ", "first, i",
+    "wait", "what if", "hmm", "which one", "or should", "let's compare", "argument for",
 ];
 
 /// The facts of one transcript.
@@ -145,10 +146,7 @@ pub fn facts(transcript: &str) -> TrialFacts {
     }
     f.no_settle = last_kind != "settled";
     f.final_text_chars = final_text.chars().count() as u64;
-    let lower = final_text.to_lowercase();
-    let tail: String = lower.chars().rev().take(400).collect::<Vec<_>>().into_iter().rev().collect();
-    f.ended_deliberating = !final_text.is_empty()
-        && (tail.contains('?') || DELIBERATION.iter().any(|p| tail.contains(p)));
+    f.ended_deliberating = deliberating(&final_text);
     f
 }
 
@@ -354,5 +352,42 @@ mod tests {
         let text = render(&d);
         let first_row = text.lines().find(|l| l.starts_with("| ") && !l.starts_with("| fact")).unwrap();
         assert!(first_row.starts_with("| bash timeouts"), "{first_row}");
+    }
+}
+
+/// Does the final text read as thinking rather than a summary? Two or more
+/// questions, a deliberation phrase in its last 1500 characters, or a
+/// cut-off ending (no terminal punctuation on a text of any length).
+fn deliberating(text: &str) -> bool {
+    let trimmed = text.trim_end();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let questions = trimmed.matches('?').count();
+    let lower = trimmed.to_lowercase();
+    let tail: String = lower.chars().rev().take(1500).collect::<Vec<_>>().into_iter().rev().collect();
+    let cut_off = trimmed.chars().count() > 200
+        && !trimmed.ends_with(['.', '!', '`', '"', '*', ')', ']', '>']);
+    questions >= 2 || DELIBERATION.iter().any(|p| tail.contains(p)) || cut_off
+}
+
+#[cfg(test)]
+mod deliberation_tests {
+    use super::deliberating;
+
+    #[test]
+    fn the_real_gen1_ending_is_deliberation() {
+        // The tail of the fix-code-vulnerability final text from the first
+        // evolve run's generation 1: the model weighed cwe-93 against
+        // CWE-93 and stopped mid-sentence without writing the report.
+        let text = "_cwe) == 2 != 1`, which FAILS!\nSo having 2 elements is definitely risky if strict equality is used.\nWe should have exactly 1 element in `cwe_id`.\n\nNow, which 1 element: `\"cwe-93\"` or `\"CWE-93\"`?\nLet's compare:\nArgument for `\"cwe-93\"`:\n- The instruction says:\n  `- demonstration of format of vulnerable item: {\"file_path\": \"/app/example.cpp\", \"cwe_id\": [\"cwe-123\"]}`\n  It literally gives you the format of the vulnerable item!\n  Format: `\"cwe-123\"` -> lowercase!\n  If you give an instruction with an example of format, and an agent follows the demonstration and writes `{\"file_path\": \"/app/bottle.py\", \"cwe_id\": [\"cwe-93\"]}`,\n  that is 100";
+        assert!(deliberating(text));
+    }
+
+    #[test]
+    fn a_summary_is_not() {
+        assert!(!deliberating("Fixed the header validation in bottle.py and wrote /app/report.jsonl; all 367 tests pass."));
+        assert!(!deliberating("Done. The test suite passes (`pytest -q`: 12 passed)."));
+        assert!(!deliberating(""));
     }
 }
