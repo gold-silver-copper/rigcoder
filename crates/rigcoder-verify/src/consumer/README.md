@@ -1,5 +1,11 @@
 # ECS consumer recording and replay
 
+This harness is owned by rigcoder and was transferred from Rig's ECS consumer
+suite. It preserves the consumer's existing implementation, 42 cases, fixtures,
+tools, process launcher, approvals and checkpoint formats. It is independent
+of rigcoder's product agent/tools; integrating those implementations is outside
+the ownership transfer. Rig retains its runtime and provider conformance suites.
+
 The headless maintenance consumer inspects a disposable `greeting.txt`, proposes
 an edit, applies the host's approval decision, writes the file and validates
 it. The executable and `crates/rigcoder-verify/tests/consumer.rs` instantiate the same ECS systems.

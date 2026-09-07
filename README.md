@@ -15,7 +15,7 @@ Workspace crates:
 | `crates/rigcoder-cli` | `rigcoder`: headless, one task in, transcript out; what the benchmark harness runs inside task containers |
 | `crates/rigcoder-ui` | `rigcoder-ui`: a terminal UI, Bevy driving ratatui over crossterm via `bevy_ratatui` (Bevy 0.19 needs its `main` branch, pinned by commit) |
 | `crates/rigcoder-bench` | `rigcoder-bench`: the Terminal-Bench runner (Docker directly, no framework) and the self-improvement loop |
-| `crates/rigcoder-verify` | the migrated 42-case consumer verifier; integration with the product tools and stronger session contracts is in progress |
+| `crates/rigcoder-verify` | the transferred 42-case ECS consumer harness, preserving its own tools, repair workflow, replay and resume verification |
 
 Plus `harness/`: the task slices, the Linux build script and the ledger of the
 self-improvement loop (see `harness/README.md`).
@@ -83,14 +83,24 @@ permission bits and ownership. Read-only, hard-linked, set-ID, ACL-bearing and
 extended-attribute-bearing targets are refused, as are replacements that would
 change ownership or inherit unsupported metadata. Pending approvals are currently
 runtime state: durable approval checkpoints, a mutation ledger and exclusion of
-concurrent external writers remain part of the unfinished migration.
+concurrent external writers are not implemented in the product. They are outside
+the consumer ownership transfer; the transferred harness retains its own existing
+approval, persistence and process-isolation contracts.
 
 ## Dependency pin
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
-`rig-ecs`, `rig-effect-log` and `rig-cassette`) to extraction commit
-`36bb89956a790367be8eaa88958d055bcce67718` in
+`rig-ecs`, `rig-effect-log` and `rig-cassette`) to published migration commit
+`90a89f6dc9a8e3ee2a5558dcccd9b07635241675` in
 [Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474), stacked on #2443.
 To move the pin, update every Rig revision and `Cargo.lock`, then run the
 workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.
-The Rig PR remains open while this migration is integrated and verified.
+The ECS consumer is transferred unchanged into `rigcoder-verify`. Its ownership
+transfer does not require integration with the product agent or tools. Rig PR
+#2474 remains open and stacked on #2443 while the replacement merges here,
+followed by removal of the Rig-owned copy and a final dependency-pin update.
+
+Run the preserved offline matrix with
+`cargo run --locked -p rigcoder-verify -- verify`. See the
+[consumer guide](crates/rigcoder-verify/src/consumer/README.md) for case selection,
+recording, replay, resume and failure diagnostics.

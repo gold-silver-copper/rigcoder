@@ -10,11 +10,11 @@ repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
 # Keep all Rig dependencies on the extraction commit from Rig PR #2474.
-rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "36bb89956a790367be8eaa88958d055bcce67718", default-features = false }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "36bb89956a790367be8eaa88958d055bcce67718" }
-rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "36bb89956a790367be8eaa88958d055bcce67718", default-features = false }
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "36bb89956a790367be8eaa88958d055bcce67718", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "36bb89956a790367be8eaa88958d055bcce67718", default-features = false, features = ["reqwest", "rustls"] }
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "90a89f6dc9a8e3ee2a5558dcccd9b07635241675", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }
