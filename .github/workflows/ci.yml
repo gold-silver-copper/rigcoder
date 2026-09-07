@@ -1,0 +1,18 @@
+name: ci
+on:
+  push:
+    branches: [main, evolve]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace
+      - run: cargo build --release -p rigcoder-cli
+      - run: python3 -m py_compile harness/iterate.py harness/rigcoder_agent.py

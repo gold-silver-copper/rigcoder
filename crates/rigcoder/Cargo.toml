@@ -1,0 +1,25 @@
+[package]
+name = "rigcoder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A coding agent over rig-ecs: the run is a Bevy world, the tools are handler entities."
+
+[dependencies]
+rig-ecs = { workspace = true }
+rig = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_app = { workspace = true }
+bevy_tasks = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+ignore = { workspace = true }
+similar = { workspace = true }
+regex = "1"
+globset = "0.4"

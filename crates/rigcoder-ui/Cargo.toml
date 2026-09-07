@@ -1,0 +1,16 @@
+[package]
+name = "rigcoder-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The terminal UI for rigcoder: Bevy driving ratatui over crossterm."
+
+[dependencies]
+rigcoder = { path = "../rigcoder" }
+rig-ecs = { workspace = true }
+bevy = { workspace = true }
+bevy_ratatui = { workspace = true }
+ratatui = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "rigcoder-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Headless rigcoder: one task in, a transcript out. The binary the benchmark harness drives."
+
+[[bin]]
+name = "rigcoder"
+path = "src/main.rs"
+
+[dependencies]
+rigcoder = { path = "../rigcoder" }
+rig-ecs = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_app = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
