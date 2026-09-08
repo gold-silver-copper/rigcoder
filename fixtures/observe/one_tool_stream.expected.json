@@ -67,12 +67,20 @@
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "gate",
+      "stage": "host",
       "emitter": {
-        "name": "unknown"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
-        "action": "released"
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "b40a72199fd9b0772c746bfd87e3799ad735cceb7e5f9bac45625ccdf2160a9b",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
+        }
       }
     },
     {
@@ -95,7 +103,7 @@
           "operation": "b40a72199fd9b0772c746bfd87e3799ad735cceb7e5f9bac45625ccdf2160a9b",
           "tool": "bash",
           "mode": "auto",
-          "decision": "prepared"
+          "decision": "approved"
         }
       }
     },
@@ -107,20 +115,12 @@
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "host",
+      "stage": "gate",
       "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
+        "name": "unknown"
       },
       "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "b40a72199fd9b0772c746bfd87e3799ad735cceb7e5f9bac45625ccdf2160a9b",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "approved"
-        }
+        "action": "released"
       }
     },
     {

@@ -2,13 +2,12 @@
 //!
 //! Every cell is a unary/streamed parity pair recorded against the real
 //! API; the semantic facts must agree between the pair (`semantic_facts`:
-//! everything but a delivery-only truncation and the bus's `held`/`released`,
-//! whose count at a host decision is a function of frames waited).
+//! everything but a delivery-only truncation).
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
 //! | `text_{unary,stream}` | one text turn | settled, one request, answer says pong | `issued, landed, ended:settled`; all scoped to the run; `Landed` carries the effect id | recorded |
-//! | `one_tool_{unary,stream}` | one bash call, auto approval, then text | file written, two requests | approval `prepared`/`approved` between the completion and the tool; tool subject keyed `tool:bash`, family ToolCall, effect id in the log | recorded |
+//! | `one_tool_{unary,stream}` | one bash call, auto approval, then text | file written, two requests | `held`, approval `prepared`/`approved`, `released`, then the tool `issued`: the hold is the gate's decision, no churn; tool subject keyed `tool:bash`, family Tool, effect id in the log | recorded |
 //! | `batch_c1_{unary,stream}`, `batch_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | holds ≥ 4, each released once, four approvals; concurrency 1 holds more | recorded |
 //! | `two_tools_{unary,stream}` | bash, then read_file, then text | three requests, file content in answer | `Issued` subjects for the completions carry increasing `order`; tools carry their key | recorded |
 //! | `invalid_tool_{unary,stream}` | a call to a function the agent was never given | run failed `UnknownToolCall` | `invalid_call` (name, resolution `fail`), `ended:unknown_tool_call` last | recorded |
@@ -69,9 +68,9 @@ fn one_tool_call() {
                 "issued",
                 "landed",
                 "held",
-                "released",
                 "rigcoder/approval:prepared",
                 "rigcoder/approval:approved",
+                "released",
                 "issued",
                 "landed",
                 "issued",

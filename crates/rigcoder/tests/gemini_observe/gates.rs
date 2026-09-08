@@ -2,8 +2,8 @@
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
-//! | `ask_approve_{unary,stream}` | approval mode `ask`, approved by the host | file written | `approval:held` then `approval:approved`; the first `held` precedes the approval, the tool's `issued` follows it, nothing is held after it, every hold released (the hold/release churn while the reviewer decides is counted, not sequenced: see the ledger's finding on `release_batch`) | recorded |
-//! | `ask_refuse_{unary,stream}` | approval asked, refused | file untouched; the log holds no tool exchange | `approval:held` then `approval:denied`; `denied@Gate:denied` | recorded |
+//! | `ask_approve_{unary,stream}` | approval mode `ask`, approved by the host | file written | exactly `held`, `approval:held`, `approval:approved`, `released` before the tool's `issued` (one hold for the whole decision — Rig #2479) | recorded |
+//! | `ask_refuse_{unary,stream}` | approval asked, refused | file untouched; the log holds no tool exchange | one `held`, `approval:held` then `approval:denied`, `denied@Gate:denied`, no `released` (the gate answers before it lets go of its hold) | recorded |
 //! | `steer_deny_{unary,stream}` | a steering deny rule on bash | `Denied` transcript line, nothing prepared; the second recorded request carries the reason text | `rigcoder/steer` (rule `deny`), `denied@Gate:denied` | recorded |
 //! | `scope_deny_{unary,stream}` | a file write outside the allowed scope | file absent | `rigcoder/steer` (rule `scope`), `denied@Gate:denied` | recorded |
 //! | `stale_approval_{unary,stream}` | the call's arguments change after preparation began | denial names the change; the model's honest second call is approved and runs | `approval:held`, `approval:denied` (reason), `denied@Gate:denied`, then `approval:held`, `approval:approved` | recorded |
@@ -68,13 +68,9 @@ fn ask_and_approve() {
                 approvals(cell),
                 ["rigcoder/approval:held", "rigcoder/approval:approved"]
             );
+            // The hold is the decision: held once while the reviewer decides,
+            // released by the gate on approval, then dispatched.
             let facts = cell.facts();
-            let held = facts.iter().position(|f| f == "held").unwrap();
-            let approved = facts
-                .iter()
-                .position(|f| f == "rigcoder/approval:approved")
-                .unwrap();
-            // The tool dispatches only after the host approved.
             let tool_issued = cell
                 .trace()
                 .observations
@@ -87,15 +83,20 @@ fn ask_and_approve() {
                             .is_some_and(|k| k.as_str() == "tool:bash")
                 })
                 .unwrap();
-            assert!(held < approved && approved < tool_issued, "{facts:?}");
-            assert!(
-                !facts[approved..].contains(&"held".to_owned()),
-                "nothing held after the approval: {facts:?}"
-            );
+            let decision: Vec<&str> = facts[..tool_issued]
+                .iter()
+                .filter(|f| *f == "held" || *f == "released" || f.starts_with("rigcoder/approval"))
+                .map(String::as_str)
+                .collect();
             assert_eq!(
-                cell.count("held"),
-                cell.count("released"),
-                "every hold released"
+                decision,
+                [
+                    "held",
+                    "rigcoder/approval:held",
+                    "rigcoder/approval:approved",
+                    "released"
+                ],
+                "{facts:?}"
             );
             let approval = cell
                 .find(|a| matches!(a, Action::Host { payload, .. } if payload["decision"] == "approved"))
@@ -133,16 +134,11 @@ fn ask_and_refuse() {
                 ["rigcoder/approval:held", "rigcoder/approval:denied"]
             );
             assert_eq!(cell.count("denied@Gate:denied"), 1, "{:?}", cell.facts());
-            // The denial removes the hold: no `released` after the decision.
+            // The denial removes the hold: no `released` anywhere — a hold
+            // removed from an answered intent is the denial.
             let facts = cell.facts();
-            let denied_at = facts
-                .iter()
-                .position(|f| f == "rigcoder/approval:denied")
-                .unwrap();
-            assert!(
-                !facts[denied_at..].contains(&"released".to_owned()),
-                "{facts:?}"
-            );
+            assert_eq!(cell.count("released"), 0, "{facts:?}");
+            assert_eq!(cell.count("held"), 1, "{facts:?}");
             // No exchange for the denied tool: two completions only.
             let log = cell.log();
             assert_eq!(log.records.len(), 2, "{log:?}");
