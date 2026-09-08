@@ -214,12 +214,24 @@ fn gate_bash(
     steer: Res<Steer>,
     mut transcript: ResMut<Transcript>,
     mut commands: Commands,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
+    subjects: rig_ecs::bus::Subjects,
 ) {
     for (entity, effect, slot) in &fresh {
         let Some(command) = bash_command(effect, slot) else {
             continue;
         };
         if let Some(reason) = &compiled.invalid {
+            crate::observe::emit(
+                witness.as_deref(),
+                subjects.of(entity),
+                "steer",
+                &crate::observe::SteerDenial {
+                    tool: slot.name.clone(),
+                    rule: "invalid_rule".into(),
+                    reason: reason.clone(),
+                },
+            );
             commands
                 .entity(entity)
                 .insert(EffectOutcome(Err(ErrorReport::new(
@@ -233,6 +245,16 @@ fn gate_bash(
             continue;
         }
         if let Some((_, reason)) = compiled.deny.iter().find(|(r, _)| r.is_match(&command)) {
+            crate::observe::emit(
+                witness.as_deref(),
+                subjects.of(entity),
+                "steer",
+                &crate::observe::SteerDenial {
+                    tool: slot.name.clone(),
+                    rule: "deny".into(),
+                    reason: reason.clone(),
+                },
+            );
             commands
                 .entity(entity)
                 .insert(EffectOutcome(Err(ErrorReport::new(
@@ -256,10 +278,12 @@ fn gate_bash(
 /// Cut an over-long tool result to head and tail for history; the record
 /// already holds the full answer.
 fn shape_results(
-    mut outcomes: Query<&mut EffectOutcome, (With<ToolCallSlot>, Added<EffectOutcome>)>,
+    mut outcomes: Query<(Entity, &ToolCallSlot, &mut EffectOutcome), Added<EffectOutcome>>,
     steer: Res<Steer>,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
+    subjects: rig_ecs::bus::Subjects,
 ) {
-    for mut outcome in &mut outcomes {
+    for (entity, slot, mut outcome) in &mut outcomes {
         let Ok(Outcome::ToolResult { result }) = &outcome.0 else {
             continue;
         };
@@ -283,6 +307,18 @@ fn shape_results(
             "{head}\n\n[... result cut to {} chars for history; the full output was {} chars ...]\n\n{tail}",
             steer.max_result_chars,
             text.chars().count()
+        );
+        // An in-place rewrite raises no lifecycle event the library could
+        // observe: the judge names itself.
+        crate::observe::emit(
+            witness.as_deref(),
+            subjects.of(entity),
+            "steer",
+            &crate::observe::ResultShaped {
+                tool: slot.name.clone(),
+                chars: text.chars().count(),
+                kept: steer.max_result_chars,
+            },
         );
         outcome.0 = Ok(Outcome::ToolResult {
             result: result.clone().with_output(ToolOutput::text(shaped)),
@@ -481,6 +517,8 @@ pub fn gate_scope(
     scope: Option<Res<Scope>>,
     mut transcript: ResMut<Transcript>,
     mut commands: Commands,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
+    subjects: rig_ecs::bus::SubjectWalk,
 ) {
     let Some(scope) = scope.filter(|scope| scope.enabled()) else {
         return;
@@ -526,6 +564,16 @@ pub fn gate_scope(
             *args = canonical_args;
         }
         if let Some(reason) = reason {
+            crate::observe::emit(
+                witness.as_deref(),
+                subjects.of_intent(entity, &effect.key, effect.kind.family()),
+                "steer",
+                &crate::observe::SteerDenial {
+                    tool: slot.name.clone(),
+                    rule: "scope".into(),
+                    reason: reason.clone(),
+                },
+            );
             commands
                 .entity(entity)
                 .insert(EffectOutcome(Err(ErrorReport::new(

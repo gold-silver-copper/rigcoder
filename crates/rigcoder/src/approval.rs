@@ -277,6 +277,26 @@ pub(crate) fn cancel_run(
 }
 
 fn deny(world: &mut World, entity: Entity, tool: &str, reason: String) {
+    let (scope, mode) = run_identity(world, entity);
+    let operation = world
+        .get::<Invocation>(entity)
+        .and_then(|invocation| match &invocation.phase {
+            Phase::Waiting { request, .. } => Some(request.operation_id.clone()),
+            Phase::Preparing(_) | Phase::Approved(_) => None,
+        })
+        .unwrap_or_default();
+    crate::observe::emit(
+        world.get_resource::<rig_ecs::bus::Witnessing>(),
+        subject_of(world, entity, &scope),
+        "approval",
+        &crate::observe::Approval {
+            operation,
+            tool: tool.to_owned(),
+            mode: format!("{mode:?}").to_ascii_lowercase(),
+            decision: "denied".into(),
+            reason: Some(reason.clone()),
+        },
+    );
     world
         .entity_mut(entity)
         .remove::<(Held, PolicyHold, Invocation)>();
@@ -291,6 +311,19 @@ fn deny(world: &mut World, entity: Entity, tool: &str, reason: String) {
         reason,
     });
     world.resource_mut::<Progress>().mark();
+}
+
+/// The subject of a tool-call effect entity for a host fact: the run's
+/// scope and the effect's dispatch order and key.
+fn subject_of(world: &World, entity: Entity, scope: &str) -> rig::observe::Subject {
+    rig::observe::Subject {
+        scope: Some(scope.to_owned()),
+        order: world.get::<Seq>(entity).map(|seq| seq.0),
+        effect: world.get::<Issued>(entity).map(|issued| issued.0),
+        key: world.get::<PendingEffect>(entity).map(|e| e.key.clone()),
+        family: world.get::<PendingEffect>(entity).map(|e| e.kind.family()),
+        ..rig::observe::Subject::default()
+    }
 }
 
 fn run_identity(world: &World, mut entity: Entity) -> (String, ApprovalMode) {
@@ -456,6 +489,23 @@ pub(crate) fn gate(world: &mut World) {
                 operation: Mutex::new(Some(operation)),
                 cancelled: Arc::new(AtomicBool::new(false)),
             });
+            let (scope, _) = run_identity(world, entity);
+            crate::observe::emit(
+                world.get_resource::<rig_ecs::bus::Witnessing>(),
+                subject_of(world, entity, &scope),
+                "approval",
+                &crate::observe::Approval {
+                    operation: request.operation_id.clone(),
+                    tool: tool.clone(),
+                    mode: format!("{:?}", invocation.mode).to_ascii_lowercase(),
+                    decision: if invocation.mode == ApprovalMode::Ask {
+                        "held".into()
+                    } else {
+                        "prepared".into()
+                    },
+                    reason: None,
+                },
+            );
             if invocation.mode == ApprovalMode::Ask {
                 world.resource_mut::<Transcript>().push(Event::Held {
                     name: tool.clone(),
@@ -477,6 +527,19 @@ pub(crate) fn gate(world: &mut World) {
             };
             match decision {
                 Some(true) => {
+                    let (scope, _) = run_identity(world, entity);
+                    crate::observe::emit(
+                        world.get_resource::<rig_ecs::bus::Witnessing>(),
+                        subject_of(world, entity, &scope),
+                        "approval",
+                        &crate::observe::Approval {
+                            operation: request.operation_id.clone(),
+                            tool: tool.clone(),
+                            mode: format!("{:?}", invocation.mode).to_ascii_lowercase(),
+                            decision: "approved".into(),
+                            reason: None,
+                        },
+                    );
                     let mut context = world
                         .get::<ToolInputs>(entity)
                         .map(|inputs| inputs.0.clone())

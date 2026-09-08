@@ -94,7 +94,13 @@ pub enum Event {
     Settled {
         answer: String,
     },
-    Failed(String),
+    /// The run ended without settling: the reason, as the runtime reported
+    /// it. A struct variant, because an internally tagged newtype of a
+    /// string cannot be serialized, which silently dropped every ending
+    /// from `transcript.jsonl`.
+    Failed {
+        reason: String,
+    },
     /// The run failed on a transient provider error and will be submitted again.
     Retrying {
         reason: String,
@@ -167,15 +173,15 @@ fn start_run(
         return None;
     }
     if settings.max_tokens == 0 {
-        world.resource_mut::<Transcript>().push(Event::Failed(
-            "max_tokens must be greater than zero".to_owned(),
-        ));
+        world.resource_mut::<Transcript>().push(Event::Failed {
+            reason: "max_tokens must be greater than zero".to_owned(),
+        });
         return None;
     }
     let Some(sequence) = world.resource::<Conversation>().runs.checked_add(1) else {
-        world
-            .resource_mut::<Transcript>()
-            .push(Event::Failed("run sequence exhausted".to_owned()));
+        world.resource_mut::<Transcript>().push(Event::Failed {
+            reason: "run sequence exhausted".to_owned(),
+        });
         return None;
     };
     world
@@ -266,9 +272,9 @@ pub fn cancel(world: &mut World, reason: &str) {
         .is_some()
     {
         world.resource_mut::<Conversation>().last = None;
-        world
-            .resource_mut::<Transcript>()
-            .push(Event::Failed(format!("cancelled: {reason}")));
+        world.resource_mut::<Transcript>().push(Event::Failed {
+            reason: format!("cancelled: {reason}"),
+        });
     }
     if let Some(run) = world.resource::<Conversation>().active {
         world.entity_mut(run).insert(Cancelled(reason.to_owned()));
@@ -365,6 +371,8 @@ pub fn on_failed(
     mut transcript: ResMut<Transcript>,
     setup: Res<crate::Setup>,
     settings: Query<&crate::RunConfiguration>,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
+    scopes: Query<&rig_ecs::bus::Scope>,
 ) {
     let run = failed.event().entity;
     if conversation.active != Some(run) {
@@ -400,10 +408,22 @@ pub fn on_failed(
         };
         conversation.history = history;
         conversation.retry_at = Some(std::time::Instant::now() + wait);
+        crate::observe::emit(
+            witness.as_deref(),
+            scopes
+                .get(run)
+                .map_or_else(|_| rig::observe::Subject::default(), |scope| rig::observe::Subject::scoped(scope.0.clone())),
+            "session",
+            &crate::observe::ProviderRetry {
+                attempt: conversation.provider_retries,
+                wait_secs: wait.as_secs(),
+                reason: report.message.clone(),
+            },
+        );
         transcript.push(Event::Retrying { reason: reason.clone(), attempt: conversation.provider_retries, wait_secs: wait.as_secs() });
         return;
     }
-    transcript.push(Event::Failed(reason));
+    transcript.push(Event::Failed { reason });
 }
 
 fn record_usage(run: Entity, usage: &Query<&Usage>, transcript: &mut Transcript) {
@@ -510,9 +530,9 @@ pub fn resubmit_when_due(world: &mut World) {
         (prompt, settings, approval)
     };
     if start_run(world, &prompt, false, settings, approval).is_none() {
-        world.resource_mut::<Transcript>().push(Event::Failed(
-            "could not retry: no agent is registered".to_owned(),
-        ));
+        world.resource_mut::<Transcript>().push(Event::Failed {
+            reason: "could not retry: no agent is registered".to_owned(),
+        });
     } else {
         world.resource_mut::<rig_ecs::bus::Progress>().mark();
     }
@@ -625,6 +645,31 @@ mod retry_tests {
     }
 
     #[test]
+    fn every_event_kind_serializes_as_a_transcript_line() {
+        // A `failed` line was silently missing from every transcript: an
+        // internally tagged newtype variant of a string does not serialize.
+        for event in [
+            Event::Failed {
+                reason: "cancelled".into(),
+            },
+            Event::Settled {
+                answer: "ok".into(),
+            },
+            Event::Denied {
+                name: "bash".into(),
+                reason: "no".into(),
+            },
+        ] {
+            let line = serde_json::to_string(&event).expect("every event is a line");
+            assert!(line.contains("\"kind\":"), "{line}");
+        }
+        assert_eq!(
+            serde_json::to_string(&Event::Failed { reason: "x".into() }).unwrap(),
+            r#"{"kind":"failed","reason":"x"}"#
+        );
+    }
+
+    #[test]
     fn automatic_retries_keep_the_original_configuration() {
         let dir = scratch("frozen-settings");
         let mut live = app(
@@ -710,7 +755,7 @@ mod retry_tests {
             "{events:?}"
         );
         assert!(
-            !events.iter().any(|e| matches!(e, Event::Failed(_))),
+            !events.iter().any(|e| matches!(e, Event::Failed { .. })),
             "{events:?}"
         );
     }
@@ -840,11 +885,9 @@ mod retry_tests {
         resubmit_when_due(app.world_mut());
         assert!(!app.world().resource::<Conversation>().is_busy());
         assert_eq!(app.world().resource::<Conversation>().runs, 1);
-        assert!(
-            app.world().resource::<Transcript>().events.iter().any(
-                |e| matches!(e, Event::Failed(reason) if reason.contains("stop during backoff"))
-            )
-        );
+        assert!(app.world().resource::<Transcript>().events.iter().any(
+            |e| matches!(e, Event::Failed { reason } if reason.contains("stop during backoff"))
+        ));
     }
 
     #[test]

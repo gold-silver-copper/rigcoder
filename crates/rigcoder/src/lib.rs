@@ -10,6 +10,7 @@ pub mod approval;
 pub mod checkpoint;
 mod file_change;
 pub mod model;
+pub mod observe;
 pub mod session;
 pub mod steer;
 pub mod tools;
@@ -40,6 +41,7 @@ pub use rig_effect_log::EffectLog;
 pub fn effect_log(world: &World) -> EffectLog {
     world.resource::<EffectLogResource>().log()
 }
+pub use observe::trace as observations;
 pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
 
 /// The system prompt, kept as a file so the improvement harness can edit it
@@ -128,6 +130,11 @@ impl Plugin for RigcoderPlugin {
         app.add_plugins(steer::SteerPlugin);
         // Every effect is recorded: the log replays on a host without keys.
         EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
+        // Every decision around those effects is witnessed: the trace is
+        // the failure evidence beside the log.
+        let observations = Arc::new(rig::observe::ObservationLog::default());
+        rig_ecs::bus::Witnessing::install(app.world_mut(), observations.clone());
+        app.insert_resource(observe::Observations(observations));
         app.insert_resource(Workspace { root: workspace })
             .init_resource::<RunSettings>()
             .insert_resource(model)
@@ -199,9 +206,9 @@ pub fn setup(
                 .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
                 .map(|(e, _)| e);
             let Some(model) = model else {
-                transcript.push(Event::Failed(
-                    "the effect log records no model exchange".to_owned(),
-                ));
+                transcript.push(Event::Failed {
+                    reason: "the effect log records no model exchange".to_owned(),
+                });
                 return;
             };
             let mut tools: Vec<(usize, String, Entity)> = bound
@@ -231,9 +238,9 @@ pub fn setup(
             }) {
                 Ok(model) => model,
                 Err(report) => {
-                    transcript.push(Event::Failed(format!(
-                        "could not register the model: {report}"
-                    )));
+                    transcript.push(Event::Failed {
+                        reason: format!("could not register the model: {report}"),
+                    });
                     return;
                 }
             };
@@ -288,8 +295,8 @@ fn bind_replayers(mut handlers: Handlers, setup: Res<Setup>, mut transcript: Res
     if let Mode::Replay(log) = &setup.mode
         && let Err(report) = Replay::default().register(&mut handlers, log)
     {
-        transcript.push(Event::Failed(format!(
-            "could not bind the replayers: {report}"
-        )));
+        transcript.push(Event::Failed {
+            reason: format!("could not bind the replayers: {report}"),
+        });
     }
 }

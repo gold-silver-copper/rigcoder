@@ -39,6 +39,13 @@ pub struct TrialFacts {
     pub no_settle: bool,
     /// Tool calls before the first write_file or edit_file (u64::MAX: none).
     pub calls_before_first_edit: u64,
+    /// How the run ended, from the transcript's `failed` line (`settled`
+    /// when it settled; `unknown` when the transcript ends without either).
+    #[serde(default)]
+    pub ending: String,
+    /// What the witness saw (`observations.json`), when the trial has one.
+    #[serde(default)]
+    pub observed: Observed,
     /// The last tool called before the end.
     pub last_tool: Option<String>,
     pub input_tokens: u64,
@@ -61,6 +68,75 @@ pub struct Aggregate {
     pub input_tokens: f64,
     pub by_tool: BTreeMap<String, f64>,
     pub last_tool: BTreeMap<String, u64>,
+}
+
+/// The decision trace, counted: the facts a failure classification needs
+/// that no transcript line carries.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Observed {
+    /// The trace was present and complete (no dropped facts).
+    pub complete: bool,
+    /// Provider streams that ended before their terminal record.
+    pub stream_truncations: u64,
+    /// Tool calls a gate or steering rule denied.
+    pub denials: u64,
+    /// Whole-prompt provider retries the session made.
+    pub provider_retries: u64,
+    /// Intents the driver refused (no handler, re-entrant, ids exhausted).
+    pub refusals: u64,
+    /// Approval holds, and how many of them were denied by the reviewer.
+    pub holds: u64,
+    pub held_denied: u64,
+    /// Dispatches cancelled while a handler served them (a tool still
+    /// running when the run was cancelled).
+    pub cancelled_in_flight: u64,
+    /// Every run ending the witness saw, in order (`settled`, `provider`,
+    /// `cancelled`, `max_turns`, …).
+    pub endings: Vec<String>,
+    /// The reason detail of the last non-settled ending, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure: Option<String>,
+}
+
+/// Count what an observation trace says. A missing or unparsable trace is
+/// an incomplete, empty `Observed`, never a claim that nothing happened.
+pub fn observed(trace: &str) -> Observed {
+    let Ok(trace) = serde_json::from_str::<rig::observe::ObservationTrace>(trace) else {
+        return Observed::default();
+    };
+    let mut o = Observed {
+        complete: trace.is_complete(),
+        ..Observed::default()
+    };
+    for observation in &trace.observations {
+        match &observation.action {
+            rig::observe::Action::StreamTruncated { .. } => o.stream_truncations += 1,
+            rig::observe::Action::Denied { .. } => o.denials += 1,
+            rig::observe::Action::Refused { .. } => o.refusals += 1,
+            rig::observe::Action::Cancelled { .. }
+                if observation.stage == rig::observe::Stage::Collect =>
+            {
+                o.cancelled_in_flight += 1;
+            }
+            rig::observe::Action::Ended { ending } => {
+                o.endings.push(ending.code.clone());
+                if ending.code != "settled" {
+                    o.last_failure = ending.detail.clone();
+                }
+            }
+            rig::observe::Action::Host { kind, payload } => match kind.as_str() {
+                "rigcoder/provider_retry" => o.provider_retries += 1,
+                "rigcoder/approval" => match payload["decision"].as_str() {
+                    Some("held") => o.holds += 1,
+                    Some("denied") => o.held_denied += 1,
+                    _ => {}
+                },
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    o
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -87,6 +163,8 @@ struct Event {
     input_tokens: u64,
     #[serde(default)]
     output_tokens: u64,
+    #[serde(default)]
+    reason: String,
 }
 
 const DELIBERATION: &[&str] = &[
@@ -165,6 +243,8 @@ pub fn facts(transcript: &str) -> TrialFacts {
                 }
             }
             "assistant" => final_text = e.text,
+            "failed" => f.ending = e.reason,
+            "settled" => f.ending = "settled".into(),
             "usage" => {
                 f.input_tokens += e.input_tokens;
                 f.output_tokens += e.output_tokens;
@@ -174,9 +254,52 @@ pub fn facts(transcript: &str) -> TrialFacts {
         last_kind = e.kind;
     }
     f.no_settle = last_kind != "settled";
+    if f.ending.is_empty() {
+        f.ending = "unknown".into();
+    }
     f.final_text_chars = final_text.chars().count() as u64;
     f.ended_deliberating = deliberating(&final_text);
     f
+}
+
+fn short(text: &str, max: usize) -> String {
+    let mut out: String = text.chars().take(max).collect();
+    if out.len() < text.len() {
+        out.push('…');
+    }
+    out
+}
+
+/// The witness's counts for the failed trials: what a transcript cannot
+/// say about why a run ended.
+pub fn render_observed(d: &Digest) -> String {
+    let mut out = String::new();
+    let failed: Vec<&TrialFacts> = d.trials.iter().filter(|t| t.reward < 1.0).collect();
+    if failed.iter().all(|t| t.observed == Observed::default()) {
+        return out;
+    }
+    out.push_str("\n### What the witness saw in failed trials\n\n| trial | trace | stream truncations | denials | provider retries | refusals | holds (denied) | cancelled in flight | endings | last failure |\n|---|---|---|---|---|---|---|---|---|---|\n");
+    for t in failed {
+        let o = &t.observed;
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} ({}) | {} | {} | {} |\n",
+            t.trial,
+            if o.complete { "complete" } else { "incomplete" },
+            o.stream_truncations,
+            o.denials,
+            o.provider_retries,
+            o.refusals,
+            o.holds,
+            o.held_denied,
+            o.cancelled_in_flight,
+            o.endings.join(" → "),
+            o.last_failure
+                .as_deref()
+                .map(|s| short(s, 80))
+                .unwrap_or_default()
+        ));
+    }
+    out
 }
 
 fn mean(values: impl Iterator<Item = f64>, n: usize) -> f64 {
@@ -262,6 +385,9 @@ pub fn job(job_dir: &Path) -> Result<Digest> {
             continue;
         }
         let mut f = facts(&std::fs::read_to_string(&transcript)?);
+        if let Ok(trace) = std::fs::read_to_string(dir.join("agent").join("observations.json")) {
+            f.observed = observed(&trace);
+        }
         f.trial = dir
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -365,11 +491,11 @@ pub fn render(d: &Digest) -> String {
     out.push_str("\n### Failed trials\n\n| trial | calls | timeouts | truncated | repeats | missing paths | ending | last tool |\n|---|---|---|---|---|---|---|---|\n");
     for t in d.trials.iter().filter(|t| t.reward < 1.0) {
         let ending = if t.no_settle {
-            "no settle"
+            format!("no settle: {}", short(&t.ending, 80))
         } else if t.ended_deliberating {
-            "deliberating"
+            "deliberating".to_owned()
         } else {
-            "summary"
+            "summary".to_owned()
         };
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {ending} | {} |\n",
@@ -383,6 +509,7 @@ pub fn render(d: &Digest) -> String {
         ));
     }
     out.push('\n');
+    out.push_str(&render_observed(d));
     out
 }
 

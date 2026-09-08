@@ -130,7 +130,7 @@ fn a_blocked_prompt_fails_once_with_the_block_reason() {
     let failures: Vec<&String> = events
         .iter()
         .filter_map(|event| match event {
-            Event::Failed(reason) => Some(reason),
+            Event::Failed { reason } => Some(reason),
             _ => None,
         })
         .collect();

@@ -81,7 +81,7 @@ fn capture_when_over(world: &mut World) {
         let c = world.resource::<rigcoder::Conversation>();
         let t = world.resource::<Transcript>();
         (c.runs > 0 && c.active.is_none())
-            || (c.runs == 0 && t.events.iter().any(|e| matches!(e, Event::Failed(_))))
+            || (c.runs == 0 && t.events.iter().any(|e| matches!(e, Event::Failed { .. })))
             || ticks > 20_000
     };
     if !over {
@@ -241,7 +241,7 @@ fn a_recorded_run_replays_without_a_model_and_diverges_when_the_prompt_changes()
         Start::Prompt("write hello.txt then cat it"),
     );
     let failed = diverged.events.iter().find_map(|e| match e {
-        Event::Failed(reason) => Some(reason.clone()),
+        Event::Failed { reason } => Some(reason.clone()),
         _ => None,
     });
     assert!(failed.is_some(), "{:?}", diverged.events);
@@ -450,13 +450,9 @@ fn checkpoint_archives_require_a_directory_outside_the_workspace() {
     });
     rigcoder::submit(app.world_mut(), "finish").unwrap();
     finish_app(&mut app);
-    assert!(
-        app.world()
-            .resource::<Transcript>()
-            .events
-            .iter()
-            .any(|e| matches!(e, Event::Failed(error) if error.contains("outside the workspace")))
-    );
+    assert!(app.world().resource::<Transcript>().events.iter().any(
+        |e| matches!(e, Event::Failed { reason: error } if error.contains("outside the workspace"))
+    ));
     assert!(!rigcoder::checkpoint::scene_path(&scenes, 1).exists());
     assert!(!rigcoder::checkpoint::tar_path(&scenes, 1).exists());
     assert_eq!(app.world().resource::<Checkpoint>().turns_saved, 0);
@@ -514,7 +510,7 @@ fn replay_rejects_changed_run_settings_before_dispatch() {
             .resource::<Transcript>()
             .events
             .iter()
-            .any(|e| matches!(e, Event::Failed(error) if error.contains("policy")))
+            .any(|e| matches!(e, Event::Failed { reason: error } if error.contains("policy")))
     );
     assert!(
         rigcoder::effect_log(app.world()).records.is_empty(),
@@ -541,7 +537,7 @@ fn a_failed_tar_command_does_not_publish_a_scene() {
             .resource::<Transcript>()
             .events
             .iter()
-            .any(|e| matches!(e, Event::Failed(error) if error.contains("tar failed")))
+            .any(|e| matches!(e, Event::Failed { reason: error } if error.contains("tar failed")))
     );
     assert!(!rigcoder::checkpoint::scene_path(&scenes, 1).exists());
     assert!(!rigcoder::checkpoint::tar_path(&scenes, 1).exists());
@@ -602,10 +598,8 @@ fn checkpoint_collisions_preserve_the_existing_snapshot() {
         "existing snapshot"
     );
     assert!(
-        app.world()
-            .resource::<Transcript>()
-            .events
-            .iter()
-            .any(|e| matches!(e, Event::Failed(error) if error.contains("already exists")))
+        app.world().resource::<Transcript>().events.iter().any(
+            |e| matches!(e, Event::Failed { reason: error } if error.contains("already exists"))
+        )
     );
 }
