@@ -407,6 +407,9 @@ fn main() -> anyhow::Result<()> {
             None => rigcoder::Mode::Live,
         },
         prompt_override,
+        // A host that writes the log or the trace is one that will read
+        // them after a failure: keep the frames a failed stream needs.
+        keep_stream_events: args.effect_log.is_some() || observations_path.is_some(),
     };
     let checkpoint = rigcoder::checkpoint::Checkpoint {
         dir: args.checkpoint.clone(),

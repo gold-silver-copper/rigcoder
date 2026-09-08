@@ -128,6 +128,7 @@ fn cell(name: &str, answers: Vec<Answer>, max_turns: usize) -> Cell {
         max_turns,
         mode: rigcoder::Mode::Live,
         prompt_override: Some("You are a test agent.".into()),
+        keep_stream_events: false,
     });
     app.insert_resource(Model(Mutex::new(Some(Scripted(Mutex::new(
         answers.into(),
