@@ -90,9 +90,11 @@ approval, persistence and process-isolation contracts.
 ## Dependency pin
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
-`rig-ecs`, `rig-effect-log` and `rig-cassette`) to published migration commit
-`de83e9fb2415ce128fef543b5cc1c94ae9863685` in
-[Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474), stacked on #2443.
+`rig-ecs`, `rig-effect-log` and `rig-cassette`) to
+`1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750`, the head of
+[Rig PR #2476](https://github.com/0xPlaygrounds/rig/pull/2476) (the observation
+witness), stacked on #2443. The consumer ownership transfer landed at the
+earlier pin `de83e9f` ([Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474)).
 To move the pin, update every Rig revision and `Cargo.lock`, then run the
 workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.
 Rigcoder owns the transferred ECS consumer in `rigcoder-verify`, its repair
