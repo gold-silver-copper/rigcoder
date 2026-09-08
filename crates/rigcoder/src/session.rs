@@ -61,6 +61,14 @@ impl Conversation {
     pub fn is_busy(&self) -> bool {
         self.active.is_some() || self.has_pending_retry()
     }
+
+    /// Make a pending provider retry due now: a host that already waited
+    /// (or a test that must not) submits it on the next tick.
+    pub fn expire_backoff(&mut self) {
+        if self.retry_at.is_some() {
+            self.retry_at = Some(std::time::Instant::now());
+        }
+    }
 }
 
 /// One thing that happened, in the order it happened.
