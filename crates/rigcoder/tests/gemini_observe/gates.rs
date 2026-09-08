@@ -2,9 +2,9 @@
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
-//! | `ask_approve_{unary,stream}` | approval mode `ask`, approved by the host | file written | `held`, `approval:held`, `approval:approved`, `released`, tool `issued`/`landed`; hold churn collapsed (see `without_churn`) | recorded |
+//! | `ask_approve_{unary,stream}` | approval mode `ask`, approved by the host | file written | `approval:held` then `approval:approved`; the first `held` precedes the approval, the tool's `issued` follows it, nothing is held after it, every hold released (the hold/release churn while the reviewer decides is counted, not sequenced: see the ledger's finding on `release_batch`) | recorded |
 //! | `ask_refuse_{unary,stream}` | approval asked, refused | file untouched; the log holds no tool exchange | `approval:held` then `approval:denied`; `denied@Gate:denied` | recorded |
-//! | `steer_deny_{unary,stream}` | a steering deny rule on bash | `Denied` transcript line, nothing prepared; second request carries the reason | `rigcoder/steer` (rule `deny`), `denied@Gate:denied` | recorded |
+//! | `steer_deny_{unary,stream}` | a steering deny rule on bash | `Denied` transcript line, nothing prepared; the second recorded request carries the reason text | `rigcoder/steer` (rule `deny`), `denied@Gate:denied` | recorded |
 //! | `scope_deny_{unary,stream}` | a file write outside the allowed scope | file absent | `rigcoder/steer` (rule `scope`), `denied@Gate:denied` | recorded |
 //! | `stale_approval_{unary,stream}` | the call's arguments change after preparation began | denial names the change; the model's honest second call is approved and runs | `approval:held`, `approval:denied` (reason), `denied@Gate:denied`, then `approval:held`, `approval:approved` | recorded |
 //! | `patched_{unary,stream}` | one serving layer rewrites the request | the recorded request carries the patch | `patched` at `Handler` with `before`/`after` differing on the patched field, emitter = the layer (was `unknown` before the fix fed back to #2476) | recorded |
@@ -26,33 +26,6 @@ use rig_ecs::bus::{Held, PendingEffect};
 
 const MATRIX: &str = "observe_gates";
 
-fn pair(name: &str, config: fn(bool) -> Config, body: impl Fn(&mut Cell, bool)) {
-    let mut traces = Vec::new();
-    for stream in [false, true] {
-        let cell = format!("{name}_{}", if stream { "stream" } else { "unary" });
-        run(MATRIX, &cell, config(stream), |cell| {
-            let result =
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(cell, stream)));
-            if cell
-                .app
-                .world()
-                .get_resource::<rig_ecs::bus::Witnessing>()
-                .is_some()
-            {
-                eprintln!("[{}/{}] facts: {:?}", MATRIX, cell.name, cell.facts());
-            }
-            if let Err(payload) = result {
-                std::panic::resume_unwind(payload);
-            }
-            traces.push(semantic_facts(&cell.trace()));
-        });
-    }
-    assert_eq!(
-        traces[0], traces[1],
-        "unary and streamed agree on the facts"
-    );
-}
-
 fn wait_for_hold(cell: &mut Cell) {
     cell.drive_until("an approval is pending", |world| {
         !world
@@ -72,6 +45,7 @@ fn approvals(cell: &Cell) -> Vec<String> {
 #[test]
 fn ask_and_approve() {
     pair(
+        MATRIX,
         "ask_approve",
         |stream| Config {
             approval: rigcoder::approval::ApprovalMode::Ask,
@@ -138,6 +112,7 @@ fn ask_and_approve() {
 #[test]
 fn ask_and_refuse() {
     pair(
+        MATRIX,
         "ask_refuse",
         |stream| Config {
             approval: rigcoder::approval::ApprovalMode::Ask,
@@ -195,6 +170,7 @@ fn ask_and_refuse() {
 #[test]
 fn steer_deny_rule() {
     pair(
+        MATRIX,
         "steer_deny",
         |stream| Config {
             steer: Some(|steer| {
@@ -233,7 +209,27 @@ fn steer_deny_rule() {
             assert_eq!(fact.rule, "deny");
             assert_eq!(fact.reason, "that word is forbidden here");
             // The model read the reason: the second request carries it.
-            assert_eq!(cell.log().records.len(), 2);
+            let log = cell.log();
+            assert_eq!(log.records.len(), 2);
+            let rig::effect::EffectKind::Completion { request, .. } = &log.records[1].kind else {
+                panic!()
+            };
+            assert!(
+                serde_json::to_string(request)
+                    .unwrap()
+                    .contains("that word is forbidden here")
+            );
+            if !cell.recording() {
+                let bodies = rig_cassette::recorded_interaction_bodies(
+                    &cassette_root(),
+                    PROVIDER,
+                    &format!("{MATRIX}/{}", cell.name),
+                );
+                assert!(
+                    bodies[1].0.contains("that word is forbidden here"),
+                    "the wire carries the reason"
+                );
+            }
         },
     );
 }
@@ -241,6 +237,7 @@ fn steer_deny_rule() {
 #[test]
 fn scope_deny() {
     pair(
+        MATRIX,
         "scope_deny",
         |stream| Config {
             scope: Some(|dir| rigcoder::steer::Scope {
@@ -273,6 +270,7 @@ fn scope_deny() {
 #[test]
 fn stale_approval() {
     pair(
+        MATRIX,
         "stale_approval",
         |stream| Config {
             approval: rigcoder::approval::ApprovalMode::Ask,
@@ -479,6 +477,7 @@ fn patched(cell: &Cell) -> Vec<rig::observe::Observation> {
 #[test]
 fn a_layer_patch() {
     pair(
+        MATRIX,
         "patched",
         |stream| Config {
             layers: Some(|h| h.layered(Cooler(0.1))),
@@ -622,6 +621,7 @@ fn a_layer_discard_never_reaches_the_wire() {
 #[test]
 fn a_judge_replacement() {
     pair(
+        MATRIX,
         "replaced",
         |stream| Config {
             layers: Some(|h| h.layered(Replacer)),

@@ -1,6 +1,7 @@
 //! Gemini cassette matrices for the observation witness (Rig #2476) on the
-//! real product session. Six matrices, one file each; the tables are in
-//! each file's doc comment. See `support` for the harness.
+//! real product session. Seven matrices (A–G), one file each; the tables
+//! are in each file's doc comment. See `support` for the harness and the
+//! recording order.
 
 mod support;
 

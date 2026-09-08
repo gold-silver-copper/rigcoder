@@ -1,8 +1,9 @@
 //! Matrix D — provider failures (`observe_failures`).
 //!
 //! A failed run is a join of two facts: `Ended { provider, "<kind>: <message>" }`
-//! and the `landed` summary carrying the report's kind code; every cell
-//! checks the join.
+//! and the `landed` summary carrying the report's kind code; every cell that
+//! fails checks the join on its ending, and every cell that retries checks
+//! it on the first ending.
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
@@ -11,11 +12,11 @@
 //! | `unknown_model_{unary,stream}` | HTTP 404 (a model that does not exist) | run failed, one request | same shape | recorded |
 //! | `rate_limited_unary` | HTTP 429 `RESOURCE_EXHAUSTED`, then the answer | settled after one retry, two requests | `landed` Err retryable, `ended:provider`, `provider_retry { attempt: 1 }`, `issued`, `landed` Ok, `ended:settled` | derived from `text_unary` (a 429 interaction prepended) |
 //! | `server_error_stream` | HTTP 503 `UNAVAILABLE`, then the answer | settled after one retry | same shape on the streamed wire | derived from `text_stream` |
-//! | `blocked_prompt_{unary,stream}` | `promptFeedback.blockReason` from a live safety block | run failed once, one request, no retry | `ended:provider` naming the block reason; no `provider_retry`, no `stream_truncated` | recorded if the live API blocks; otherwise dropped here and proven by `tests/gemini_blocked_prompt.rs` (documented chunk, local server) |
+//! | `blocked_prompt_{unary,stream}` | the strictest `safetySettings` and a harassment prompt, live | the live API answered (no `promptFeedback.blockReason` in either recording): one request, settled, no retry, no truncation | `issued, landed, ended:settled`; the recorded response carries no block | recorded (the block was not obtained; a blocked prompt's trace is proven by `tests/gemini_blocked_prompt.rs` over Gemini's documented chunk) |
 //! | `stream_truncated_stream` | the stream ends before its terminal frame, then the answer | settled after one retry | `stream_truncated { delivered ≥ 1, tail non-empty }` (emitter `rig-ecs/bus`), `landed` Err, `provider_retry`, `ended:settled` | derived from `text_stream` (last frame dropped) |
-//! | `stream_error_frame_stream` | an error frame after text, no terminal | the run reports the error | the error reaches the trace (`stream_truncated.errors` or a `landed` Err naming it) | derived from `text_stream` (terminal replaced by an error frame) |
-//! | `malformed_frame_stream` | a frame that is not JSON | the run reports the parse failure | `landed` Err whose code is the parser's kind; no `provider_retry` | derived from `text_stream` (first frame corrupted) |
-//! | `transport_cut_stream` | the body ends mid-frame | the run reports the cut | distinguishable from the clean truncation: the trace's error names the cut | derived from `text_stream` (body cut mid-JSON) |
+//! | `stream_error_frame_stream` | an error frame after text, no terminal | at this pin the run reports a truncation (the envelope sits in the tail as an `unknown` event, `errors: []`): the defect fixed by rig #2478 | the error text reaches the trace (in the tail); the ending/landed join | derived from `text_stream` (terminal replaced by an error frame) |
+//! | `malformed_frame_stream` | a frame that is not JSON | the run reports the parse failure | `landed` Err of kind `json` (`EOF while parsing`), not retryable, no `stream_truncated`, no `provider_retry` | derived from `text_stream` (first frame corrupted) |
+//! | `transport_cut_stream` | the body ends mid-frame | the run reports a truncation | **not** distinguishable from the clean truncation: kind `response`, `delivered: 2`, a tail ending with the last whole frame's delta, `errors: []` (the SSE decoder drops the partial frame — the limitation noted on rig #2478) | derived from `text_stream` (body cut mid-JSON) |
 
 use crate::support::*;
 use rig::observe::{Action, OutcomeSummary};
@@ -240,6 +241,24 @@ fn retried_then_settled(cell: &Cell, first_kind: &str) {
         unreachable!()
     };
     assert_eq!(reason.code, first_kind, "the first landing's kind");
+    // The join on the first ending: the runtime's `provider` code, the
+    // report's kind and message as the detail.
+    let Action::Ended { ending } = cell
+        .find(|a| matches!(a, Action::Ended { .. }))
+        .unwrap()
+        .action
+    else {
+        unreachable!()
+    };
+    assert_eq!(ending.code, "provider");
+    assert!(
+        ending
+            .detail
+            .as_deref()
+            .unwrap_or("")
+            .starts_with(&format!("{first_kind}: ")),
+        "{ending:?}"
+    );
     let expected: Vec<String> = [
         "issued",
         "landed",
@@ -397,15 +416,27 @@ fn a_blocked_prompt() {
             );
             assert_eq!(cell.log().records.len(), 1, "one request");
             if cell.ending() == "settled" {
-                eprintln!(
-                    "[{}/{}] the live API answered instead of blocking; see the table",
-                    MATRIX, cell.name
-                );
+                // What the recordings hold (2026-09-08): an answer, no block.
+                assert_eq!(facts, ["issued", "landed", "ended:settled"]);
+                if !cell.recording() {
+                    let bodies = rig_cassette::recorded_interaction_bodies(
+                        &cassette_root(),
+                        PROVIDER,
+                        &format!("{MATRIX}/{}", cell.name),
+                    );
+                    assert!(
+                        !bodies[0].1.contains("blockReason"),
+                        "no block in the recording"
+                    );
+                    assert!(
+                        bodies[0].0.contains("BLOCK_LOW_AND_ABOVE"),
+                        "the request asked for the strictest thresholds"
+                    );
+                }
             } else {
+                // A block, if a recording ever obtains one.
                 assert!(
-                    cell.ending().contains("blocked the prompt")
-                        || cell.ending().contains("SAFETY")
-                        || cell.ending().contains("block"),
+                    cell.ending().contains("blocked the prompt"),
                     "{}",
                     cell.ending()
                 );
@@ -553,14 +584,29 @@ fn a_malformed_frame() {
                 cell.ending()
             );
             assert_ne!(cell.ending(), "settled");
-            let (code, kind, outcome) = ending_matches_landed(cell);
-            eprintln!("[{MATRIX}/malformed_frame_stream] ended:{code} landed:{kind} {outcome:?}");
-            if let Some(t) = cell.find(|a| matches!(a, Action::StreamTruncated { .. })) {
-                eprintln!(
-                    "[{MATRIX}/malformed_frame_stream] truncation: {}",
-                    serde_json::to_string(&t.action).unwrap()
-                );
-            }
+            let (_, kind, outcome) = ending_matches_landed(cell);
+            assert_eq!(
+                kind,
+                rig::error::ErrorKind::Json.code(),
+                "the parser's kind: {outcome:?}"
+            );
+            let OutcomeSummary::Err { reason, retryable } = outcome else {
+                unreachable!()
+            };
+            assert!(!retryable);
+            assert!(
+                reason
+                    .detail
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("EOF while parsing"),
+                "{reason:?}"
+            );
+            assert_eq!(
+                cell.count("stream_truncated"),
+                0,
+                "a corrupt frame is a parse failure, not a cut: {facts:?}"
+            );
             assert_eq!(
                 cell.count("rigcoder/provider_retry"),
                 0,
@@ -601,14 +647,42 @@ fn a_transport_cut_mid_frame() {
                 cell.ending()
             );
             assert_ne!(cell.ending(), "settled");
-            let (code, kind, outcome) = ending_matches_landed(cell);
-            eprintln!("[{MATRIX}/transport_cut_stream] ended:{code} landed:{kind} {outcome:?}");
-            if let Some(t) = cell.find(|a| matches!(a, Action::StreamTruncated { .. })) {
-                eprintln!(
-                    "[{MATRIX}/transport_cut_stream] truncation: {}",
-                    serde_json::to_string(&t.action).unwrap()
-                );
-            }
+            let (_, kind, _) = ending_matches_landed(cell);
+            assert_eq!(kind, rig::error::ErrorKind::Response.code());
+            // The limitation, pinned: the SSE decoder drops the partial frame,
+            // so a cut mid-frame reads exactly like a clean truncation — the
+            // same ending, a tail ending with the last whole frame's delta,
+            // no error item. Distinguishing them needs a fact from the
+            // decoder (noted on rig #2478).
+            let truncated = cell
+                .find(|a| matches!(a, Action::StreamTruncated { .. }))
+                .expect("reported as a truncation");
+            let Action::StreamTruncated {
+                delivered,
+                tail,
+                errors,
+            } = truncated.action
+            else {
+                unreachable!()
+            };
+            assert_eq!(delivered, 2, "the whole frames before the cut");
+            assert!(
+                errors.is_empty(),
+                "the partial frame raises no error: {errors:?}"
+            );
+            assert!(
+                matches!(
+                    tail.last(),
+                    Some(rig::streaming::StreamEvent::BlockDelta { .. })
+                ),
+                "{tail:?}"
+            );
+            assert!(
+                cell.ending()
+                    .contains("the stream ended before its terminal record"),
+                "{}",
+                cell.ending()
+            );
         },
     );
 }

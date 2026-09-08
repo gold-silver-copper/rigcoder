@@ -8,7 +8,17 @@
 //! Replay (the default, and CI's contract): no key needed.
 //!
 //! The workspace path is part of the request (the preamble names it), so a
-//! cell's workspace is a fixed absolute path under `/tmp`, not a tempdir.
+//! cell's workspace is a fixed absolute path under `/tmp`, not a tempdir,
+//! and cells run one at a time (`ONE_AT_A_TIME`).
+//!
+//! Recording order matters: later matrices replay or derive from earlier
+//! recordings, and `derive` runs before a cell takes the lock. Record with
+//! one thread, matrix by matrix:
+//!
+//! ```sh
+//! RIG_PROVIDER_TEST_MODE=record cargo test -p rigcoder --test gemini_observe -- \
+//!   --test-threads=1 turns:: gates:: interruptions:: failures:: lineage:: host:: drivers::
+//! ```
 
 #![allow(dead_code)]
 
@@ -644,7 +654,6 @@ pub fn cassette_text(docs: &[serde_yaml::Value]) -> String {
 /// them back.
 pub fn sse_frames(body: &str) -> Vec<String> {
     body.split("\r\n\r\n")
-        .chain(std::iter::empty())
         .flat_map(|chunk| chunk.split("\n\n"))
         .filter(|chunk| !chunk.trim().is_empty())
         .map(|chunk| chunk.trim_matches(['\r', '\n']).to_owned())
@@ -715,26 +724,6 @@ pub fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 pub use serde::Deserialize;
 
-/// Consecutive `held`/`released` churn collapsed to one hold: while a call
-/// waits for a host decision, the runtime's batch release lifts the hold
-/// every pass and the approval gate re-places it, so the count is a
-/// function of frames waited, never of the decisions made.
-pub fn without_churn(facts: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for fact in facts {
-        if fact == "held"
-            && out.len() >= 2
-            && out[out.len() - 1] == "released"
-            && out[out.len() - 2] == "held"
-        {
-            out.pop();
-            continue;
-        }
-        out.push(fact.clone());
-    }
-    out
-}
-
 /// A one-thread HTTP/1.1 server that answers every request with the frames
 /// of a recorded streaming response, one frame per `pace`, then closes: the
 /// recorded bytes, delivered slowly enough for a host to act mid-stream.
@@ -801,4 +790,33 @@ pub fn paced_server(frames: Vec<String>, pace: Duration) -> (String, Arc<AtomicU
 pub fn recorded_frames(path: &Path, index: usize) -> Vec<String> {
     let mut docs = read_cassette(path);
     sse_frames(body_of(&mut docs[index]))
+}
+
+/// A unary/streamed parity pair: `body` runs once per wire under
+/// `config(stream)`, and the cells' semantic facts must agree.
+pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(&mut Cell, bool)) {
+    let mut traces = Vec::new();
+    for stream in [false, true] {
+        let cell = format!("{name}_{}", if stream { "stream" } else { "unary" });
+        run(matrix, &cell, config(stream), |cell| {
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(cell, stream)));
+            if cell
+                .app
+                .world()
+                .get_resource::<rig_ecs::bus::Witnessing>()
+                .is_some()
+            {
+                eprintln!("[{}/{}] facts: {:?}", matrix, cell.name, cell.facts());
+            }
+            if let Err(payload) = result {
+                std::panic::resume_unwind(payload);
+            }
+            traces.push(semantic_facts(&cell.trace()));
+        });
+    }
+    assert_eq!(
+        traces[0], traces[1],
+        "unary and streamed agree on the facts"
+    );
 }

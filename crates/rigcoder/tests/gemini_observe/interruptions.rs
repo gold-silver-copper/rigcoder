@@ -119,7 +119,7 @@ fn cancel_mid_stream() {
             // The run ended with its completion still streaming: the product
             // keeps the run entity, so the bus never drops the dispatch —
             // it lands later, whole, and nothing reads it.
-            cell.drive_more(std::time::Duration::from_secs(5), |world| {
+            cell.drive_more(std::time::Duration::from_secs(12), |world| {
                 rigcoder::observations(world).is_some_and(|t| {
                     t.observations.iter().any(|o| {
                         matches!(o.action, Action::Landed { .. } | Action::Cancelled { .. })
@@ -132,8 +132,8 @@ fn cancel_mid_stream() {
                 .trace()
                 .observations
                 .into_iter()
-                .find(|o| matches!(o.action, Action::Landed { .. } | Action::Cancelled { .. }))
-                .expect("the streaming dispatch is accounted for after the run ended");
+                .find(|o| matches!(o.action, Action::Landed { .. }))
+                .expect("the streaming dispatch lands after the run ended");
             assert!(
                 after
                     .subject

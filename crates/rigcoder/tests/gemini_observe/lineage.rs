@@ -8,14 +8,14 @@
 //! |---|---|---|---|---|
 //! | `disabled_witness` | the same cassette with no witness installed | transcript, effect-log records, delivery partitions, workspace file and request sequence identical to the witnessed replay | (no trace) | replay of `one_tool_stream` |
 //! | `passes_a`, `passes_b` | two unwitnessed executions | records identical; pass numbers reported (the tool preparation runs on the task pool, so they may differ) | — | replay of `one_tool_stream` |
-//! | `compare_equal` | two replays of one program | both settled | `compare(a, b) == Equal`; `at` differs and is ignored | replay of `one_tool_stream` |
+//! | `compare_equal` | two replays of one program, each under its own counting clock | both settled | `compare(a, b) == Equal` and the same facts (measurements are not compared: `clock` shows a clockless and a clocked trace `Equal`) | replay of `one_tool_stream` |
 //! | `compare_diverged` | the same program under concurrency 1 instead of 4 | four results either way | `compare` → `Diverged { index }` at a `Gate`-stage fact, before any provider exchange differs | replay of `batch_c4_stream` |
 //! | `compare_incomparable` | a sink of capacity 2 | run unaffected: settled, same answer | `dropped > 0`, `!is_complete()`, `compare` → `Incomparable { incomplete_actual }` | replay of `text_stream` |
 //! | `expected_traces` | committed expected traces for three cells | — | `compare(expected, replayed) == Equal` against `fixtures/observe/<cell>.expected.json` (written in record mode) | replay of `text_stream`, `one_tool_stream`, `invalid_tool_stream` |
 //! | `clock` | a counting host clock | settled | every `at` is `Some` and strictly increasing; `compare` with the clockless trace is `Equal` | replay of `text_stream` |
-//! | `session` | `with_session` | settled | `trace.session` is the run's scope; `compare` ignores it | replay of `text_stream` |
+//! | `session` | `with_session("rigcoder/run/1")` configured by the cell | settled | the trace carries the configured session; `compare` ignores it (a renamed copy is `Equal`) | replay of `text_stream` |
 //! | `correlation` | subjects on a four-call batch | four results | every tool `landed` effect id is a log record and every record landed; keys `tool:bash`, family Tool; four contiguous dispatch orders; completions' `order` increases; runtime-made tool effects carry no `parent` | replay of `batch_c4_stream` |
-//! | `two_runs` | two runs in one session (product retry budget on) | second request carries the first's history; both settled | scopes `rigcoder/run/1` then `rigcoder/run/2`, each ending `settled`; a live 503 met during recording is part of the record | recorded |
+//! | `two_runs` | two runs in one session (the product's retry budget on, so a transient failure during recording would be part of the record; this recording holds two clean exchanges) | second request carries the first's history; both settled | scopes `rigcoder/run/1` then `rigcoder/run/2`, each ending `settled` | recorded |
 
 use crate::support::*;
 use rig::observe::{Action, Comparison, ObservationTrace, Stage, compare};

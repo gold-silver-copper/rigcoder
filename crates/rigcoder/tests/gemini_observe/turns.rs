@@ -1,8 +1,9 @@
 //! Matrix A — turn shapes × delivery (`observe_turns`).
 //!
 //! Every cell is a unary/streamed parity pair recorded against the real
-//! API; the semantic facts (everything but a delivery-only truncation) must
-//! agree between the pair.
+//! API; the semantic facts must agree between the pair (`semantic_facts`:
+//! everything but a delivery-only truncation and the bus's `held`/`released`,
+//! whose count at a host decision is a function of frames waited).
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
@@ -11,7 +12,7 @@
 //! | `batch_c1_{unary,stream}`, `batch_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | holds ≥ 4, each released once, four approvals; concurrency 1 holds more | recorded |
 //! | `two_tools_{unary,stream}` | bash, then read_file, then text | three requests, file content in answer | `Issued` subjects for the completions carry increasing `order`; tools carry their key | recorded |
 //! | `invalid_tool_{unary,stream}` | a call to a function the agent was never given | run failed `UnknownToolCall` | `invalid_call` (name, resolution `fail`), `ended:unknown_tool_call` last | recorded |
-//! | `thinking_{unary,stream}` | `includeThoughts` on | settled; the stream carries thought deltas | trace carries no thought text (payload policy); facts unchanged | recorded |
+//! | `thinking_{unary,stream}` | `includeThoughts` on (`gemini-2.5-flash`, which returns thought parts) | settled; the recorded request asks for thoughts and the recorded response carries ≥ 1 thought part; the record's outcome holds the reasoning | the trace carries no thought or reasoning text (payload policy); facts unchanged | recorded |
 //! | `max_tokens_{unary,stream}` | `finishReason: MAX_TOKENS` under a six-token cap | what the recorded bytes say: no parts → `ended:provider` (empty response), any member → `ended:settled`; never a retry | as stated; no parity claim (Gemini's shape varies per recording) | recorded |
 //! | `empty_candidate_unary` | `content: {}` (no parts), `MAX_TOKENS` | run failed on the empty response | `landed` Err `response`, not retryable, no `provider_retry` | derived from `max_tokens_unary` (content emptied) |
 //! | `empty_member_stream` | one `"text": ""` part, `MAX_TOKENS` | settled with an empty answer | `issued, landed, ended:settled` | derived from `text_stream` (text emptied) |
@@ -21,36 +22,9 @@ use rig::observe::Action;
 
 const MATRIX: &str = "observe_turns";
 
-fn pair(name: &str, config: fn(bool) -> Config, body: impl Fn(&mut Cell, bool)) {
-    let mut traces = Vec::new();
-    for stream in [false, true] {
-        let cell = format!("{name}_{}", if stream { "stream" } else { "unary" });
-        run(MATRIX, &cell, config(stream), |cell| {
-            let result =
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(cell, stream)));
-            if cell
-                .app
-                .world()
-                .get_resource::<rig_ecs::bus::Witnessing>()
-                .is_some()
-            {
-                eprintln!("[{}/{}] facts: {:?}", MATRIX, cell.name, cell.facts());
-            }
-            if let Err(payload) = result {
-                std::panic::resume_unwind(payload);
-            }
-            traces.push(semantic_facts(&cell.trace()));
-        });
-    }
-    assert_eq!(
-        traces[0], traces[1],
-        "unary and streamed agree on the facts"
-    );
-}
-
 #[test]
 fn text_answer() {
-    pair("text", Config::delivery, |cell, _| {
+    pair(MATRIX, "text", Config::delivery, |cell, _| {
         cell.submit("Reply with the single word: pong");
         cell.drive();
         assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
@@ -79,7 +53,7 @@ fn text_answer() {
 
 #[test]
 fn one_tool_call() {
-    pair("one_tool", Config::delivery, |cell, _| {
+    pair(MATRIX, "one_tool", Config::delivery, |cell, _| {
         cell.submit("Run this command: printf hi > out.txt");
         cell.drive();
         assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
@@ -145,9 +119,11 @@ fn one_tool_call() {
 
 #[test]
 fn a_batch_under_concurrency_one_and_four() {
+    HOLDS.lock().unwrap().clear();
     for concurrency in [1usize, 4] {
         let holds = std::sync::Mutex::new(Vec::new());
         pair(
+            MATRIX,
             &format!("batch_c{concurrency}"),
             if concurrency == 1 {
                 |stream| Config {
@@ -199,7 +175,7 @@ static HOLDS: std::sync::Mutex<Vec<(usize, Vec<usize>)>> = std::sync::Mutex::new
 
 #[test]
 fn two_tools_in_sequence() {
-    pair("two_tools", Config::delivery, |cell, _| {
+    pair(MATRIX, "two_tools", Config::delivery, |cell, _| {
         cell.submit(
             "First run this command: printf 'alpha beta' > note.txt . Then, after its result, read the file note.txt with read_file. Then reply with the file's contents.",
         );
@@ -239,6 +215,7 @@ fn two_tools_in_sequence() {
 #[test]
 fn an_invalid_tool_call() {
     pair(
+        MATRIX,
         "invalid_tool",
         |stream| Config {
             prompt: "You are a test agent. You have a function named teleport that takes no arguments. Call it whenever the user asks, without any other text.",
@@ -271,27 +248,70 @@ fn an_invalid_tool_call() {
     );
 }
 
+/// `includeThoughts` on a model that returns thought parts
+/// (`gemini-2.5-flash`; `gemini-3.8-flash` counts thoughts in usage but
+/// returned none on 2026-09-08, which would leave the payload-policy check
+/// vacuous).
 #[test]
 fn thinking_enabled() {
     pair(
+        MATRIX,
         "thinking",
         |stream| Config {
+            model: "gemini-2.5-flash",
             additional_params: Some(serde_json::json!({
                 "generationConfig": {"thinkingConfig": {"includeThoughts": true, "thinkingBudget": 512}}
             })),
             ..Config::delivery(stream)
         },
-        |cell, _| {
-            cell.submit("What is 17 + 25? Reply with just the number.");
+        |cell, stream| {
+            cell.submit("What is 17 + 25? Think it through, then reply with just the number.");
             cell.drive();
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
             assert!(cell.answer().contains("42"), "{}", cell.answer());
             let facts = cell.facts();
             assert_eq!(facts, ["issued", "landed", "ended:settled"], "{facts:?}");
-            // The payload policy: the trace summarises the outcome, it never
-            // carries reasoning text.
+            if !cell.recording() {
+                // The wire: the request asked, the response carried thoughts.
+                let scenario = format!("{MATRIX}/{}", cell.name);
+                let request =
+                    rig_cassette::recorded_json_request(&cassette_root(), PROVIDER, &scenario);
+                assert_eq!(
+                    request["generationConfig"]["thinkingConfig"]["includeThoughts"], true,
+                    "{request}"
+                );
+                let thought_parts: usize = if stream {
+                    rig_cassette::recorded_sse_json_frames(&cassette_root(), PROVIDER, &scenario)
+                        .iter()
+                        .flat_map(|f| {
+                            f["candidates"][0]["content"]["parts"]
+                                .as_array()
+                                .cloned()
+                                .unwrap_or_default()
+                        })
+                        .filter(|p| p["thought"] == true)
+                        .count()
+                } else {
+                    rig_cassette::recorded_json_response(&cassette_root(), PROVIDER, &scenario)["candidates"][0]["content"]["parts"]
+                        .as_array()
+                        .map_or(0, |parts| parts.iter().filter(|p| p["thought"] == true).count())
+                };
+                assert!(thought_parts >= 1, "the recording carries thought parts");
+            }
+            // The record holds the reasoning; the trace only summarises the
+            // outcome and never carries reasoning text.
+            let log = cell.log();
+            assert!(
+                serde_json::to_string(&log.records[0].outcome)
+                    .unwrap()
+                    .contains("easoning"),
+                "the record keeps the thoughts"
+            );
             let json = serde_json::to_string(&cell.trace()).unwrap();
-            assert!(!json.contains("thought"), "{json}");
+            assert!(
+                !json.contains("thought") && !json.contains("easoning"),
+                "{json}"
+            );
         },
     );
 }
@@ -457,8 +477,8 @@ fn an_empty_candidate_is_rejected_unary() {
     );
 }
 
-/// The streamed empty shape: one text part with `"text": ""` and a thought
-/// signature, `MAX_TOKENS`. Derived from `text_stream` by emptying its text.
+/// The streamed empty shape: text parts with `"text": ""` (one per frame),
+/// `MAX_TOKENS`. Derived from `text_stream` by emptying its text.
 #[test]
 fn an_empty_member_settles_stream() {
     let source = cassette_path(MATRIX, "text_stream");
