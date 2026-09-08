@@ -9,12 +9,12 @@ license = "MIT"
 repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
-# Keep all Rig dependencies on the extraction commit from Rig PR #2474.
-rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "de83e9fb2415ce128fef543b5cc1c94ae9863685", default-features = false }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "de83e9fb2415ce128fef543b5cc1c94ae9863685" }
-rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "de83e9fb2415ce128fef543b5cc1c94ae9863685", default-features = false }
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "de83e9fb2415ce128fef543b5cc1c94ae9863685", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "de83e9fb2415ce128fef543b5cc1c94ae9863685", default-features = false, features = ["reqwest", "rustls"] }
+# Keep all Rig dependencies on the head of Rig PR #2476 (feat/observe-1, stacked on #2443).
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }

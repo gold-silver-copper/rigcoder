@@ -158,7 +158,7 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
         &env,
         &format!(
             "{REMOTE_BIN} --cwd {} --max-turns {max_turns} --timeout-secs {timeout_secs} \
-             --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json --task-file /logs/agent/instruction.md{checkpoint} \
+             --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json --observations /logs/agent/observations.json --task-file /logs/agent/instruction.md{checkpoint} \
              > /logs/agent/rigcoder.txt 2>&1; status=$?; echo $status > /logs/agent/exit_code.txt; exit $status",
             shell_quote(&task.workdir)
         ),
@@ -376,7 +376,7 @@ pub fn branch_from(
                 &env,
                 &format!(
                     "{REMOTE_BIN} --cwd {} --max-turns {max_turns} --timeout-secs {timeout_secs} \
-                     --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json \
+                     --transcript /logs/agent/transcript.jsonl --effect-log /logs/agent/effects.json --observations /logs/agent/observations.json \
                      --resume /logs/agent/resume.scene.json > /logs/agent/rigcoder.txt 2>&1; status=$?; echo $status > /logs/agent/exit_code.txt; exit $status",
                     shell_quote(&task.workdir)
                 ),

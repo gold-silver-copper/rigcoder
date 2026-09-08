@@ -56,6 +56,10 @@ struct Args {
     /// Write the effect log (every model exchange and tool call, replayable without keys) here at exit.
     #[arg(long)]
     effect_log: Option<PathBuf>,
+    /// Write the observation trace (every decision around those exchanges: holds, denials,
+    /// approvals, retries, truncations, endings) here at exit.
+    #[arg(long)]
+    observations: Option<PathBuf>,
     /// Replay a recorded effect log instead of calling a provider: the model and the
     /// tools answer from the record; the first request that differs is reported as a divergence (exit 3).
     #[arg(long, conflicts_with = "resume")]
@@ -220,6 +224,46 @@ fn write_effect_log(world: &mut World) {
     world.resource_mut::<EffectLogOut>().written = true;
 }
 
+#[derive(Resource)]
+struct ObservationsOut {
+    path: Option<PathBuf>,
+    written: bool,
+}
+
+/// Once the run has ended, finalize and write the observation trace beside
+/// the effect log.
+fn write_observations(world: &mut World) {
+    let over = {
+        let c = world.resource::<rigcoder::Conversation>();
+        c.runs > 0 && !c.is_busy()
+    };
+    let due = {
+        let out = world.resource::<ObservationsOut>();
+        over && !out.written && out.path.is_some()
+    };
+    if !due {
+        return;
+    }
+    let path = world
+        .resource::<ObservationsOut>()
+        .path
+        .clone()
+        .expect("checked");
+    rigcoder::observe::finalize(world);
+    let result = rigcoder::observations(world)
+        .ok_or_else(|| "no witness is installed".to_owned())
+        .and_then(|trace| serde_json::to_vec(&trace).map_err(|error| error.to_string()))
+        .and_then(|json| write_log_atomically(&path, &json).map_err(|error| error.to_string()));
+    if let Err(error) = result {
+        eprintln!(
+            "rigcoder: could not write the observations to {}: {error}",
+            path.display()
+        );
+        world.write_message(AppExit::error());
+    }
+    world.resource_mut::<ObservationsOut>().written = true;
+}
+
 fn write_log_atomically(path: &std::path::Path, json: &[u8]) -> std::io::Result<()> {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".{}.partial", std::process::id()));
@@ -348,6 +392,7 @@ fn main() -> anyhow::Result<()> {
     eprintln!("rigcoder: {model} in {}", workspace.display());
 
     let effect_log_path = args.effect_log.clone();
+    let observations_path = args.observations.clone();
     let prompt_override = args
         .prompt_file
         .as_ref()
@@ -400,7 +445,11 @@ fn main() -> anyhow::Result<()> {
         path: effect_log_path,
         written: false,
     })
-    .add_systems(bevy_app::Last, write_effect_log);
+    .insert_resource(ObservationsOut {
+        path: observations_path,
+        written: false,
+    })
+    .add_systems(bevy_app::Last, (write_effect_log, write_observations));
     let exit = app.run();
     match exit {
         AppExit::Success => Ok(()),
@@ -468,7 +517,7 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
                 let _ = writeln!(stdout, "[settled after {:?}]", cli.started.elapsed());
                 exit.write(AppExit::Success);
             }
-            Event::Failed(reason) => {
+            Event::Failed { reason } => {
                 let _ = writeln!(stdout, "[failed] {reason}");
                 exit.write(
                     if reason.contains("replay")

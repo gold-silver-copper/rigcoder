@@ -90,7 +90,7 @@ async fn all_providers_use_host_transport_tokens_and_stream_mode_without_retries
                 transcript
                     .events
                     .iter()
-                    .any(|e| matches!(e, Event::Failed(_)))
+                    .any(|e| matches!(e, Event::Failed { .. }))
             );
             assert!(
                 !transcript

@@ -86,9 +86,9 @@ pub fn save_between_turns(world: &mut World) {
         Err(error) => {
             // One actionable failure, rather than another failure every tick.
             world.resource_mut::<Checkpoint>().dir = None;
-            world
-                .resource_mut::<Transcript>()
-                .push(Event::Failed(format!("checkpoint {materialised}: {error}")));
+            world.resource_mut::<Transcript>().push(Event::Failed {
+                reason: format!("checkpoint {materialised}: {error}"),
+            });
         }
     }
 }

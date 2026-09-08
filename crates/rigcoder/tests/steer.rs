@@ -79,7 +79,7 @@ fn capture_when_over(
         && transcript
             .events
             .iter()
-            .any(|e| matches!(e, Event::Failed(_)));
+            .any(|e| matches!(e, Event::Failed { .. }));
     if (conversation.runs > 0 && conversation.active.is_none()) || failed_setup || *ticks > 20_000 {
         *captured.0.lock().unwrap() = transcript.events.clone();
         exit.write(AppExit::Success);

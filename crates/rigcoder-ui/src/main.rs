@@ -397,7 +397,7 @@ fn render_transcript(events: &[Event]) -> Text<'static> {
                 lines.push(Line::from(Span::styled("─".repeat(40), Style::new().dim())));
                 lines.push(Line::default());
             }
-            Event::Failed(reason) => {
+            Event::Failed { reason } => {
                 lines.push(Line::from(Span::styled(
                     format!("run failed: {reason}"),
                     Style::new().fg(Color::Red).bold(),
