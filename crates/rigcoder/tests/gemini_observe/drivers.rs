@@ -4,8 +4,8 @@
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
-//! | `deferred_intake` | `ServingPolicy { command_capacity: 1 }` over a four-call batch | four results | `deferred:intake_bound` at `Dispatch` (emitter `rig-ecs/bus`), once per intent left behind, before its `issued` | replay of `observe_turns/batch_c4_stream` |
-//! | `deferred_serial` | `serial_per_handler: true` over the same batch | four results, served one at a time | `deferred:serial_key_busy` for calls behind the one in flight, each before its `issued` | replay of `observe_turns/batch_c4_stream` |
+//! | `deferred_intake` | `ServingPolicy { command_capacity: 1 }` over a four-call batch | four results | `deferred:intake_bound` at `Dispatch` (emitter `rig-ecs/bus`), once per intent left behind, before its `issued` | replay of `observe_turns/calls4_c4_stream` |
+//! | `deferred_serial` | `serial_per_handler: true` over the same batch | four results, served one at a time | `deferred:serial_key_busy` for calls behind the one in flight, each before its `issued` | replay of `observe_turns/calls4_c4_stream` |
 //! | `refused_handler` | the bash handler despawned while its call waits for approval | no file written; the model is told the tool is unavailable; the run ends on the replay miss that follows (no recording holds the refusal's read-back) | `approval:approved` then `refused:handler_unavailable` at `Dispatch` keyed `tool:bash`, never issued, no record | derived from `observe_gates/ask_approve_stream` (first exchange only) |
 //! | `retry_deliverable_stream` | a required file missing after a text-only answer | the file exists at the end; two exchanges | `retry` at `Runtime` with the feedback the model reads, then `issued`… `ended:settled` | recorded |
 //! | `approved` | `Action::Approved` | — | no producer in this product: the library reserves it for a host policy that approves through `Witnessing::emit`; rigcoder names its approvals as `rigcoder/approval` host facts (matrix B) | none (documented) |
@@ -32,8 +32,9 @@ fn an_intake_bound_defers() {
         MATRIX,
         "deferred_intake",
         Config {
-            source: Source::of("observe_turns", "batch_c4_stream"),
+            source: Source::of("observe_turns", "calls4_c4_stream"),
             concurrency: Some(4),
+            volatile: true,
             ..Config::streamed()
         },
         |cell| {
@@ -77,8 +78,9 @@ fn a_serial_key_defers() {
         MATRIX,
         "deferred_serial",
         Config {
-            source: Source::of("observe_turns", "batch_c4_stream"),
+            source: Source::of("observe_turns", "calls4_c4_stream"),
             concurrency: Some(4),
+            volatile: true,
             ..Config::streamed()
         },
         |cell| {

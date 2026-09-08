@@ -1,0 +1,7 @@
+{"kind":"user","text":"Write the text hello into the file outside.txt"}
+{"kind":"tool_call","name":"write_file","args":"{\"content\":\"hello\",\"path\":\"outside.txt\"}"}
+{"kind":"denied","name":"write_file","reason":"outside.txt is outside the allowed paths"}
+{"kind":"tool_result","name":"write_file","output":"denied: outside.txt is outside the allowed paths","ok":false}
+{"kind":"assistant","text":"I attempted to write the file, but access was denied because outside.txt is outside the allowed paths."}
+{"kind":"usage","input_tokens":1677,"output_tokens":45,"cached_input_tokens":0,"total_tokens":1874}
+{"kind":"settled","answer":"I attempted to write the file, but access was denied because outside.txt is outside the allowed paths."}

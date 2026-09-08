@@ -1,0 +1,66 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Reply with the single word: one"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "one"
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_1"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Now reply with the single word: two"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "two"
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_2"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

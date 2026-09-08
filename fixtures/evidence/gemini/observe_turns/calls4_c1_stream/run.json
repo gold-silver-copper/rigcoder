@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "settled",
+  "answer": "All four echo commands have been executed successfully.",
+  "provider_retries": 0,
+  "records": 6,
+  "observations": 35
+}

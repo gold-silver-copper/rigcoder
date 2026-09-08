@@ -1,0 +1,30 @@
+{
+  "matrix": "observe_driver",
+  "cell": "retry_deliverable_stream",
+  "source": {
+    "kind": "cassette",
+    "scenario": "observe_driver/retry_deliverable_stream"
+  },
+  "model": "gemini-3.8-flash",
+  "stream": true,
+  "max_tokens": 512,
+  "provider_retries": 0,
+  "max_turns": 6,
+  "approval": "auto",
+  "prompt": "You are a test agent in a workspace. Answer the user directly. If told that required files are missing, create them with the bash tool (printf), then reply with one short sentence.",
+  "concurrency": null,
+  "additional_params": null,
+  "bogus_key": false,
+  "layers": false,
+  "scope": false,
+  "steer_overridden": true,
+  "keep_stream_events": false,
+  "witness": {
+    "capacity": null,
+    "clock": false,
+    "session": null
+  },
+  "volatile": false,
+  "rig": "a219d2b0c73d",
+  "rigcoder": "0.1.0"
+}

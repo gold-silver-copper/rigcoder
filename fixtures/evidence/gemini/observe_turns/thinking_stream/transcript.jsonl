@@ -1,0 +1,4 @@
+{"kind":"user","text":"What is 17 + 25? Think it through, then reply with just the number."}
+{"kind":"assistant","text":"42"}
+{"kind":"usage","input_tokens":782,"output_tokens":1,"cached_input_tokens":0,"total_tokens":804}
+{"kind":"settled","answer":"42"}

@@ -123,6 +123,10 @@ pub struct Config {
     pub scope: Option<fn(&Path) -> Scope>,
     /// Record streamed dispatches' events verbatim in the effect log.
     pub keep_stream_events: bool,
+    /// The cell's evidence packet is not compared on replay (its story has
+    /// a timing in it: a cancellation racing a handler); it is still
+    /// written whenever packets are written.
+    pub volatile: bool,
 }
 
 #[derive(Clone, Default)]
@@ -189,6 +193,7 @@ impl Default for Config {
             layers: None,
             scope: None,
             keep_stream_events: false,
+            volatile: false,
         }
     }
 }
@@ -233,6 +238,9 @@ pub struct Cell {
     pub app: App,
     pub mode: CassetteMode,
     pub ticks: Arc<Ticks>,
+    /// The cell's configuration, as the evidence packet records it.
+    pub described: serde_json::Value,
+    volatile: bool,
     rt: tokio::runtime::Runtime,
     cassette: Option<ProviderCassette>,
 }
@@ -270,6 +278,35 @@ impl Cell {
             Source::None => (None, PathBuf::new(), (matrix.to_owned(), name.to_owned())),
             Source::Paced { workspace, .. } => (None, PathBuf::new(), workspace.clone()),
         };
+        let described = serde_json::json!({
+            "matrix": matrix,
+            "cell": name,
+            "source": match &config.source {
+                Source::Ambient => serde_json::json!({"kind": "cassette", "scenario": format!("{matrix}/{name}")}),
+                Source::Replay { path, workspace } => serde_json::json!({"kind": "replay", "path": path.strip_prefix(fixture_root()).map(|p| p.display().to_string()).unwrap_or_else(|_| path.display().to_string()), "workspace_of": format!("{}/{}", workspace.0, workspace.1)}),
+                Source::None => serde_json::json!({"kind": "none"}),
+                Source::Paced { frames, pace, workspace } => serde_json::json!({"kind": "paced", "frames": frames.len(), "pace_ms": pace.as_millis(), "workspace_of": format!("{}/{}", workspace.0, workspace.1)}),
+            },
+            "model": config.model,
+            "stream": config.stream,
+            "max_tokens": config.max_tokens,
+            "provider_retries": config.retries,
+            "max_turns": config.max_turns,
+            "approval": format!("{:?}", config.approval).to_ascii_lowercase(),
+            "prompt": config.prompt,
+            "concurrency": config.concurrency,
+            "additional_params": config.additional_params,
+            "bogus_key": config.bogus_key,
+            "layers": config.layers.is_some(),
+            "scope": config.scope.is_some(),
+            "steer_overridden": config.steer.is_some(),
+            "keep_stream_events": config.keep_stream_events,
+            "witness": config.witness.as_ref().map(|w| serde_json::json!({"capacity": w.capacity, "clock": w.clock, "session": w.session})),
+            "volatile": config.volatile,
+            "rig": &RIG_REV[..12],
+            "rigcoder": env!("CARGO_PKG_VERSION"),
+        });
+        let volatile = config.volatile;
         let cassette = mode.map(|mode| {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).unwrap();
@@ -387,9 +424,101 @@ impl Cell {
             app,
             mode: mode.unwrap_or(CassetteMode::Replay),
             ticks,
+            described,
+            volatile,
             rt,
             cassette,
         }
+    }
+
+    /// Everything the world holds about the run, as files: the evidence
+    /// packet. Written to `fixtures/evidence/gemini/<matrix>/<cell>/` when
+    /// packets are being written (`RIGCODER_EVIDENCE=write`, or cassette
+    /// record mode), otherwise regenerated in scratch and compared with the
+    /// committed packet after stripping measurements (delivery pass
+    /// numbers, clock stamps), unless the cell is `volatile`.
+    pub fn evidence(&self) {
+        let world = self.app.world();
+        let mut files: Vec<(String, String)> = Vec::new();
+        files.push(("cell.json".into(), pretty(&self.described)));
+        let log = rigcoder::effect_log(world);
+        files.push(("effects.json".into(), pretty(&log)));
+        if let Some(trace) = rigcoder::observations(world) {
+            files.push(("observations.json".into(), pretty(&trace)));
+        }
+        let transcript: String = world
+            .resource::<Transcript>()
+            .events
+            .iter()
+            .map(|e| serde_json::to_string(e).unwrap() + "\n")
+            .collect();
+        files.push(("transcript.jsonl".into(), transcript));
+        let conversation = world.resource::<Conversation>();
+        files.push(("history.json".into(), pretty(&conversation.history)));
+        files.push((
+            "run.json".into(),
+            pretty(&serde_json::json!({
+                "runs": conversation.runs,
+                "ending": self.ending(),
+                "answer": self.answer(),
+                "provider_retries": conversation.provider_retries,
+                "records": log.records.len(),
+                "observations": rigcoder::observations(world).map(|t| t.observations.len()),
+            })),
+        ));
+        let mut workspace: Vec<(String, String)> = Vec::new();
+        snapshot(&self.dir, &self.dir, &mut workspace);
+        workspace.sort();
+        for (path, content) in workspace {
+            files.push((format!("workspace/{path}"), content));
+        }
+        let packet = fixture_root()
+            .join("evidence")
+            .join(PROVIDER)
+            .join(&self.matrix)
+            .join(&self.name);
+        if writing_evidence() {
+            let _ = std::fs::remove_dir_all(&packet);
+            for (name, content) in &files {
+                let path = packet.join(name);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(&path, content).unwrap();
+            }
+            return;
+        }
+        assert!(
+            packet.is_dir(),
+            "{}: no evidence packet; write them with RIGCODER_EVIDENCE=write",
+            packet.display()
+        );
+        for (name, content) in &files {
+            let committed = std::fs::read_to_string(packet.join(name)).unwrap_or_else(|e| {
+                panic!(
+                    "{}/{name}: {e}; regenerate with RIGCODER_EVIDENCE=write",
+                    packet.display()
+                )
+            });
+            if self.volatile {
+                continue;
+            }
+            let (a, b) = (normalized(name, &committed), normalized(name, content));
+            assert!(
+                a == b,
+                "{}/{name} drifted from the committed evidence; regenerate with RIGCODER_EVIDENCE=write if the change is intended\n--- committed\n{}\n--- now\n{}",
+                packet.display(),
+                &a[..a.len().min(2000)],
+                &b[..b.len().min(2000)]
+            );
+        }
+        let mut listed = Vec::new();
+        list(&packet, &packet, &mut listed);
+        let mut produced: Vec<String> = files.iter().map(|(n, _)| n.clone()).collect();
+        listed.sort();
+        produced.sort();
+        assert_eq!(
+            listed, produced,
+            "the packet holds exactly what the run produced"
+        );
     }
 
     pub fn recording(&self) -> bool {
@@ -573,7 +702,10 @@ pub fn run(matrix: &str, name: &str, config: Config, body: impl FnOnce(&mut Cell
     let mut cell = Cell::new(matrix, name, config);
     let result = catch_unwind(AssertUnwindSafe(|| body(&mut cell)));
     match result {
-        Ok(()) => cell.finish(),
+        Ok(()) => {
+            cell.evidence();
+            cell.finish()
+        }
         Err(payload) => {
             drop(cell);
             resume_unwind(payload);
@@ -816,4 +948,149 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
         traces[0], traces[1],
         "unary and streamed agree on the facts"
     );
+}
+
+/// The Rig revision every cell runs against (the workspace pin).
+pub const RIG_REV: &str = "a219d2b0c73d87bd8d1fe080c0cbdf95e0b35fe4";
+
+fn pretty<T: serde::Serialize>(value: &T) -> String {
+    serde_json::to_string_pretty(value).unwrap() + "\n"
+}
+
+/// Whether evidence packets are being written rather than compared.
+pub fn writing_evidence() -> bool {
+    std::env::var("RIGCODER_EVIDENCE").is_ok_and(|v| v == "write")
+        || CassetteMode::current() == CassetteMode::Record
+}
+
+/// The workspace's files, relative path and content (binary as base64).
+fn snapshot(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            snapshot(root, &path, out);
+        } else if let Ok(rel) = path.strip_prefix(root) {
+            let content = match std::fs::read(&path) {
+                Ok(bytes) => match String::from_utf8(bytes) {
+                    Ok(text) => text,
+                    Err(e) => format!("base64:{}", base64_encode(e.as_bytes())),
+                },
+                Err(e) => format!("unreadable: {e}"),
+            };
+            out.push((rel.display().to_string(), content));
+        }
+    }
+}
+
+fn list(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            list(root, &path, out);
+        } else if let Ok(rel) = path.strip_prefix(root) {
+            out.push(rel.display().to_string());
+        }
+    }
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// A packet file with its measurements stripped: delivery pass numbers in
+/// the effect log, clock stamps in the trace.
+fn normalized(name: &str, content: &str) -> String {
+    match name {
+        "effects.json" => {
+            let mut v: serde_json::Value = serde_json::from_str(content).unwrap();
+            collapse_deliveries(&mut v);
+            pretty(&v)
+        }
+        "observations.json" => {
+            let mut v: serde_json::Value = serde_json::from_str(content).unwrap();
+            if let Some(observations) = v
+                .pointer_mut("/observations")
+                .and_then(|d| d.as_array_mut())
+            {
+                for o in observations {
+                    o.as_object_mut().map(|o| o.remove("at"));
+                }
+            }
+            pretty(&v)
+        }
+        // A failure's Debug form carries the response headers the report
+        // kept, and the replay server stamps `date` at replay time.
+        "transcript.jsonl" | "run.json" => DATE_HEADER
+            .replace_all(content, "date: <replayed>")
+            .into_owned(),
+        _ => content.to_owned(),
+    }
+}
+
+static DATE_HEADER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(
+        r#"date\\?": \\?"[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT\\?""#,
+    )
+    .unwrap()
+});
+
+/// An effect log's delivery partitions with their measurements removed:
+/// the schedule pass (`batch`) a delivery landed in, and how a stream was
+/// split across passes (consecutive stream deliveries of one effect become
+/// one, their items summed) — both depend on when bytes arrived, not on
+/// what the program decided.
+pub fn collapse_deliveries(log: &mut serde_json::Value) {
+    let Some(deliveries) = log
+        .pointer_mut("/header/deliveries")
+        .and_then(|d| d.as_array_mut())
+    else {
+        return;
+    };
+    let mut collapsed: Vec<serde_json::Value> = Vec::new();
+    for mut d in deliveries.drain(..) {
+        if let Some(o) = d.as_object_mut() {
+            o.remove("batch");
+        }
+        let is_stream = d["kind"]["delivery"] == "stream";
+        if is_stream
+            && let Some(last) = collapsed.last_mut()
+            && last["kind"]["delivery"] == "stream"
+            && last["id"] == d["id"]
+        {
+            let items = last["kind"]["items"].as_u64().unwrap_or(0)
+                + d["kind"]["items"].as_u64().unwrap_or(0);
+            last["kind"]["items"] = serde_json::Value::from(items);
+            continue;
+        }
+        collapsed.push(d);
+    }
+    *deliveries = collapsed;
 }

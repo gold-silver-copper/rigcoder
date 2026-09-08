@@ -1,0 +1,8 @@
+{"kind":"user","text":"Reply with the single word: one"}
+{"kind":"assistant","text":"one"}
+{"kind":"usage","input_tokens":796,"output_tokens":1,"cached_input_tokens":0,"total_tokens":817}
+{"kind":"settled","answer":"one"}
+{"kind":"user","text":"Now reply with the single word: two"}
+{"kind":"assistant","text":"two"}
+{"kind":"usage","input_tokens":827,"output_tokens":1,"cached_input_tokens":0,"total_tokens":848}
+{"kind":"settled","answer":"two"}

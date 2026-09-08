@@ -1,0 +1,3 @@
+{"kind":"user","text":"Call the teleport function now."}
+{"kind":"usage","input_tokens":764,"output_tokens":5,"cached_input_tokens":0,"total_tokens":1258}
+{"kind":"failed","reason":"UnknownToolCall { name: \"teleport\" }"}

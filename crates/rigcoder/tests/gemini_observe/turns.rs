@@ -8,7 +8,7 @@
 //! |---|---|---|---|---|
 //! | `text_{unary,stream}` | one text turn | settled, one request, answer says pong | `issued, landed, ended:settled`; all scoped to the run; `Landed` carries the effect id | recorded |
 //! | `one_tool_{unary,stream}` | one bash call, auto approval, then text | file written, two requests | `held`, approval `prepared`/`approved`, `released`, then the tool `issued`: the hold is the gate's decision, no churn; tool subject keyed `tool:bash`, family Tool, effect id in the log | recorded |
-//! | `batch_c1_{unary,stream}`, `batch_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | holds ≥ 4, each released once, four approvals; concurrency 1 holds more | recorded |
+//! | `calls4_c1_{unary,stream}`, `calls4_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | holds ≥ 4, each released once, four approvals; concurrency 1 holds at least as much as 4 (the batch's holds on top of the gate's, where they do not coincide) | recorded; evidence packet volatile (a hold/release race under 1, id order under 4) |
 //! | `two_tools_{unary,stream}` | bash, then read_file, then text | three requests, file content in answer | `Issued` subjects for the completions carry increasing `order`; tools carry their key | recorded |
 //! | `invalid_tool_{unary,stream}` | a call to a function the agent was never given | run failed `UnknownToolCall` | `invalid_call` (name, resolution `fail`), `ended:unknown_tool_call` last | recorded |
 //! | `thinking_{unary,stream}` | `includeThoughts` on (`gemini-2.5-flash`, which returns thought parts) | settled; the recorded request asks for thoughts and the recorded response carries ≥ 1 thought part; the record's outcome holds the reasoning | the trace carries no thought or reasoning text (payload policy); facts unchanged | recorded |
@@ -123,15 +123,21 @@ fn a_batch_under_concurrency_one_and_four() {
         let holds = std::sync::Mutex::new(Vec::new());
         pair(
             MATRIX,
-            &format!("batch_c{concurrency}"),
+            &format!("calls4_c{concurrency}"),
+            // Volatile packets: under concurrency 1 a policy hold and the
+            // batch's release race on the same call (one `held` more or
+            // less); under 4 the parallel dispatch issues ids in varying
+            // order. Both are recorded in the ledger.
             if concurrency == 1 {
                 |stream| Config {
                     concurrency: Some(1),
+                    volatile: true,
                     ..Config::delivery(stream)
                 }
             } else {
                 |stream| Config {
                     concurrency: Some(4),
+                    volatile: true,
                     ..Config::delivery(stream)
                 }
             },
@@ -164,9 +170,11 @@ fn a_batch_under_concurrency_one_and_four() {
         .find(|(c, _)| *c == 4)
         .map(|(_, h)| h.clone())
         .unwrap();
+    // Under 4 every hold is the gate's (one per call); under 1 the batch's
+    // own holds come on top, except where the gate's hold already stood.
     assert!(
-        one[0] > four[0] && one[1] > four[1],
-        "concurrency 1 holds more than 4: {one:?} vs {four:?}"
+        one[0] >= four[0] && one[1] >= four[1],
+        "concurrency 1 holds at least as much as 4: {one:?} vs {four:?}"
     );
 }
 

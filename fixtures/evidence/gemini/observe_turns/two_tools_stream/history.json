@@ -1,0 +1,126 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "First run this command: printf 'alpha beta' > note.txt . Then, after its result, read the file note.txt with read_file. Then reply with the file's contents."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_280677"
+        },
+        "provider": {
+          "call_id": "call_280677"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf 'alpha beta' > note.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_280677"
+        },
+        "provider": {
+          "call_id": "call_280677"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "[exit code: 0]"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_31072"
+        },
+        "provider": {
+          "call_id": "call_31072"
+        },
+        "function": {
+          "name": "read_file",
+          "arguments": {
+            "path": "note.txt"
+          }
+        },
+        "signature": "signature_REDACTED_2",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_31072"
+        },
+        "provider": {
+          "call_id": "call_31072"
+        },
+        "name": "read_file",
+        "content": [
+          {
+            "type": "text",
+            "text": "     1\talpha beta\n"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "The contents of note.txt are alpha beta."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_3"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

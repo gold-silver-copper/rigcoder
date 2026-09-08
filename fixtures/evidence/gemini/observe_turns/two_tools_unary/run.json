@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "settled",
+  "answer": "The contents of note.txt are alpha beta.",
+  "provider_retries": 0,
+  "records": 5,
+  "observations": 15
+}

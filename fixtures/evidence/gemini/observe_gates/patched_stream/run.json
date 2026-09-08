@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "settled",
+  "answer": "patched",
+  "provider_retries": 0,
+  "records": 1,
+  "observations": 4
+}

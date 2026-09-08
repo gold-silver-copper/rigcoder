@@ -1,0 +1,126 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: printf stale > stale.txt"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_388314"
+        },
+        "provider": {
+          "call_id": "call_388314"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf stale > stale.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_388314"
+        },
+        "provider": {
+          "call_id": "call_388314"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "tool arguments changed after preparation began"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_347412"
+        },
+        "provider": {
+          "call_id": "call_347412"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf stale > stale.txt"
+          }
+        },
+        "signature": "signature_REDACTED_2",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_347412"
+        },
+        "provider": {
+          "call_id": "call_347412"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "[exit code: 0]"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "The command has been executed successfully."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_3"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

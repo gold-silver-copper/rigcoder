@@ -1,0 +1,7 @@
+{"kind":"user","text":"Run this command: echo forbidden"}
+{"kind":"tool_call","name":"bash","args":"{\"command\":\"echo forbidden\"}"}
+{"kind":"denied","name":"bash","reason":"that word is forbidden here"}
+{"kind":"tool_result","name":"bash","output":"denied: that word is forbidden here","ok":false}
+{"kind":"assistant","text":"The command was denied because the word is forbidden."}
+{"kind":"usage","input_tokens":1709,"output_tokens":25,"cached_input_tokens":0,"total_tokens":1863}
+{"kind":"settled","answer":"The command was denied because the word is forbidden."}

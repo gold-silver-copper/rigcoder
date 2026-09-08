@@ -1,0 +1,185 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run these four commands, each as its own bash call, all in this one reply: echo 1 ; echo 2 ; echo 3 ; echo 4 (four separate calls, one command each)"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_71229"
+        },
+        "provider": {
+          "call_id": "call_71229"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "echo 1"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      },
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_71233"
+        },
+        "provider": {
+          "call_id": "call_71233"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "echo 2"
+          }
+        },
+        "signature": null,
+        "additional_params": null
+      },
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_71240"
+        },
+        "provider": {
+          "call_id": "call_71240"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "echo 3"
+          }
+        },
+        "signature": null,
+        "additional_params": null
+      },
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_71241"
+        },
+        "provider": {
+          "call_id": "call_71241"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "echo 4"
+          }
+        },
+        "signature": null,
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_71229"
+        },
+        "provider": {
+          "call_id": "call_71229"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "1\n[exit code: 0]"
+          }
+        ]
+      },
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_71233"
+        },
+        "provider": {
+          "call_id": "call_71233"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "2\n[exit code: 0]"
+          }
+        ]
+      },
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_71240"
+        },
+        "provider": {
+          "call_id": "call_71240"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "3\n[exit code: 0]"
+          }
+        ]
+      },
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_71241"
+        },
+        "provider": {
+          "call_id": "call_71241"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "4\n[exit code: 0]"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "The four commands have been executed successfully."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_2"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

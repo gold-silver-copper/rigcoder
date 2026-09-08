@@ -1,0 +1,4 @@
+{"kind":"user","text":"Write a paragraph of at least one hundred words about rivers."}
+{"kind":"assistant","text":"Rivers are"}
+{"kind":"usage","input_tokens":802,"output_tokens":2,"cached_input_tokens":0,"total_tokens":804}
+{"kind":"settled","answer":"Rivers are"}

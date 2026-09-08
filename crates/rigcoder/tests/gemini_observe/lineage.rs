@@ -9,12 +9,12 @@
 //! | `disabled_witness` | the same cassette with no witness installed | transcript, effect-log records, delivery partitions, workspace file and request sequence identical to the witnessed replay | (no trace) | replay of `one_tool_stream` |
 //! | `passes_a`, `passes_b` | two unwitnessed executions | records identical; pass numbers reported (the tool preparation runs on the task pool, so they may differ) | — | replay of `one_tool_stream` |
 //! | `compare_equal` | two replays of one program, each under its own counting clock | both settled | `compare(a, b) == Equal` and the same facts (measurements are not compared: `clock` shows a clockless and a clocked trace `Equal`) | replay of `one_tool_stream` |
-//! | `compare_diverged` | the same program under concurrency 1 instead of 4 | four results either way | `compare` → `Diverged { index }` at a `Gate`-stage fact, before any provider exchange differs | replay of `batch_c4_stream` |
+//! | `compare_diverged` | the same program under concurrency 1 instead of 4 | four results either way | `compare` → `Diverged { index }` at a `Gate`-stage fact, before any provider exchange differs | replay of `calls4_c4_stream` |
 //! | `compare_incomparable` | a sink of capacity 2 | run unaffected: settled, same answer | `dropped > 0`, `!is_complete()`, `compare` → `Incomparable { incomplete_actual }` | replay of `text_stream` |
 //! | `expected_traces` | committed expected traces for three cells | — | `compare(expected, replayed) == Equal` against `fixtures/observe/<cell>.expected.json` (written in record mode) | replay of `text_stream`, `one_tool_stream`, `invalid_tool_stream` |
 //! | `clock` | a counting host clock | settled | every `at` is `Some` and strictly increasing; `compare` with the clockless trace is `Equal` | replay of `text_stream` |
 //! | `session` | `with_session("rigcoder/run/1")` configured by the cell | settled | the trace carries the configured session; `compare` ignores it (a renamed copy is `Equal`) | replay of `text_stream` |
-//! | `correlation` | subjects on a four-call batch | four results | every tool `landed` effect id is a log record and every record landed; keys `tool:bash`, family Tool; four contiguous dispatch orders; completions' `order` increases; runtime-made tool effects carry no `parent` | replay of `batch_c4_stream` |
+//! | `correlation` | subjects on a four-call batch | four results | every tool `landed` effect id is a log record and every record landed; keys `tool:bash`, family Tool; four contiguous dispatch orders; completions' `order` increases; runtime-made tool effects carry no `parent` | replay of `calls4_c4_stream` |
 //! | `two_runs` | two runs in one session (the product's retry budget on, so a transient failure during recording would be part of the record; this recording holds two clean exchanges) | second request carries the first's history; both settled | scopes `rigcoder/run/1` then `rigcoder/run/2`, each ending `settled` | recorded |
 
 use crate::support::*;
@@ -71,16 +71,13 @@ fn a_disabled_witness_changes_nothing() {
         "the effect log's records"
     );
     // Delivery partitions: the same effects, the same transitions, the
-    // same order. The pass number (`batch`) a delivery landed in is not
-    // compared: the tool's preparation runs on the task pool, so two
-    // unwitnessed runs disagree on it too (see `passes_vary_without_a_witness`).
-    let partitions = |log: &rigcoder::EffectLog| -> Vec<serde_json::Value> {
-        log.header
-            .deliveries
-            .iter()
-            .flatten()
-            .map(|d| serde_json::json!({"id": d.id, "kind": d.kind}))
-            .collect()
+    // same order. The pass number a delivery landed in and how a stream
+    // was split across passes are measurements (`collapse_deliveries`;
+    // see `passes_vary_without_a_witness`).
+    let partitions = |log: &rigcoder::EffectLog| -> serde_json::Value {
+        let mut v = serde_json::to_value(log).unwrap();
+        collapse_deliveries(&mut v);
+        v["header"]["deliveries"].clone()
     };
     assert_eq!(
         partitions(&log),
@@ -139,8 +136,9 @@ fn batch(name: &str, concurrency: usize) -> ObservationTrace {
         MATRIX,
         name,
         Config {
-            source: Source::of("observe_turns", "batch_c4_stream"),
+            source: Source::of("observe_turns", "calls4_c4_stream"),
             concurrency: Some(concurrency),
+            volatile: true,
             ..Config::streamed()
         },
         |cell| {
@@ -392,8 +390,9 @@ fn subjects_correlate_with_the_record() {
         MATRIX,
         "correlation",
         Config {
-            source: Source::of("observe_turns", "batch_c4_stream"),
+            source: Source::of("observe_turns", "calls4_c4_stream"),
             concurrency: Some(4),
+            volatile: true,
             ..Config::streamed()
         },
         |cell| {

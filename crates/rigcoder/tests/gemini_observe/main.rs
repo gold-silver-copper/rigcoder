@@ -38,4 +38,31 @@ fn every_observe_cassette_is_scrubbed() {
     }
     eprintln!("[hygiene] {seen} cassettes checked");
     assert!(seen >= 40, "{seen}");
+    // The evidence packets too: every file, the cassette engine's secret
+    // and provider-token checks, and no local path.
+    let mut packets = 0;
+    let mut stack = vec![support::fixture_root().join("evidence")];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let contents = std::fs::read_to_string(&path).unwrap();
+            let failures = rig_cassette::artifact_safety_failures(&path, &contents);
+            assert!(failures.is_empty(), "{}: {failures:?}", path.display());
+            assert!(
+                !contents.contains("/Users/") && !contents.contains("/home/"),
+                "{}",
+                path.display()
+            );
+            packets += 1;
+        }
+    }
+    eprintln!("[hygiene] {packets} evidence files checked");
+    // While packets are being written the later cells' are not there yet.
+    if !support::writing_evidence() {
+        assert!(packets >= 400, "{packets}");
+    }
 }

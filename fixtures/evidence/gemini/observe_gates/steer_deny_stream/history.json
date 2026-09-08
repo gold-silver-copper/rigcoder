@@ -1,0 +1,80 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: echo forbidden"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_113796"
+        },
+        "provider": {
+          "call_id": "call_113796"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "echo forbidden"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_113796"
+        },
+        "provider": {
+          "call_id": "call_113796"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "denied: that word is forbidden here"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "The command was denied because the word is forbidden."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_2"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

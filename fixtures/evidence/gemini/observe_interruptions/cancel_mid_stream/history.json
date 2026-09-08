@@ -1,0 +1,11 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Write a paragraph of at least two hundred words about rivers, then another about mountains."
+      }
+    ]
+  }
+]

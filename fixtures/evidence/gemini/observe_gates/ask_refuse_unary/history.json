@@ -1,0 +1,80 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: printf no > refused.txt"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_262326"
+        },
+        "provider": {
+          "call_id": "call_262326"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf no > refused.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_262326"
+        },
+        "provider": {
+          "call_id": "call_262326"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "denied by the reviewer"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "The command was denied by the reviewer."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_2"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

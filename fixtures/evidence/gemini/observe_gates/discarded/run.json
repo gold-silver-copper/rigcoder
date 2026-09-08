@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "Provider(ErrorReport { kind: Denied, retryable: false, message: \"not on the list\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })",
+  "answer": "",
+  "provider_retries": 0,
+  "records": 0,
+  "observations": 3
+}

@@ -1,0 +1,112 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Say hello. Do not use any tool."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "Hello! How can I help you today?"
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_1"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Not finished: these required files do not exist yet: /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt. Create them with the tools, verify they exist, then give the final summary."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_14902"
+        },
+        "provider": {
+          "call_id": "call_14902"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf \"Report content\\n\" > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && echo \"File created successfully\""
+          }
+        },
+        "signature": "signature_REDACTED_2",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_14902"
+        },
+        "provider": {
+          "call_id": "call_14902"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "File created successfully\n[exit code: 0]"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "I have created and verified the required report.txt file."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_3"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

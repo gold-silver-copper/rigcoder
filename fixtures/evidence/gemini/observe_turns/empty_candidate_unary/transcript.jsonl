@@ -1,0 +1,3 @@
+{"kind":"user","text":"Write a paragraph of at least one hundred words about rivers."}
+{"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
+{"kind":"failed","reason":"Provider(ErrorReport { kind: Response, retryable: false, message: \"ResponseError: Response contained no message or tool call (empty)\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })"}

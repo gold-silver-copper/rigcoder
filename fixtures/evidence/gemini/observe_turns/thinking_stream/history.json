@@ -1,0 +1,34 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "What is 17 + 25? Think it through, then reply with just the number."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "**Calculating the Response**\n\nOkay, I've got it. The task is straightforward: sum the numbers provided in the request and provide the numerical result. No fluff, just the answer. This is a very simple operation, so I'm moving quickly.\n\n\n",
+              "signature": "signature_REDACTED_1"
+            }
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "text": "42"
+      }
+    ]
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "settled",
+  "answer": "I was unable to write to outside.txt because the operation was denied.",
+  "provider_retries": 0,
+  "records": 2,
+  "observations": 7
+}
