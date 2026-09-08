@@ -297,15 +297,17 @@ fn deny(world: &mut World, entity: Entity, tool: &str, reason: String) {
             reason: Some(reason.clone()),
         },
     );
-    world
-        .entity_mut(entity)
-        .remove::<(Held, PolicyHold, Invocation)>();
+    // The outcome first, then the hold: a hold removed from an answered
+    // intent is the denial, not a release, to the witness.
     world
         .entity_mut(entity)
         .insert(EffectOutcome(Err(ErrorReport::new(
             ErrorKind::Denied,
             &reason,
         ))));
+    world
+        .entity_mut(entity)
+        .remove::<(Held, PolicyHold, rig_ecs::bus::PolicyHeld, Invocation)>();
     world.resource_mut::<Transcript>().push(Event::Denied {
         name: tool.to_owned(),
         reason,
@@ -557,11 +559,22 @@ pub(crate) fn gate(world: &mut World) {
             }
         }
         if matches!(invocation.phase, Phase::Approved(_)) {
-            world.entity_mut(entity).remove::<PolicyHold>();
-            // Release already removed Held for calls within concurrency. If
-            // it remains, leave that independent concurrency barrier intact.
+            // The runtime lifts only the holds it placed (`BatchHeld`): this
+            // gate's hold is its own to remove. A call the batch still holds
+            // keeps `Held` until the batch releases it in call order.
+            let batch_held = world.get::<rig_ecs::systems::BatchHeld>(entity).is_some();
+            world
+                .entity_mut(entity)
+                .remove::<(PolicyHold, rig_ecs::bus::PolicyHeld)>();
+            if !batch_held {
+                world.entity_mut(entity).remove::<Held>();
+            }
         } else {
-            world.entity_mut(entity).insert((Held, PolicyHold));
+            // `PolicyHeld` beside `Held`: on a call the batch also holds, the
+            // batch lifts only its own marker and `Held` stands for this gate.
+            world
+                .entity_mut(entity)
+                .insert((Held, PolicyHold, rig_ecs::bus::PolicyHeld));
         }
         world.entity_mut(entity).insert(invocation);
     }

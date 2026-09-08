@@ -299,8 +299,8 @@ fn one_bash_call_is_prepared_approved_and_lands() {
         "hi"
     );
     // The approval gate holds the call while it prepares (a bus `Held`
-    // the witness sees), the runtime's batch release lifts that hold each
-    // pass, and the gate's own facts name the decision.
+    // the witness sees), names its decision, and lifts its own hold: the
+    // runtime lifts only the holds it placed.
     let facts = cell.facts();
     assert_eq!(
         facts,
@@ -308,9 +308,9 @@ fn one_bash_call_is_prepared_approved_and_lands() {
             "issued",
             "landed",
             "held",
-            "released",
             "rigcoder/approval:prepared",
             "rigcoder/approval:approved",
+            "released",
             "issued",
             "landed",
             "issued",

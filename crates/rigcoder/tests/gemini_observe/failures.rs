@@ -14,7 +14,7 @@
 //! | `server_error_stream` | HTTP 503 `UNAVAILABLE`, then the answer | settled after one retry | same shape on the streamed wire | derived from `text_stream` |
 //! | `blocked_prompt_{unary,stream}` | the strictest `safetySettings` and a harassment prompt, live | the live API answered (no `promptFeedback.blockReason` in either recording): one request, settled, no retry, no truncation | `issued, landed, ended:settled`; the recorded response carries no block | recorded (the block was not obtained; a blocked prompt's trace is proven by `tests/gemini_blocked_prompt.rs` over Gemini's documented chunk) |
 //! | `stream_truncated_stream` | the stream ends before its terminal frame, then the answer | settled after one retry | `stream_truncated { delivered ≥ 1, tail non-empty }` (emitter `rig-ecs/bus`), `landed` Err, `provider_retry`, `ended:settled` | derived from `text_stream` (last frame dropped) |
-//! | `stream_error_frame_stream` | an error frame after text, no terminal | at this pin the run reports a truncation (the envelope sits in the tail as an `unknown` event, `errors: []`): the defect fixed by rig #2478 | the error text reaches the trace (in the tail); the ending/landed join | derived from `text_stream` (terminal replaced by an error frame) |
+//! | `stream_error_frame_stream` | an error frame after text, no terminal | the provider's verdict (rig #2478): run failed once, no retry | `landed` Err of kind `provider_response` carrying the envelope, no `stream_truncated`, `ended:provider` naming `INTERNAL` | derived from `text_stream` (terminal replaced by an error frame) |
 //! | `malformed_frame_stream` | a frame that is not JSON | the run reports the parse failure | `landed` Err of kind `json` (`EOF while parsing`), not retryable, no `stream_truncated`, no `provider_retry` | derived from `text_stream` (first frame corrupted) |
 //! | `transport_cut_stream` | the body ends mid-frame | the run reports a truncation | **not** distinguishable from the clean truncation: kind `response`, `delivered: 2`, a tail ending with the last whole frame's delta, `errors: []` (the SSE decoder drops the partial frame — the limitation noted on rig #2478) | derived from `text_stream` (body cut mid-JSON) |
 
@@ -537,16 +537,18 @@ fn an_error_frame_after_text() {
                 cell.ending()
             );
             assert_ne!(cell.ending(), "settled");
-            let (code, kind, outcome) = ending_matches_landed(cell);
-            eprintln!(
-                "[{MATRIX}/stream_error_frame_stream] ended:{code} landed:{kind} {outcome:?}"
+            // Since rig #2478 the envelope is the provider's verdict: no
+            // truncation, no unknown frame, no retry.
+            let (_, kind, outcome) = ending_matches_landed(cell);
+            assert_eq!(
+                kind,
+                rig::error::ErrorKind::ProviderResponse.code(),
+                "{outcome:?}"
             );
-            if let Some(t) = cell.find(|a| matches!(a, Action::StreamTruncated { .. })) {
-                eprintln!(
-                    "[{MATRIX}/stream_error_frame_stream] truncation: {}",
-                    serde_json::to_string(&t.action).unwrap()
-                );
-            }
+            assert_eq!(cell.count("stream_truncated"), 0, "{facts:?}");
+            assert_eq!(cell.count("rigcoder/provider_retry"), 0, "{facts:?}");
+            assert_eq!(facts, ["issued", "landed", "ended:provider"]);
+            assert!(cell.ending().contains("INTERNAL"), "{}", cell.ending());
             let json = serde_json::to_string(&cell.trace()).unwrap();
             assert!(
                 json.contains("internal error"),

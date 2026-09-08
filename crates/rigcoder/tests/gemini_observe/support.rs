@@ -615,17 +615,14 @@ pub fn fact(action: &Action, stage: Stage) -> String {
     }
 }
 
-/// The semantic facts of a trace for a unary/streamed parity claim: the
-/// delivery-only truncation is dropped, and so are the bus's `held` /
-/// `released` facts — while a call waits for a host decision the runtime's
-/// batch release lifts the hold every pass and the approval gate re-places
-/// it, so their number and their position relative to the host's facts is
-/// a function of frames waited (see the ledger's finding on `release_batch`).
-/// Cells that mean to pin holds count them explicitly.
+/// The semantic facts of a trace for a unary/streamed parity claim: every
+/// fact but a delivery-only truncation. Holds and releases are decisions
+/// too: since Rig #2479 the runtime lifts only the holds it placed, so a
+/// hold stands exactly as long as the policy holds it.
 pub fn semantic_facts(trace: &ObservationTrace) -> Vec<String> {
     facts(trace)
         .into_iter()
-        .filter(|f| f != "stream_truncated" && f != "held" && f != "released")
+        .filter(|f| f != "stream_truncated")
         .collect()
 }
 
