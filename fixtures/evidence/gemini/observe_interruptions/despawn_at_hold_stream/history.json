@@ -1,0 +1,35 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: printf gone > gone.txt"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_571053"
+        },
+        "provider": {
+          "call_id": "call_571053"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf gone > gone.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  }
+]

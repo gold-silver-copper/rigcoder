@@ -1,0 +1,30 @@
+{
+  "matrix": "observe_host",
+  "cell": "cli_source_stream",
+  "source": {
+    "kind": "cassette",
+    "scenario": "observe_host/cli_source_stream"
+  },
+  "model": "gemini-3.8-flash",
+  "stream": true,
+  "max_tokens": 16000,
+  "provider_retries": 3,
+  "max_turns": 4,
+  "approval": "auto",
+  "prompt": "You are a test agent operating in a workspace. Follow the user's instruction literally. When asked to run a command, call the bash tool with exactly that command. When asked to read a file, call read_file. After tool results arrive, reply with one short sentence. Never ask questions.",
+  "concurrency": null,
+  "additional_params": null,
+  "bogus_key": false,
+  "layers": false,
+  "scope": false,
+  "steer_overridden": false,
+  "keep_stream_events": false,
+  "witness": {
+    "capacity": null,
+    "clock": false,
+    "session": null
+  },
+  "volatile": false,
+  "rig": "a219d2b0c73d",
+  "rigcoder": "0.1.0"
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: sleep 4; printf late > late.txt"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_408298"
+        },
+        "provider": {
+          "call_id": "call_408298"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "sleep 4; printf late > late.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  }
+]

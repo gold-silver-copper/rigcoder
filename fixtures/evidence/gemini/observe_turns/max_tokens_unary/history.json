@@ -1,0 +1,34 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Write a paragraph of at least one hundred words about rivers."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "Rivers are"
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_1"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

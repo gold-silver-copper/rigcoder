@@ -1,0 +1,34 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "What is 17 + 25? Think it through, then reply with just the number."
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "**A Quick Calculation**\n\nRight, a straightforward arithmetic problem. The user's asked for the sum of 17 and 25. Nothing complex, no need for elaborate explanations or fancy formulas. Let's see... 17 plus 25... well, I know that 17 + 20 is 37, and adding another 5 gets me to 42. So, the answer is simply 42. No need to overthink this; brevity is key. I'll just deliver the result.\n",
+              "signature": "signature_REDACTED_1"
+            }
+          }
+        ]
+      },
+      {
+        "type": "text",
+        "text": "42"
+      }
+    ]
+  }
+]

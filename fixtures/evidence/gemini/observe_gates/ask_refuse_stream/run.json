@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "settled",
+  "answer": "The command was denied by the reviewer.",
+  "provider_retries": 0,
+  "records": 2,
+  "observations": 9
+}

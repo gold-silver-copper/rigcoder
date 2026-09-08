@@ -1,0 +1,8 @@
+{"kind":"user","text":"Run this command: printf no > refused.txt"}
+{"kind":"tool_call","name":"bash","args":"{\"command\":\"printf no > refused.txt\"}"}
+{"kind":"held","name":"bash","args":"{\"operation_id\":\"6c7477dae2d204cc7c0aed25c3197bf9c6270eb8793701ca78c5a33d2ebd20fe\",\"tool\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"printf no > refused.txt\\\"}\",\"file\":null}"}
+{"kind":"tool_result","name":"bash","output":"denied by the reviewer","ok":false}
+{"kind":"denied","name":"bash","reason":"denied by the reviewer"}
+{"kind":"assistant","text":"The command was denied by the reviewer."}
+{"kind":"usage","input_tokens":1691,"output_tokens":27,"cached_input_tokens":0,"total_tokens":1802}
+{"kind":"settled","answer":"The command was denied by the reviewer."}

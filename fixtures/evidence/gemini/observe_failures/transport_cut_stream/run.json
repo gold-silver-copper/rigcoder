@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "Provider(ErrorReport { kind: Response, retryable: false, message: \"the stream ended before its terminal record\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })",
+  "answer": "",
+  "provider_retries": 0,
+  "records": 1,
+  "observations": 4
+}

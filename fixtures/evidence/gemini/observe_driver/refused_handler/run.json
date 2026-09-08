@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "Tool(ErrorReport { kind: HandlerUnavailable, retryable: false, message: \"no handler is bound to `tool:bash`\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })",
+  "answer": "",
+  "provider_retries": 0,
+  "records": 1,
+  "observations": 8
+}

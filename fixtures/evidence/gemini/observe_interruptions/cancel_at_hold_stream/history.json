@@ -1,0 +1,35 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: printf held > held.txt"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_96319"
+        },
+        "provider": {
+          "call_id": "call_96319"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf held > held.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  }
+]

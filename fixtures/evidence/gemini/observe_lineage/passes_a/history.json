@@ -1,0 +1,80 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Run this command: printf hi > out.txt"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "toolcall",
+        "id": {
+          "origin": "explicit",
+          "id": "call_24112"
+        },
+        "provider": {
+          "call_id": "call_24112"
+        },
+        "function": {
+          "name": "bash",
+          "arguments": {
+            "command": "printf hi > out.txt"
+          }
+        },
+        "signature": "signature_REDACTED_1",
+        "additional_params": null
+      }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "toolresult",
+        "call": {
+          "origin": "explicit",
+          "id": "call_24112"
+        },
+        "provider": {
+          "call_id": "call_24112"
+        },
+        "name": "bash",
+        "content": [
+          {
+            "type": "text",
+            "text": "[exit code: 0]"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "The command has been executed successfully."
+      },
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_2"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

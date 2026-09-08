@@ -1,0 +1,30 @@
+{
+  "matrix": "observe_gates",
+  "cell": "shaped_stream",
+  "source": {
+    "kind": "cassette",
+    "scenario": "observe_gates/shaped_stream"
+  },
+  "model": "gemini-3.8-flash",
+  "stream": true,
+  "max_tokens": 512,
+  "provider_retries": 0,
+  "max_turns": 4,
+  "approval": "auto",
+  "prompt": "You are a test agent. When asked to read a file, call read_file with that path. After the result arrives, reply with exactly: done",
+  "concurrency": null,
+  "additional_params": null,
+  "bogus_key": false,
+  "layers": false,
+  "scope": false,
+  "steer_overridden": false,
+  "keep_stream_events": false,
+  "witness": {
+    "capacity": null,
+    "clock": false,
+    "session": null
+  },
+  "volatile": false,
+  "rig": "a219d2b0c73d",
+  "rigcoder": "0.1.0"
+}

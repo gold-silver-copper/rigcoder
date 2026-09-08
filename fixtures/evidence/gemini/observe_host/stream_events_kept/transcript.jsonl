@@ -1,0 +1,7 @@
+{"kind":"user","text":"Reply with the single word: pong"}
+{"kind":"assistant","text":"pong"}
+{"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
+{"kind":"retrying","reason":"Provider(ErrorReport { kind: Response, retryable: false, message: \"the stream ended before its terminal record\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })","attempt":1,"wait_secs":2}
+{"kind":"assistant","text":"pong"}
+{"kind":"usage","input_tokens":795,"output_tokens":1,"cached_input_tokens":0,"total_tokens":856}
+{"kind":"settled","answer":"pong"}

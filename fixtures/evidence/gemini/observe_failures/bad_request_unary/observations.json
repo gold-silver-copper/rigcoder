@@ -1,0 +1,68 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "err",
+          "reason": {
+            "code": "http",
+            "detail": "HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "provider",
+          "detail": "http: HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": false
+}

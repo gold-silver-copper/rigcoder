@@ -1,0 +1,143 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "completion"
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "d45030ba0589be56ccc9fe65ff08a2beea136908f96c4308ab067cbd1603489e",
+          "tool": "bash",
+          "mode": "ask",
+          "decision": "held"
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "cancel_requested",
+        "reason": {
+          "code": "cancelled",
+          "detail": "operator stop at hold"
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "cancelled",
+          "detail": "operator stop at hold"
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "cancelled",
+        "reason": {
+          "code": "despawned_before_dispatch"
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": false
+}

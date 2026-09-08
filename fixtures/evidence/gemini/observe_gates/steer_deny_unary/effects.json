@@ -1,0 +1,768 @@
+{
+  "header": {
+    "deliveries": [
+      {
+        "batch": 3,
+        "id": 0,
+        "kind": {
+          "delivery": "outcome"
+        }
+      },
+      {
+        "batch": 6,
+        "id": 1,
+        "kind": {
+          "delivery": "outcome"
+        }
+      }
+    ],
+    "handlers": [
+      {
+        "key": "rigcoder/model",
+        "family": {
+          "family": "completion",
+          "model": "gemini-3.8-flash",
+          "capabilities": {
+            "composes_native_output_with_tools": false
+          }
+        }
+      },
+      {
+        "key": "tool:read_file",
+        "family": {
+          "family": "tool",
+          "name": "read_file",
+          "description": "Read a text file. Returns its lines numbered from 1. A file over 2000 lines read without offset/limit returns an outline (definitions with line numbers) instead; then read the ranges you need.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "File path, absolute or relative to the workspace"
+              },
+              "offset": {
+                "type": "integer",
+                "description": "First line to return (1-based, default 1)"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Maximum lines to return (default 2000)"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "key": "tool:write_file",
+        "family": {
+          "family": "tool",
+          "name": "write_file",
+          "description": "Create or overwrite a file with the given content. Parent directories are created. New files are private; replacements preserve existing permissions. Read-only and hard-linked targets are refused.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ]
+          }
+        }
+      },
+      {
+        "key": "tool:edit_file",
+        "family": {
+          "family": "tool",
+          "name": "edit_file",
+          "description": "Replace an exact string in a file. old_string must match exactly once unless replace_all is true. Returns the lines around each replacement as they now read.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "old_string": {
+                "type": "string",
+                "description": "Exact text to find (include enough context to be unique)"
+              },
+              "new_string": {
+                "type": "string",
+                "description": "Replacement text"
+              },
+              "replace_all": {
+                "type": "boolean",
+                "description": "Replace every occurrence (default false)"
+              }
+            },
+            "required": [
+              "path",
+              "old_string",
+              "new_string"
+            ]
+          }
+        }
+      },
+      {
+        "key": "tool:list_files",
+        "family": {
+          "family": "tool",
+          "name": "list_files",
+          "description": "List files under a directory (recursively, honoring .gitignore). Directories end with '/'.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Directory (default: the workspace)"
+              },
+              "max_depth": {
+                "type": "integer",
+                "description": "Recursion depth (default 3)"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Maximum entries (default 500)"
+              }
+            }
+          }
+        }
+      },
+      {
+        "key": "tool:grep",
+        "family": {
+          "family": "tool",
+          "name": "grep",
+          "description": "Search file contents with a regular expression (Rust regex syntax). Returns path:line:text matches.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "description": "File or directory to search (default: the workspace)"
+              },
+              "glob": {
+                "type": "string",
+                "description": "Only files matching this glob, e.g. *.rs"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Maximum matches (default 200)"
+              }
+            },
+            "required": [
+              "pattern"
+            ]
+          }
+        }
+      },
+      {
+        "key": "tool:bash",
+        "family": {
+          "family": "tool",
+          "name": "bash",
+          "description": "Run a shell command with bash in the workspace directory and return its stdout, stderr and exit code. Non-interactive: stdin is closed. Killed after timeout_secs (default 120, max 600).",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "timeout_secs": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      }
+    ],
+    "signature": {
+      "rigcoder/model": "completion"
+    },
+    "hooks": [],
+    "required": {},
+    "programs": {
+      "rigcoder/run/1": {
+        "required": {
+          "rigcoder/model": "completion",
+          "tool:bash": "tool",
+          "tool:edit_file": "tool",
+          "tool:grep": "tool",
+          "tool:list_files": "tool",
+          "tool:read_file": "tool",
+          "tool:write_file": "tool"
+        },
+        "policy": 5060448952408036029
+      }
+    }
+  },
+  "records": [
+    {
+      "tool_output": null,
+      "id": 0,
+      "key": "rigcoder/model",
+      "kind": {
+        "effect": "completion",
+        "request": {
+          "model": null,
+          "chat_history": [
+            {
+              "role": "system",
+              "content": "You are a test agent operating in a workspace. Follow the user's instruction literally. When asked to run a command, call the bash tool with exactly that command. When asked to read a file, call read_file. After tool results arrive, reply with one short sentence. Never ask questions.\nWorkspace directory: /tmp/rigcoder-observe/observe_gates/steer_deny_unary\n"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Run this command: echo forbidden"
+                }
+              ]
+            }
+          ],
+          "documents": [],
+          "tools": [
+            {
+              "name": "read_file",
+              "description": "Read a text file. Returns its lines numbered from 1. A file over 2000 lines read without offset/limit returns an outline (definitions with line numbers) instead; then read the ranges you need.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "File path, absolute or relative to the workspace"
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "description": "First line to return (1-based, default 1)"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum lines to return (default 2000)"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "name": "write_file",
+              "description": "Create or overwrite a file with the given content. Parent directories are created. New files are private; replacements preserve existing permissions. Read-only and hard-linked targets are refused.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "content"
+                ]
+              }
+            },
+            {
+              "name": "edit_file",
+              "description": "Replace an exact string in a file. old_string must match exactly once unless replace_all is true. Returns the lines around each replacement as they now read.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "old_string": {
+                    "type": "string",
+                    "description": "Exact text to find (include enough context to be unique)"
+                  },
+                  "new_string": {
+                    "type": "string",
+                    "description": "Replacement text"
+                  },
+                  "replace_all": {
+                    "type": "boolean",
+                    "description": "Replace every occurrence (default false)"
+                  }
+                },
+                "required": [
+                  "path",
+                  "old_string",
+                  "new_string"
+                ]
+              }
+            },
+            {
+              "name": "list_files",
+              "description": "List files under a directory (recursively, honoring .gitignore). Directories end with '/'.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Directory (default: the workspace)"
+                  },
+                  "max_depth": {
+                    "type": "integer",
+                    "description": "Recursion depth (default 3)"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum entries (default 500)"
+                  }
+                }
+              }
+            },
+            {
+              "name": "grep",
+              "description": "Search file contents with a regular expression (Rust regex syntax). Returns path:line:text matches.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "File or directory to search (default: the workspace)"
+                  },
+                  "glob": {
+                    "type": "string",
+                    "description": "Only files matching this glob, e.g. *.rs"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum matches (default 200)"
+                  }
+                },
+                "required": [
+                  "pattern"
+                ]
+              }
+            },
+            {
+              "name": "bash",
+              "description": "Run a shell command with bash in the workspace directory and return its stdout, stderr and exit code. Non-interactive: stdin is closed. Killed after timeout_secs (default 120, max 600).",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout_secs": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            }
+          ],
+          "temperature": null,
+          "max_tokens": 512,
+          "tool_choice": null,
+          "additional_params": null,
+          "output_schema": null
+        },
+        "stream": false
+      },
+      "outcome": {
+        "Ok": {
+          "outcome": "completion",
+          "choice": [
+            {
+              "type": "toolcall",
+              "id": {
+                "origin": "explicit",
+                "id": "call_613666"
+              },
+              "provider": {
+                "call_id": "call_613666"
+              },
+              "function": {
+                "name": "bash",
+                "arguments": {
+                  "command": "echo forbidden"
+                }
+              },
+              "signature": "signature_REDACTED_1",
+              "additional_params": null
+            }
+          ],
+          "usage": {
+            "input_tokens": 797,
+            "output_tokens": 15,
+            "total_tokens": 893,
+            "cached_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "tool_use_prompt_tokens": 0,
+            "reasoning_tokens": 81
+          },
+          "message_id": null,
+          "response_id": "id_REDACTED_1",
+          "finish_reason": "tool_calls",
+          "provider": "gcp.gemini",
+          "model": "gemini-3.8-flash",
+          "raw": {
+            "responseId": "id_REDACTED_1",
+            "candidates": [
+              {
+                "content": {
+                  "parts": [
+                    {
+                      "thoughtSignature": "signature_REDACTED_1",
+                      "functionCall": {
+                        "name": "bash",
+                        "args": {
+                          "command": "echo forbidden"
+                        },
+                        "id": "call_613666"
+                      }
+                    }
+                  ],
+                  "role": "model"
+                },
+                "finishReason": "STOP",
+                "safetyRatings": null,
+                "citationMetadata": null,
+                "tokenCount": null,
+                "avgLogprobs": null,
+                "logprobsResult": null,
+                "index": 0,
+                "finishMessage": "Model generated function call(s)."
+              }
+            ],
+            "promptFeedback": null,
+            "usageMetadata": {
+              "promptTokenCount": 797,
+              "candidatesTokenCount": 15,
+              "totalTokenCount": 893,
+              "thoughtsTokenCount": 81,
+              "promptTokensDetails": [
+                {
+                  "modality": "TEXT",
+                  "tokenCount": 797
+                }
+              ]
+            },
+            "modelVersion": "gemini-3.8-flash"
+          }
+        }
+      },
+      "scope": "rigcoder/run/1"
+    },
+    {
+      "tool_output": null,
+      "id": 1,
+      "key": "rigcoder/model",
+      "kind": {
+        "effect": "completion",
+        "request": {
+          "model": null,
+          "chat_history": [
+            {
+              "role": "system",
+              "content": "You are a test agent operating in a workspace. Follow the user's instruction literally. When asked to run a command, call the bash tool with exactly that command. When asked to read a file, call read_file. After tool results arrive, reply with one short sentence. Never ask questions.\nWorkspace directory: /tmp/rigcoder-observe/observe_gates/steer_deny_unary\n"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Run this command: echo forbidden"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "id": null,
+              "content": [
+                {
+                  "type": "toolcall",
+                  "id": {
+                    "origin": "explicit",
+                    "id": "call_613666"
+                  },
+                  "provider": {
+                    "call_id": "call_613666"
+                  },
+                  "function": {
+                    "name": "bash",
+                    "arguments": {
+                      "command": "echo forbidden"
+                    }
+                  },
+                  "signature": "signature_REDACTED_1",
+                  "additional_params": null
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "toolresult",
+                  "call": {
+                    "origin": "explicit",
+                    "id": "call_613666"
+                  },
+                  "provider": {
+                    "call_id": "call_613666"
+                  },
+                  "name": "bash",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "denied: that word is forbidden here"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "documents": [],
+          "tools": [
+            {
+              "name": "read_file",
+              "description": "Read a text file. Returns its lines numbered from 1. A file over 2000 lines read without offset/limit returns an outline (definitions with line numbers) instead; then read the ranges you need.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "File path, absolute or relative to the workspace"
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "description": "First line to return (1-based, default 1)"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum lines to return (default 2000)"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "name": "write_file",
+              "description": "Create or overwrite a file with the given content. Parent directories are created. New files are private; replacements preserve existing permissions. Read-only and hard-linked targets are refused.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "content"
+                ]
+              }
+            },
+            {
+              "name": "edit_file",
+              "description": "Replace an exact string in a file. old_string must match exactly once unless replace_all is true. Returns the lines around each replacement as they now read.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "old_string": {
+                    "type": "string",
+                    "description": "Exact text to find (include enough context to be unique)"
+                  },
+                  "new_string": {
+                    "type": "string",
+                    "description": "Replacement text"
+                  },
+                  "replace_all": {
+                    "type": "boolean",
+                    "description": "Replace every occurrence (default false)"
+                  }
+                },
+                "required": [
+                  "path",
+                  "old_string",
+                  "new_string"
+                ]
+              }
+            },
+            {
+              "name": "list_files",
+              "description": "List files under a directory (recursively, honoring .gitignore). Directories end with '/'.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Directory (default: the workspace)"
+                  },
+                  "max_depth": {
+                    "type": "integer",
+                    "description": "Recursion depth (default 3)"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum entries (default 500)"
+                  }
+                }
+              }
+            },
+            {
+              "name": "grep",
+              "description": "Search file contents with a regular expression (Rust regex syntax). Returns path:line:text matches.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "File or directory to search (default: the workspace)"
+                  },
+                  "glob": {
+                    "type": "string",
+                    "description": "Only files matching this glob, e.g. *.rs"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "Maximum matches (default 200)"
+                  }
+                },
+                "required": [
+                  "pattern"
+                ]
+              }
+            },
+            {
+              "name": "bash",
+              "description": "Run a shell command with bash in the workspace directory and return its stdout, stderr and exit code. Non-interactive: stdin is closed. Killed after timeout_secs (default 120, max 600).",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeout_secs": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            }
+          ],
+          "temperature": null,
+          "max_tokens": 512,
+          "tool_choice": null,
+          "additional_params": null,
+          "output_schema": null
+        },
+        "stream": false
+      },
+      "outcome": {
+        "Ok": {
+          "outcome": "completion",
+          "choice": [
+            {
+              "type": "text",
+              "text": "The command was denied because the word is forbidden."
+            },
+            {
+              "type": "reasoning",
+              "id": null,
+              "content": [
+                {
+                  "type": "text",
+                  "content": {
+                    "text": "",
+                    "signature": "signature_REDACTED_2"
+                  }
+                }
+              ]
+            }
+          ],
+          "usage": {
+            "input_tokens": 912,
+            "output_tokens": 10,
+            "total_tokens": 970,
+            "cached_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "tool_use_prompt_tokens": 0,
+            "reasoning_tokens": 48
+          },
+          "message_id": null,
+          "response_id": "id_REDACTED_2",
+          "finish_reason": "stop",
+          "provider": "gcp.gemini",
+          "model": "gemini-3.8-flash",
+          "raw": {
+            "responseId": "id_REDACTED_2",
+            "candidates": [
+              {
+                "content": {
+                  "parts": [
+                    {
+                      "thoughtSignature": "signature_REDACTED_2",
+                      "text": "The command was denied because the word is forbidden."
+                    }
+                  ],
+                  "role": "model"
+                },
+                "finishReason": "STOP",
+                "safetyRatings": null,
+                "citationMetadata": null,
+                "tokenCount": null,
+                "avgLogprobs": null,
+                "logprobsResult": null,
+                "index": 0,
+                "finishMessage": null
+              }
+            ],
+            "promptFeedback": null,
+            "usageMetadata": {
+              "promptTokenCount": 912,
+              "candidatesTokenCount": 10,
+              "totalTokenCount": 970,
+              "thoughtsTokenCount": 48,
+              "promptTokensDetails": [
+                {
+                  "modality": "TEXT",
+                  "tokenCount": 912
+                }
+              ]
+            },
+            "modelVersion": "gemini-3.8-flash"
+          }
+        }
+      },
+      "scope": "rigcoder/run/1"
+    }
+  ]
+}

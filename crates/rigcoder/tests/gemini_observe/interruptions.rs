@@ -95,6 +95,9 @@ fn cancel_mid_stream() {
                 0,
                 std::time::Duration::from_millis(150),
             ),
+            // The packet has a timing in it: how many deltas landed before
+            // the cancel.
+            volatile: true,
             ..long()
         },
         |cell| {

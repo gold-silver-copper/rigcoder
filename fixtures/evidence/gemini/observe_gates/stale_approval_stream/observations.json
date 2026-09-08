@@ -1,0 +1,354 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "completion"
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "d75cb2ea640ae6344357ab3a74e71b856ae1522b7c554be64f124cf922ce479f",
+          "tool": "bash",
+          "mode": "ask",
+          "decision": "held"
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "",
+          "tool": "bash",
+          "mode": "ask",
+          "decision": "denied",
+          "reason": "tool arguments changed after preparation began"
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "denied",
+        "reason": {
+          "code": "denied",
+          "detail": "tool arguments changed after preparation began"
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "completion"
+        }
+      }
+    },
+    {
+      "seq": 8,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
+      }
+    },
+    {
+      "seq": 9,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "9b09d5b3b8428c7778b23134d9481385b86c80c0ffde14042190e8d68bd664c3",
+          "tool": "bash",
+          "mode": "ask",
+          "decision": "held"
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "9b09d5b3b8428c7778b23134d9481385b86c80c0ffde14042190e8d68bd664c3",
+          "tool": "bash",
+          "mode": "ask",
+          "decision": "approved"
+        }
+      }
+    },
+    {
+      "seq": 11,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "unknown"
+      },
+      "action": {
+        "action": "released"
+      }
+    },
+    {
+      "seq": 12,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "effect": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 13,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "effect": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "tool"
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 15,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "completion"
+        }
+      }
+    },
+    {
+      "seq": 16,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "settled"
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": false
+}

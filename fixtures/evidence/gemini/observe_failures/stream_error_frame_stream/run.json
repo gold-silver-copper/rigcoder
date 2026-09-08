@@ -1,0 +1,8 @@
+{
+  "runs": 1,
+  "ending": "Provider(ErrorReport { kind: ProviderResponse, retryable: false, message: \"ProviderResponseError: {\\\"error\\\":{\\\"code\\\":500,\\\"message\\\":\\\"An internal error has occurred.\\\",\\\"status\\\":\\\"INTERNAL\\\"}}\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: Some(ProviderResponseError { status: None, body: \"{\\\"error\\\":{\\\"code\\\":500,\\\"message\\\":\\\"An internal error has occurred.\\\",\\\"status\\\":\\\"INTERNAL\\\"}}\", provider_request_id: None, headers: None }) })",
+  "answer": "",
+  "provider_retries": 0,
+  "records": 1,
+  "observations": 3
+}

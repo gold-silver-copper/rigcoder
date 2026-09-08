@@ -1,0 +1,30 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "Reply with the single word: pong"
+      }
+    ]
+  },
+  {
+    "role": "assistant",
+    "id": null,
+    "content": [
+      {
+        "type": "reasoning",
+        "id": null,
+        "content": [
+          {
+            "type": "text",
+            "content": {
+              "text": "",
+              "signature": "signature_REDACTED_1"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

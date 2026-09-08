@@ -1,0 +1,11 @@
+{"kind":"user","text":"Run this command: printf stale > stale.txt"}
+{"kind":"tool_call","name":"bash","args":"{\"command\":\"printf stale > stale.txt\"}"}
+{"kind":"held","name":"bash","args":"{\"operation_id\":\"d75cb2ea640ae6344357ab3a74e71b856ae1522b7c554be64f124cf922ce479f\",\"tool\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"printf stale > stale.txt\\\"}\",\"file\":null}"}
+{"kind":"tool_result","name":"bash","output":"tool arguments changed after preparation began","ok":false}
+{"kind":"denied","name":"bash","reason":"tool arguments changed after preparation began"}
+{"kind":"tool_call","name":"bash","args":"{\"command\":\"printf stale > stale.txt\"}"}
+{"kind":"held","name":"bash","args":"{\"operation_id\":\"9b09d5b3b8428c7778b23134d9481385b86c80c0ffde14042190e8d68bd664c3\",\"tool\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"printf stale > stale.txt\\\"}\",\"file\":null}"}
+{"kind":"tool_result","name":"bash","output":"[exit code: 0]","ok":true}
+{"kind":"assistant","text":"The command has been executed successfully."}
+{"kind":"usage","input_tokens":2601,"output_tokens":45,"cached_input_tokens":0,"total_tokens":2707}
+{"kind":"settled","answer":"The command has been executed successfully."}

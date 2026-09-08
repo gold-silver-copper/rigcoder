@@ -1,0 +1,5 @@
+{"kind":"user","text":"Run this command: printf gone > gone.txt"}
+{"kind":"tool_call","name":"bash","args":"{\"command\":\"printf gone > gone.txt\"}"}
+{"kind":"held","name":"bash","args":"{\"operation_id\":\"93a3ad1c732ad06ade1d06e889a5232048114a69eb52585046989b4da4867817\",\"tool\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"printf gone > gone.txt\\\"}\",\"file\":null}"}
+{"kind":"usage","input_tokens":805,"output_tokens":19,"cached_input_tokens":0,"total_tokens":884}
+{"kind":"failed","reason":"Cancelled(ErrorReport { kind: Cancelled, retryable: false, message: \"the consumer cancelled the dispatch before it was answered\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })"}

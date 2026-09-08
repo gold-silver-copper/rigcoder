@@ -1,0 +1,3 @@
+{"kind":"user","text":"Reply with the single word: never"}
+{"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
+{"kind":"failed","reason":"Cancelled(ErrorReport { kind: Cancelled, retryable: false, message: \"operator stop before dispatch\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })"}

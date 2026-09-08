@@ -1,0 +1,38 @@
+{
+  "matrix": "observe_interruptions",
+  "cell": "cancel_mid_stream",
+  "source": {
+    "kind": "paced",
+    "frames": 23,
+    "pace_ms": 150,
+    "workspace_of": "observe_interruptions/long_answer_stream"
+  },
+  "model": "gemini-3.8-flash",
+  "stream": true,
+  "max_tokens": 1500,
+  "provider_retries": 0,
+  "max_turns": 4,
+  "approval": "auto",
+  "prompt": "You are a test agent operating in a workspace. Follow the user's instruction literally. When asked to run a command, call the bash tool with exactly that command. When asked to read a file, call read_file. After tool results arrive, reply with one short sentence. Never ask questions.",
+  "concurrency": null,
+  "additional_params": {
+    "generationConfig": {
+      "thinkingConfig": {
+        "thinkingBudget": 0
+      }
+    }
+  },
+  "bogus_key": false,
+  "layers": false,
+  "scope": false,
+  "steer_overridden": false,
+  "keep_stream_events": false,
+  "witness": {
+    "capacity": null,
+    "clock": false,
+    "session": null
+  },
+  "volatile": true,
+  "rig": "a219d2b0c73d",
+  "rigcoder": "0.1.0"
+}
