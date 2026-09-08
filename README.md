@@ -91,14 +91,16 @@ approval, persistence and process-isolation contracts.
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
 `rig-ecs`, `rig-effect-log` and `rig-cassette`) to published migration commit
-`90a89f6dc9a8e3ee2a5558dcccd9b07635241675` in
+`de83e9fb2415ce128fef543b5cc1c94ae9863685` in
 [Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474), stacked on #2443.
 To move the pin, update every Rig revision and `Cargo.lock`, then run the
 workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.
-The ECS consumer is transferred unchanged into `rigcoder-verify`. Its ownership
-transfer does not require integration with the product agent or tools. Rig PR
-#2474 remains open and stacked on #2443 while the replacement merges here,
-followed by removal of the Rig-owned copy and a final dependency-pin update.
+Rigcoder owns the transferred ECS consumer in `rigcoder-verify`, its repair
+project in `harness/repair-project`, and its fixtures in `fixtures/verify` and
+`fixtures/cassettes`. The pinned Rig revision retains `rig-cassette` and removes
+the original consumer after the verified replacement merged here. Rig PR #2474
+and its base #2443 remain open and unmerged. The transfer preserves the harness's
+existing implementations and does not require product-agent/tool integration.
 
 Run the preserved offline matrix with
 `cargo run --locked -p rigcoder-verify -- verify`. See the
