@@ -101,6 +101,13 @@ pub struct RigcoderPlugin {
     pub mode: Mode,
     /// Use this system prompt instead of the compiled-in `prompt.md`.
     pub prompt_override: Option<String>,
+    /// Keep every streamed dispatch's events verbatim in the effect log
+    /// (`EffectRecord::events`) instead of their fold. A completion that
+    /// ends in an error, a cancellation or a truncation can then be
+    /// classified from the frames the adapter saw, without a scripted
+    /// reproduction. Costs the events' size per streamed exchange; the
+    /// CLI turns it on whenever it writes an effect log.
+    pub keep_stream_events: bool,
 }
 
 impl RigcoderPlugin {
@@ -111,6 +118,7 @@ impl RigcoderPlugin {
             max_turns,
             mode: Mode::Live,
             prompt_override: None,
+            keep_stream_events: false,
         }
     }
 }
@@ -123,13 +131,19 @@ impl Plugin for RigcoderPlugin {
             max_turns,
             mode,
             prompt_override,
+            keep_stream_events,
         } = self.clone();
         install_bus(app.world_mut(), ServingPolicy::default());
         install_agent(app.world_mut());
         app.add_systems(Update, run_to_quiescence);
         app.add_plugins(steer::SteerPlugin);
         // Every effect is recorded: the log replays on a host without keys.
-        EffectLogResource::install(app.world_mut(), rig_effect_log::EffectLogRecorder::new());
+        let recorder = if keep_stream_events {
+            rig_effect_log::EffectLogRecorder::keeping_stream_events()
+        } else {
+            rig_effect_log::EffectLogRecorder::new()
+        };
+        EffectLogResource::install(app.world_mut(), recorder);
         // Every decision around those effects is witnessed: the trace is
         // the failure evidence beside the log.
         let observations = Arc::new(rig::observe::ObservationLog::default());

@@ -128,6 +128,7 @@ fn run(
             max_turns: 8,
             mode,
             prompt_override,
+            keep_stream_events: false,
         },
     ))
     .insert_resource(Checkpoint {
@@ -502,6 +503,7 @@ fn replay_rejects_changed_run_settings_before_dispatch() {
         max_turns: 7,
         mode: Mode::Replay(live.log.unwrap().into()),
         prompt_override: None,
+        keep_stream_events: false,
     });
     app.update();
     rigcoder::submit(app.world_mut(), "finish").unwrap();

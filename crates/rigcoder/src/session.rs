@@ -596,6 +596,7 @@ mod retry_tests {
             max_turns: 8,
             mode,
             prompt_override: None,
+            keep_stream_events: false,
         });
         if let Some(answers) = answers {
             app.insert_resource(Model(Mutex::new(Some(Scripted(Mutex::new(
@@ -809,6 +810,7 @@ mod retry_tests {
                 max_turns: 8,
                 mode: crate::Mode::Replay(log.into()),
                 prompt_override: None,
+                keep_stream_events: false,
             })
             .add_systems(bevy_app::PostStartup, |world: &mut World| {
                 submit(world, "finish").unwrap();
