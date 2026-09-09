@@ -127,7 +127,7 @@ fn a_blocked_prompt_fails_once_with_the_block_reason() {
         "provider requests: {}\ntranscript: {events:#?}",
         requests.load(Ordering::SeqCst)
     );
-    let failures: Vec<&String> = events
+    let failures: Vec<&rigcoder::failure::FailureDetail> = events
         .iter()
         .filter_map(|event| match event {
             Event::Failed { reason } => Some(reason),
@@ -136,14 +136,18 @@ fn a_blocked_prompt_fails_once_with_the_block_reason() {
         .collect();
     assert_eq!(failures.len(), 1, "one ending: {events:?}");
     let reason = failures[0];
-    assert!(reason.contains("blocked the prompt"), "{reason}");
-    assert!(reason.contains("PROHIBITED_CONTENT"), "{reason}");
+    assert_eq!(reason.kind, "provider");
+    assert_eq!(reason.retryable, Some(false));
+    assert!(reason.message.contains("blocked the prompt"), "{reason}");
+    assert!(reason.message.contains("PROHIBITED_CONTENT"), "{reason}");
     assert!(
-        reason.contains("HARM_CATEGORY_DANGEROUS_CONTENT"),
+        reason.message.contains("HARM_CATEGORY_DANGEROUS_CONTENT"),
         "{reason}"
     );
     assert!(
-        !reason.contains("stream ended before its terminal record"),
+        !reason
+            .message
+            .contains("stream ended before its terminal record"),
         "a refusal is not a truncation: {reason}"
     );
     assert!(

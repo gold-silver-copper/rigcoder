@@ -1,0 +1,110 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:generateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 401
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "error_envelope",
+            "error": {
+              "code": "401",
+              "status": "UNAUTHENTICATED",
+              "message": "Missing authentication credential."
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 401,
+              "retryable": false
+            }
+          }
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "derived"
+}

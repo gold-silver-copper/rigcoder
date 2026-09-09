@@ -1,0 +1,340 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 795,
+              "output_tokens": 1,
+              "total_tokens": 856,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 60,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "transport_eof",
+            "after": 1,
+            "partial_bytes": 204
+          }
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "partial_frame",
+              "byte_count": 204,
+              "after": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "stream_truncated",
+        "delivered": 2,
+        "tail": [
+          {
+            "event": "block_start",
+            "id": "minted:text:0",
+            "kind": {
+              "kind": "text"
+            }
+          },
+          {
+            "event": "block_delta",
+            "id": "minted:text:0",
+            "delta": {
+              "delta": "text",
+              "text": "pong"
+            }
+          }
+        ],
+        "errors": []
+      }
+    },
+    {
+      "seq": 8,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "err",
+          "reason": {
+            "code": "response",
+            "detail": "the stream ended before its terminal record"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "seq": 9,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "provider",
+          "detail": "response: the stream ended before its terminal record"
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "response",
+          "origin": "provider",
+          "boundary": "decode",
+          "message": "the stream ended before its terminal record",
+          "retryable": false,
+          "http_status": null,
+          "adapter": {
+            "subject": {
+              "scope": "rigcoder/run/1",
+              "order": 0,
+              "effect": 0,
+              "key": "rigcoder/model",
+              "family": "completion"
+            },
+            "operation": "rigcoder/request/1/completion/0",
+            "attempt": 1,
+            "host_attempt": 1,
+            "response_status": 200,
+            "ending": {
+              "ending": "partial_frame",
+              "byte_count": 204,
+              "after": 1
+            },
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            },
+            "error_envelope": null
+          }
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "derived"
+}

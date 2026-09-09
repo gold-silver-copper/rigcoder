@@ -1,0 +1,702 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 2000000
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 4000000
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 503
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 6000000
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 11,
+              "output_tokens": null,
+              "total_tokens": 11,
+              "cached_input_tokens": null,
+              "reasoning_tokens": null,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 7000000
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "error_envelope",
+            "error": {
+              "code": "503",
+              "status": "UNAVAILABLE",
+              "message": "The model is overloaded. Please try again later."
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 8000000
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 503,
+              "retryable": true
+            }
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": null,
+            "timing": {
+              "request_duration": {
+                "secs": 0,
+                "nanos": 6000000
+              },
+              "time_to_first_byte": {
+                "secs": 0,
+                "nanos": 2000000
+              }
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 10000000
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "err",
+          "reason": {
+            "code": "http",
+            "detail": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}"
+          },
+          "retryable": true
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 12000000
+      },
+      "handler_timing": {
+        "interval": "time_to_first_item",
+        "duration": {
+          "secs": 0,
+          "nanos": 10000000
+        },
+        "complete": true
+      }
+    },
+    {
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "provider",
+          "detail": "http: HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}"
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 14000000
+      },
+      "run_timing": {
+        "duration": {
+          "secs": 0,
+          "nanos": 13000000
+        },
+        "complete": true
+      }
+    },
+    {
+      "seq": 8,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "http",
+          "origin": "provider",
+          "boundary": "provider_response",
+          "message": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}",
+          "retryable": true,
+          "http_status": 503,
+          "adapter": {
+            "subject": {
+              "scope": "rigcoder/run/1",
+              "order": 0,
+              "effect": 0,
+              "key": "rigcoder/model",
+              "family": "completion"
+            },
+            "operation": "rigcoder/request/1/completion/0",
+            "attempt": 1,
+            "host_attempt": 1,
+            "response_status": 503,
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 503,
+              "retryable": true
+            },
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": null
+            },
+            "error_envelope": {
+              "code": "503",
+              "status": "UNAVAILABLE",
+              "message": "The model is overloaded. Please try again later."
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 15000000
+      }
+    },
+    {
+      "seq": 9,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/provider_retry",
+        "payload": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "wait_secs": 2,
+          "reason": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}"
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 16000000
+      }
+    },
+    {
+      "seq": 10,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 19000000
+      }
+    },
+    {
+      "seq": 11,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 21000000
+      }
+    },
+    {
+      "seq": 12,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "response",
+            "status": 503
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 23000000
+      }
+    },
+    {
+      "seq": 13,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 13,
+              "output_tokens": null,
+              "total_tokens": 13,
+              "cached_input_tokens": null,
+              "reasoning_tokens": null,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 24000000
+      }
+    },
+    {
+      "seq": 14,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "error_envelope",
+            "error": {
+              "code": "503",
+              "status": "UNAVAILABLE",
+              "message": "The model is overloaded. Please try again later."
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 25000000
+      }
+    },
+    {
+      "seq": 15,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 503,
+              "retryable": true
+            }
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": null,
+            "timing": {
+              "request_duration": {
+                "secs": 0,
+                "nanos": 6000000
+              },
+              "time_to_first_byte": {
+                "secs": 0,
+                "nanos": 2000000
+              }
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 27000000
+      }
+    },
+    {
+      "seq": 16,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "err",
+          "reason": {
+            "code": "http",
+            "detail": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}"
+          },
+          "retryable": true
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 29000000
+      },
+      "handler_timing": {
+        "interval": "time_to_first_item",
+        "duration": {
+          "secs": 0,
+          "nanos": 10000000
+        },
+        "complete": true
+      }
+    },
+    {
+      "seq": 17,
+      "subject": {
+        "scope": "rigcoder/run/2"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "provider",
+          "detail": "http: HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}"
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 31000000
+      },
+      "run_timing": {
+        "duration": {
+          "secs": 0,
+          "nanos": 13000000
+        },
+        "complete": true
+      }
+    },
+    {
+      "seq": 18,
+      "subject": {
+        "scope": "rigcoder/run/2"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "http",
+          "origin": "provider",
+          "boundary": "provider_response",
+          "message": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}",
+          "retryable": true,
+          "http_status": 503,
+          "adapter": {
+            "subject": {
+              "scope": "rigcoder/run/2",
+              "order": 1,
+              "effect": 1,
+              "key": "rigcoder/model",
+              "family": "completion"
+            },
+            "operation": "rigcoder/request/1/completion/0",
+            "attempt": 2,
+            "host_attempt": 2,
+            "response_status": 503,
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 503,
+              "retryable": true
+            },
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": null
+            },
+            "error_envelope": {
+              "code": "503",
+              "status": "UNAVAILABLE",
+              "message": "The model is overloaded. Please try again later."
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 32000000
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "scripted"
+  },
+  "recording_provenance": "derived"
+}

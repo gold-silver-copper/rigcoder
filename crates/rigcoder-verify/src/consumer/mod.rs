@@ -452,6 +452,7 @@ fn program(app: &mut App, case: &Case) -> Result<Entity, Error> {
                             .then(|| json!({"synthetic_background_chunks":64})),
                         output_schema: None,
                         record_telemetry_content: false,
+                        observation: None,
                     },
                 },
             ),

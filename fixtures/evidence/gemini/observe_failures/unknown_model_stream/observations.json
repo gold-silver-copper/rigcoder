@@ -27,6 +27,125 @@
         "key": "rigcoder/model",
         "family": "completion"
       },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 404
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "error_envelope",
+            "error": {
+              "code": "404",
+              "status": "NOT_FOUND",
+              "message": "models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods."
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 404,
+              "retryable": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
       "stage": "collect",
       "emitter": {
         "name": "rig-ecs/bus",
@@ -45,7 +164,7 @@
       }
     },
     {
-      "seq": 2,
+      "seq": 6,
       "subject": {
         "scope": "rigcoder/run/1"
       },
@@ -61,8 +180,67 @@
           "detail": "http: HttpError: Invalid status code 404 Not Found with message: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}"
         }
       }
+    },
+    {
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "http",
+          "origin": "provider",
+          "boundary": "provider_response",
+          "message": "HttpError: Invalid status code 404 Not Found with message: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}",
+          "retryable": false,
+          "http_status": 404,
+          "adapter": {
+            "subject": {
+              "scope": "rigcoder/run/1",
+              "order": 0,
+              "effect": 0,
+              "key": "rigcoder/model",
+              "family": "completion"
+            },
+            "operation": "rigcoder/request/1/completion/0",
+            "attempt": 1,
+            "host_attempt": 1,
+            "response_status": 404,
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 404,
+              "retryable": false
+            },
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": null
+            },
+            "error_envelope": {
+              "code": "404",
+              "status": "NOT_FOUND",
+              "message": "models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods."
+            }
+          }
+        }
+      }
     }
   ],
   "dropped": 0,
-  "finalized": false
+  "finalized": false,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "live"
 }

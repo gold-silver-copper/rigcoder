@@ -2,12 +2,12 @@
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
-//! | `cancel_before_dispatch` | cancel in the frame the run was submitted | no request made; run failed cancelled | exactly `cancel_requested`, `ended:cancelled` (no intent had been assembled yet) | no-wire |
+//! | `cancel_before_dispatch` | cancel in the frame the run was submitted | no request made; run failed cancelled | exactly `cancel_requested`, `ended:cancelled` with 2 ms scripted run total, structured `rigcoder/failure` without provider identity | local-only |
 //! | `long_answer_stream` | a long streamed answer, whole | settled | `issued, landed, ended:settled` | recorded (source of the next) |
 //! | `cancel_mid_stream` | cancel after the first text delta landed | run failed with the operator's reason; the completion lands whole after the run ended and no history reads it | `issued`, `cancel_requested`, `ended:cancelled`, then the model's `landed` (the product keeps the run entity, so the bus never drops the dispatch: no `cancelled@Collect`) | derived: the recorded frames served one per 150 ms by a local pacing server (an instant replay lands the whole stream in one pass) |
 //! | `cancel_mid_tool_{unary,stream}` | cancel with bash in flight (the CLI's timeout reason) | run failed; `late.txt` not written when the run ends | `cancel_requested` before `ended:cancelled`; the tool's dispatch `landed` after the run ended (the handler answers once told to stop; the bus never drops it, so no `cancelled@Collect`) | recorded |
 //! | `cancel_at_hold_stream` | cancel while a call waits for approval | run failed; file untouched | `held`, `approval:held`, `cancel_requested`, `ended:cancelled`, then `cancelled { despawned_before_dispatch }` for the held call; never `approved`, no `released` after the last hold | recorded |
-//! | `despawn_at_hold_stream` | the held call is despawned by the host | the runtime ends the run cancelled on its own; file untouched | `held` … `cancelled { despawned_before_dispatch }` with no `released` between (the `Despawning` set works), `ended:cancelled` last | recorded |
+//! | `despawn_at_hold_stream` | the held call is despawned by the host | the runtime ends the run cancelled on its own; file untouched | `held` … `cancelled { despawned_before_dispatch }` with no `released` between, ending followed by structured `rigcoder/failure` | recorded |
 
 use crate::support::*;
 use rig::observe::{Action, Stage};
@@ -34,18 +34,36 @@ fn cancel_before_dispatch() {
         "cancel_before_dispatch",
         Config {
             source: Source::None,
+            witness: Some(WitnessConfig {
+                clock: true,
+                ..Default::default()
+            }),
             ..Config::streamed()
         },
         |cell| {
             cell.submit("Reply with the single word: never");
             cell.cancel("operator stop before dispatch");
             cell.drive();
-            assert!(cell.ending().contains("operator stop"), "{}", cell.ending());
+            assert_eq!(cell.failure().kind, "cancelled");
+            assert_eq!(cell.failure().message, "operator stop before dispatch");
             assert!(cell.log().records.is_empty());
             let facts = cell.facts();
             // The run's first turn never assembled: no intent existed to
-            // be despawned, so the request and the ending are the whole story.
-            assert_eq!(facts, ["cancel_requested", "ended:cancelled"], "{facts:?}");
+            // be despawned; the typed failure follows the request and ending.
+            assert_eq!(
+                facts,
+                ["cancel_requested", "ended:cancelled", "rigcoder/failure"],
+                "{facts:?}"
+            );
+            assert!(cell.failure().adapter.is_none());
+            let ended = cell.find(|a| matches!(a, Action::Ended { .. })).unwrap();
+            assert_eq!(
+                ended.run_timing,
+                Some(rig::observe::RunTiming {
+                    duration: Some(std::time::Duration::from_millis(2)),
+                    complete: true,
+                })
+            );
             let requested = cell
                 .find(|a| matches!(a, Action::CancelRequested { .. }))
                 .unwrap();
@@ -82,7 +100,11 @@ fn cancel_mid_stream() {
             cell.answer().len()
         );
         assert!(text > 400, "{:?}", cell.events());
-        assert_eq!(cell.facts(), ["issued", "landed", "ended:settled"]);
+        assert!(cell.count("adapter") > 0);
+        assert_eq!(
+            cell.lifecycle_facts(),
+            ["issued", "landed", "ended:settled"]
+        );
     });
     // The cell: the same frames, one every 150 ms, cancelled once the first
     // delta landed. Timing that a live or an instant replay cannot promise.
@@ -90,6 +112,10 @@ fn cancel_mid_stream() {
         MATRIX,
         "cancel_mid_stream",
         Config {
+            witness: Some(WitnessConfig {
+                clock: true,
+                ..Default::default()
+            }),
             source: paced(
                 (MATRIX, "long_answer_stream"),
                 0,
@@ -111,12 +137,18 @@ fn cancel_mid_stream() {
             });
             cell.cancel("operator stop mid-stream");
             cell.drive();
-            assert!(cell.ending().contains("mid-stream"), "{}", cell.ending());
-            let at_end = cell.facts();
+            assert_eq!(cell.failure().kind, "cancelled");
+            assert_eq!(cell.failure().message, "operator stop mid-stream");
+            let at_end = cell.lifecycle_facts();
             eprintln!("[{MATRIX}/cancel_mid_stream] facts at the end: {at_end:?}");
             assert_eq!(
                 at_end,
-                ["issued", "cancel_requested", "ended:cancelled"],
+                [
+                    "issued",
+                    "cancel_requested",
+                    "ended:cancelled",
+                    "rigcoder/failure"
+                ],
                 "{at_end:?}"
             );
             // The run ended with its completion still streaming: the product
@@ -156,6 +188,37 @@ fn cancel_mid_stream() {
                 "the bus never dropped it: {facts:?}"
             );
             // The record: one completion, whole, that no history consumed.
+            let artifact = rigcoder::observe::artifact(cell.app.world()).unwrap();
+            assert_eq!(
+                artifact.recording_provenance,
+                Some(rigcoder::observe::RecordingProvenance::Live)
+            );
+            assert_eq!(
+                artifact.measurement_context,
+                Some(rigcoder::observe::MeasurementContext {
+                    execution_mode: rigcoder::observe::ExecutionMode::PacedReplay,
+                    clock_source: rigcoder::observe::ClockSource::Scripted,
+                })
+            );
+            let adapter = artifact
+                .trace
+                .observations
+                .iter()
+                .find_map(|o| {
+                    let Action::Adapter { observation } = &o.action else {
+                        return None;
+                    };
+                    observation.analysis.as_ref()?.timing.as_ref()
+                })
+                .unwrap();
+            assert!(adapter.time_to_first_byte.is_some());
+            assert!(adapter.time_to_first_byte < adapter.request_duration);
+            assert!(
+                after
+                    .handler_timing
+                    .as_ref()
+                    .is_some_and(|timing| timing.complete && timing.duration.is_some())
+            );
             let log = cell.log();
             assert_eq!(log.records.len(), 1, "{log:?}");
             assert!(
@@ -186,7 +249,8 @@ fn cancel_with_bash_in_flight() {
             cell.app.update();
             cell.cancel(TIMEOUT_REASON);
             cell.drive();
-            assert!(cell.ending().contains(TIMEOUT_REASON), "{}", cell.ending());
+            assert_eq!(cell.failure().kind, "cancelled");
+            assert_eq!(cell.failure().message, TIMEOUT_REASON);
             assert!(
                 !cell.dir.join("late.txt").exists(),
                 "the run ended before the tool"
@@ -273,7 +337,15 @@ fn cancel_at_an_approval_hold() {
             });
             cell.cancel("operator stop at hold");
             cell.drive();
-            assert!(cell.ending().contains("at hold"), "{}", cell.ending());
+            assert_eq!(cell.failure().kind, "cancelled");
+            assert_eq!(cell.failure().message, "operator stop at hold");
+            assert_eq!(
+                cell.find(|a| matches!(a, Action::Held { .. }))
+                    .unwrap()
+                    .emitter
+                    .name,
+                "rigcoder/approval"
+            );
             assert!(!cell.dir.join("held.txt").exists());
             let facts = cell.facts();
             eprintln!("[{MATRIX}/cancel_at_hold_stream] facts: {facts:?}");
@@ -330,6 +402,13 @@ fn despawn_at_an_approval_hold() {
                 .iter(cell.app.world())
                 .collect();
             assert_eq!(held.len(), 1);
+            assert_eq!(
+                cell.find(|a| matches!(a, Action::Held { .. }))
+                    .unwrap()
+                    .emitter
+                    .name,
+                "rigcoder/approval"
+            );
             cell.app.world_mut().despawn(held[0]);
             cell.drive();
             let facts = cell.facts();
@@ -344,8 +423,11 @@ fn despawn_at_an_approval_hold() {
                 "a despawn is not a release: {facts:?}"
             );
             // The runtime notices its batch lost a call and ends the run.
-            assert!(cell.ending().contains("Cancelled"), "{}", cell.ending());
-            assert_eq!(facts.last().map(String::as_str), Some("ended:cancelled"));
+            assert_eq!(cell.failure().kind, "cancelled");
+            assert_eq!(
+                &facts[facts.len() - 2..],
+                ["ended:cancelled", "rigcoder/failure"]
+            );
             assert!(!cell.dir.join("gone.txt").exists());
             assert!(!facts.contains(&"rigcoder/approval:approved".to_owned()));
         },

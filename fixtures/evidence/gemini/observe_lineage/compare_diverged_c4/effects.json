@@ -17,35 +17,35 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 17,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 8,
-        "id": 4,
-        "kind": {
-          "delivery": "outcome"
-        }
-      },
-      {
-        "batch": 9,
+        "batch": 17,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 10,
+        "batch": 17,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 13,
+        "batch": 18,
+        "id": 4,
+        "kind": {
+          "delivery": "outcome"
+        }
+      },
+      {
+        "batch": 21,
         "id": 5,
         "kind": {
           "delivery": "stream",
@@ -53,7 +53,7 @@
         }
       },
       {
-        "batch": 13,
+        "batch": 21,
         "id": 5,
         "kind": {
           "delivery": "outcome"
@@ -251,7 +251,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 9776864470218819400
+        "policy": 3799105739397278184
       }
     }
   },

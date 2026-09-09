@@ -1,5 +1,5 @@
 {"kind":"user","text":"Run this command: sleep 4; printf late > late.txt"}
 {"kind":"tool_call","name":"bash","args":"{\"command\":\"sleep 4; printf late > late.txt\"}"}
 {"kind":"usage","input_tokens":807,"output_tokens":23,"cached_input_tokens":0,"total_tokens":911}
-{"kind":"failed","reason":"Cancelled(ErrorReport { kind: Cancelled, retryable: false, message: \"rigcoder --timeout-secs elapsed\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })"}
+{"kind":"failed","reason":{"kind":"cancelled","origin":"cancelled","boundary":"host","message":"rigcoder --timeout-secs elapsed","retryable":false,"http_status":null,"adapter":null}}
 {"kind":"tool_result","name":"bash","output":"[killed after 120s timeout]\n[exit code: signal]","ok":true}

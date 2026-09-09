@@ -1,0 +1,139 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:generateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 795,
+              "output_tokens": 1,
+              "total_tokens": 888,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 92,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "direct"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "direct/1",
+          "attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "decoded"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "live"
+}

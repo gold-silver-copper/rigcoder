@@ -36,6 +36,16 @@ fn wait_for_hold(cell: &mut Cell) {
 }
 
 fn approvals(cell: &Cell) -> Vec<String> {
+    for fact in cell
+        .trace()
+        .observations
+        .iter()
+        .filter(|fact| matches!(fact.action, Action::Held { .. } | Action::Released))
+    {
+        assert_eq!(fact.emitter.name, "rigcoder/approval");
+        assert!(fact.subject.order.is_some());
+        assert!(fact.subject.scope.is_some());
+    }
     cell.facts()
         .into_iter()
         .filter(|f| f.starts_with("rigcoder/approval"))
@@ -483,7 +493,8 @@ fn a_layer_patch() {
             cell.submit("Reply with the single word: patched");
             cell.drive();
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
-            let facts = cell.facts();
+            let facts = cell.lifecycle_facts();
+            assert!(cell.count("adapter") > 0);
             assert_eq!(
                 facts,
                 ["issued", "patched", "landed", "ended:settled"],
@@ -532,7 +543,8 @@ fn two_layers_patch_in_order() {
             cell.submit("Reply with the single word: twice");
             cell.drive();
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
-            let facts = cell.facts();
+            let facts = cell.lifecycle_facts();
+            assert!(cell.count("adapter") > 0);
             assert_eq!(
                 facts,
                 ["issued", "patched", "patched", "landed", "ended:settled"],
@@ -589,7 +601,8 @@ fn a_layer_discard_never_reaches_the_wire() {
             cell.submit("Reply with the single word: never");
             cell.drive();
             assert!(
-                cell.ending().contains("not on the list"),
+                cell.failure().kind == "denied"
+                    && cell.failure().message.contains("not on the list"),
                 "{}",
                 cell.ending()
             );
@@ -601,10 +614,20 @@ fn a_layer_discard_never_reaches_the_wire() {
             let facts = cell.facts();
             assert_eq!(
                 facts,
-                ["issued", "denied@Handler:layer_discarded", "ended:provider"],
+                [
+                    "issued",
+                    "denied@Handler:layer_discarded",
+                    "ended:provider",
+                    "rigcoder/failure"
+                ],
                 "a discarded dispatch never lands: {facts:?}"
             );
             let denied = cell.find(|a| matches!(a, Action::Denied { .. })).unwrap();
+            assert_eq!(
+                cell.failure().boundary,
+                rigcoder::failure::FailureBoundary::Host
+            );
+            assert!(cell.failure().adapter.is_none());
             assert_eq!(denied.emitter.name, "bouncer", "the layer names itself");
             assert!(
                 denied.subject.effect.is_some(),
@@ -627,17 +650,33 @@ fn a_judge_replacement() {
             cell.submit("Reply with the single word: kept");
             cell.drive();
             assert!(
-                cell.ending().contains("withdrawn by policy"),
+                cell.failure().kind == "provider"
+                    && cell.failure().message.contains("withdrawn by policy"),
                 "{}",
                 cell.ending()
             );
             // The record holds the handler's answer.
             let record = &cell.log().records[0];
             assert!(record.outcome.is_ok(), "{record:?}");
-            let facts = cell.facts();
+            let facts = cell.lifecycle_facts();
+            assert!(cell.count("adapter") > 0);
+            assert_eq!(
+                cell.failure().boundary,
+                rigcoder::failure::FailureBoundary::Host
+            );
+            assert!(
+                cell.failure().adapter.is_none(),
+                "host replacement is not a failed provider attempt"
+            );
             assert_eq!(
                 facts,
-                ["issued", "landed", "replaced", "ended:provider"],
+                [
+                    "issued",
+                    "landed",
+                    "replaced",
+                    "ended:provider",
+                    "rigcoder/failure"
+                ],
                 "{facts:?}"
             );
             let replaced = cell.find(|a| matches!(a, Action::Replaced { .. })).unwrap();

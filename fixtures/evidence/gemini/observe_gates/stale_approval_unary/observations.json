@@ -27,6 +27,159 @@
         "key": "rigcoder/model",
         "family": "completion"
       },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:generateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 801,
+              "output_tokens": 19,
+              "total_tokens": 862,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 42,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": "Model generated function call(s).",
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "decoded"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
       "stage": "collect",
       "emitter": {
         "name": "rig-ecs/bus",
@@ -41,7 +194,7 @@
       }
     },
     {
-      "seq": 2,
+      "seq": 7,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -50,7 +203,8 @@
       },
       "stage": "gate",
       "emitter": {
-        "name": "unknown"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
         "action": "held",
@@ -60,7 +214,7 @@
       }
     },
     {
-      "seq": 3,
+      "seq": 8,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -84,7 +238,7 @@
       }
     },
     {
-      "seq": 4,
+      "seq": 9,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -109,7 +263,7 @@
       }
     },
     {
-      "seq": 5,
+      "seq": 10,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -129,7 +283,7 @@
       }
     },
     {
-      "seq": 6,
+      "seq": 11,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -147,7 +301,155 @@
       }
     },
     {
-      "seq": 7,
+      "seq": 12,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:1",
+          "attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:generateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:1",
+          "attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:1",
+          "attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 879,
+              "output_tokens": 19,
+              "total_tokens": 903,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 5,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 15,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:1",
+          "attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": "Model generated function call(s).",
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_2",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 16,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:1",
+          "attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "decoded"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 17,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -169,7 +471,7 @@
       }
     },
     {
-      "seq": 8,
+      "seq": 18,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -178,7 +480,8 @@
       },
       "stage": "gate",
       "emitter": {
-        "name": "unknown"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
         "action": "held",
@@ -188,7 +491,7 @@
       }
     },
     {
-      "seq": 9,
+      "seq": 19,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -212,7 +515,7 @@
       }
     },
     {
-      "seq": 10,
+      "seq": 20,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -236,7 +539,7 @@
       }
     },
     {
-      "seq": 11,
+      "seq": 21,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -245,14 +548,15 @@
       },
       "stage": "gate",
       "emitter": {
-        "name": "unknown"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
         "action": "released"
       }
     },
     {
-      "seq": 12,
+      "seq": 22,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -270,7 +574,7 @@
       }
     },
     {
-      "seq": 13,
+      "seq": 23,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -292,7 +596,7 @@
       }
     },
     {
-      "seq": 14,
+      "seq": 24,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -310,7 +614,155 @@
       }
     },
     {
-      "seq": 15,
+      "seq": 25,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:3",
+          "attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:generateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 26,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:3",
+          "attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 27,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:3",
+          "attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 921,
+              "output_tokens": 7,
+              "total_tokens": 942,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 14,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 28,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:3",
+          "attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_3",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 29,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "effect": 3,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:3",
+          "attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "decoded"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 30,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -332,7 +784,7 @@
       }
     },
     {
-      "seq": 16,
+      "seq": 31,
       "subject": {
         "scope": "rigcoder/run/1"
       },
@@ -350,5 +802,10 @@
     }
   ],
   "dropped": 0,
-  "finalized": false
+  "finalized": false,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "live"
 }

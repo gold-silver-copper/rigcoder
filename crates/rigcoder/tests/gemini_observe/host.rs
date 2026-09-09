@@ -3,15 +3,48 @@
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
 //! | `cli_source_stream` | a one-tool run under the CLI's default run settings | file written | (source of the next) | recorded |
-//! | `cli_replay` | `rigcoder --replay <effects.json> --observations <out.json>` (the product binary, replay mode) | exit 0, the file exists | parses as `ObservationTrace`, `finalized`, complete, ends `settled`, its host kinds are rigcoder's, `issued`/`landed` per recorded exchange | replay of `cli_source_stream` through the CLI |
+//! | `cli_replay` | `rigcoder --replay <effects.json> --observations <out.json>` (the product binary, replay mode) | exit 0, the file exists | host-monotonic effect-log replay metadata, clock stamps and run timing; finalized, complete, settled, `issued`/`landed` per exchange | replay of `cli_source_stream` through the CLI |
 //! | `digest` | `rigcoder-bench digest <job>` over a trial holding a recorded trace | `digest.json` written | `observed.stream_truncations == 1`, `provider_retries == 1`, `endings == [provider, settled]`, `complete` | replay of `observe_failures/stream_truncated_stream` |
 //! | `host_kinds_round_trip` | the four `HostAction` kinds | — | each `action()` → `from_action` round-trips; a foreign kind is `None` | in-process |
+//! | `invalid_submission` | rejected zero-token settings before a run exists | no dispatch or provider request | one matching structured transcript/host failure, absent scope/status/attempt | local-only |
 //! | `stream_events_kept` | the effect log with and without kept stream events on a failed completion | — | `events` is `None` by default and `Some(non-empty)` when kept: the frames a failure needs (the first audited gap; the CLI keeps them whenever it writes an effect log) | replay of `observe_failures/stream_truncated_stream` |
 
 use crate::support::*;
 use rig::observe::{Action, HostAction as _, ObservationTrace};
 
 const MATRIX: &str = "observe_host";
+
+#[test]
+fn a_rejected_submission_has_structured_evidence_without_a_provider_call() {
+    run(
+        MATRIX,
+        "invalid_submission",
+        Config {
+            max_tokens: 0,
+            source: Source::None,
+            ..Config::unary()
+        },
+        |cell| {
+            assert!(rigcoder::submit(cell.app.world_mut(), "never sent").is_none());
+            assert_eq!(cell.log().records.len(), 0);
+            let failure = cell.failure();
+            assert_eq!(failure.kind, "invalid_configuration");
+            assert!(failure.adapter.is_none());
+            assert!(failure.http_status.is_none());
+            rigcoder::observe::finalize(cell.app.world());
+            let trace = cell.trace();
+            assert_eq!(trace.observations.len(), 1);
+            let observation = &trace.observations[0];
+            assert!(observation.subject.scope.is_none());
+            assert_eq!(
+                rigcoder::failure::FailureDetail::from_action(&observation.action)
+                    .unwrap()
+                    .unwrap(),
+                failure
+            );
+        },
+    );
+}
 
 fn cli_prompt_file() -> std::path::PathBuf {
     let path = std::path::PathBuf::from("/tmp/rigcoder-observe").join("cli-prompt.txt");
@@ -71,8 +104,26 @@ fn the_cli_writes_the_trace_of_a_replayed_run() {
         "exit {:?}\n{stdout}\n{stderr}",
         output.status.code()
     );
-    let trace: ObservationTrace =
+    let artifact: rigcoder::observe::ObservationArtifact =
         serde_json::from_str(&std::fs::read_to_string(&observations).unwrap()).unwrap();
+    assert_eq!(
+        artifact.measurement_context,
+        Some(rigcoder::observe::MeasurementContext {
+            execution_mode: rigcoder::observe::ExecutionMode::EffectLogReplay,
+            clock_source: rigcoder::observe::ClockSource::HostMonotonic,
+        })
+    );
+    assert_eq!(
+        artifact.recording_provenance,
+        Some(rigcoder::observe::RecordingProvenance::NotApplicable)
+    );
+    let trace = artifact.trace;
+    assert!(trace.observations.iter().all(|fact| fact.at.is_some()));
+    assert!(trace.observations.iter().any(|fact| {
+        fact.run_timing
+            .as_ref()
+            .is_some_and(|timing| timing.complete && timing.duration.is_some())
+    }));
     assert!(trace.finalized, "the CLI finalizes at exit");
     assert!(trace.is_complete());
     let facts = facts(&trace);
@@ -123,7 +174,11 @@ fn the_cli_writes_the_trace_of_a_replayed_run() {
 fn truncated_cell(
     name: &str,
     keep: bool,
-) -> (Vec<rigcoder::Event>, rigcoder::EffectLog, ObservationTrace) {
+) -> (
+    Vec<rigcoder::Event>,
+    rigcoder::EffectLog,
+    rigcoder::observe::ObservationArtifact,
+) {
     let derived = cassette_path("observe_failures", "stream_truncated_stream");
     assert!(
         derived.is_file(),
@@ -144,7 +199,12 @@ fn truncated_cell(
             cell.submit("Reply with the single word: pong");
             cell.drive();
             assert_eq!(cell.ending(), "settled");
-            out = Some((cell.events(), cell.log(), cell.trace()));
+            rigcoder::observe::finalize(cell.app.world());
+            out = Some((
+                cell.events(),
+                cell.log(),
+                rigcoder::observe::artifact(cell.app.world()).unwrap(),
+            ));
         },
     );
     out.unwrap()
@@ -169,7 +229,7 @@ fn the_bench_digest_counts_the_trace() {
     .unwrap();
     std::fs::write(
         job.join("pong__1").join("result.json"),
-        r#"{"reward": 0.0}"#,
+        r#"{"task": "pong", "attempt": 1, "reward": 0.0}"#,
     )
     .unwrap();
     let output = std::process::Command::new(env!("CARGO"))
@@ -201,11 +261,29 @@ fn the_bench_digest_counts_the_trace() {
         .and_then(|t| t.iter().find(|t| t["trial"] == "pong__1"))
         .unwrap_or_else(|| panic!("{digest}"));
     let observed = &trial["observed"];
+    assert_eq!(trial["task"], "pong");
+    assert_eq!(trial["task_source"], "result_file");
+    assert_eq!(trial["attempt"], 1);
+    assert!(digest.get("evaluation").unwrap().is_null());
+    assert_eq!(observed["recording_provenance"], "derived");
+    assert_eq!(
+        observed["measurement_context"],
+        serde_json::json!({
+            "execution_mode": "cassette_replay", "clock_source": "absent",
+        })
+    );
     assert_eq!(observed["complete"], true, "{observed}");
     assert_eq!(observed["stream_truncations"], 1, "{observed}");
     assert_eq!(observed["provider_retries"], 1, "{observed}");
     assert_eq!(
-        observed["endings"],
+        serde_json::Value::Array(
+            observed["endings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|run| run["ending"].clone())
+                .collect()
+        ),
         serde_json::json!(["provider", "settled"]),
         "{observed}"
     );
@@ -232,6 +310,7 @@ fn host_kinds_round_trip() {
         kept: 30_000,
     };
     let retry = rigcoder::observe::ProviderRetry {
+        operation: None,
         attempt: 1,
         wait_secs: 2,
         reason: "timed out".into(),

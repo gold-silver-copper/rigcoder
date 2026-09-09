@@ -1,0 +1,212 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "error",
+              "boundary": "decode",
+              "kind": "provider",
+              "status": null,
+              "retryable": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "err",
+          "reason": {
+            "code": "provider",
+            "detail": "ProviderError: Invalid content type was returned: \"text/plain\""
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "provider",
+          "detail": "provider: ProviderError: Invalid content type was returned: \"text/plain\""
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "provider",
+          "origin": "provider",
+          "boundary": "decode",
+          "message": "ProviderError: Invalid content type was returned: \"text/plain\"",
+          "retryable": false,
+          "http_status": null,
+          "adapter": {
+            "subject": {
+              "scope": "rigcoder/run/1",
+              "order": 0,
+              "effect": 0,
+              "key": "rigcoder/model",
+              "family": "completion"
+            },
+            "operation": "rigcoder/request/1/completion/0",
+            "attempt": 1,
+            "host_attempt": 1,
+            "response_status": 200,
+            "ending": {
+              "ending": "error",
+              "boundary": "decode",
+              "kind": "provider",
+              "status": null,
+              "retryable": false
+            },
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": null
+            },
+            "error_envelope": null
+          }
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "derived"
+}

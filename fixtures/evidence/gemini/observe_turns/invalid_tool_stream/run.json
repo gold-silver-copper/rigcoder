@@ -1,8 +1,8 @@
 {
   "runs": 1,
-  "ending": "UnknownToolCall { name: \"teleport\" }",
+  "ending": "unknown_tool_call",
   "answer": "",
   "provider_retries": 0,
   "records": 1,
-  "observations": 4
+  "observations": 13
 }

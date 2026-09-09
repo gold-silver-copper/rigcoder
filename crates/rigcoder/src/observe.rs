@@ -15,11 +15,95 @@ use serde::{Deserialize, Serialize};
 #[derive(Resource, Clone)]
 pub struct Observations(pub Arc<ObservationLog>);
 
-/// The observations so far.
+/// Environment in which an observation's measurements were taken.
+/// This describes execution, not the provenance of a recording being replayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    Live,
+    CassetteReplay,
+    PacedReplay,
+    LocalOnly,
+    EffectLogReplay,
+}
+
+/// The host's clock implementation, independently of execution mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClockSource {
+    HostMonotonic,
+    Scripted,
+    Absent,
+}
+
+/// Host-owned provenance for measurements in the current observation capture.
+#[derive(Resource, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MeasurementContext {
+    pub execution_mode: ExecutionMode,
+    pub clock_source: ClockSource,
+}
+
+/// Origin of provider content, independently of replay mode and pacing.
+/// An absent value means unknown, not that no recording was used.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordingProvenance {
+    Live,
+    Derived,
+    NotApplicable,
+}
+
+/// Existing trace format with host metadata; Rig readers can still read the
+/// flattened trace. Missing context in older artifacts remains unknown.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservationArtifact {
+    #[serde(flatten)]
+    pub trace: ObservationTrace,
+    #[serde(default)]
+    pub measurement_context: Option<MeasurementContext>,
+    #[serde(default)]
+    pub recording_provenance: Option<RecordingProvenance>,
+}
+
+struct HostClock(std::time::Instant);
+
+impl rig::observe::Clock for HostClock {
+    fn elapsed(&self) -> std::time::Duration {
+        self.0.elapsed()
+    }
+}
+
+/// Install a fresh host-clock capture before submitting any work. The caller
+/// identifies the actual execution mode, never the recording's origin.
+pub fn install_monotonic(world: &mut World, execution_mode: ExecutionMode) {
+    let observations = Arc::new(
+        ObservationLog::default().with_clock(Arc::new(HostClock(std::time::Instant::now()))),
+    );
+    Witnessing::install(world, observations.clone());
+    world.insert_resource(Observations(observations));
+    world.insert_resource(MeasurementContext {
+        execution_mode,
+        clock_source: ClockSource::HostMonotonic,
+    });
+}
+
+/// Export the scrubbed trace and its separately labelled measurement context.
+pub fn artifact(world: &World) -> Option<ObservationArtifact> {
+    Some(ObservationArtifact {
+        trace: trace(world)?,
+        measurement_context: world.get_resource::<MeasurementContext>().cloned(),
+        recording_provenance: world.get_resource::<RecordingProvenance>().copied(),
+    })
+}
+
+/// The observations so far, with bounded, scrubbed diagnostic reasons.
 pub fn trace(world: &World) -> Option<ObservationTrace> {
-    world
-        .get_resource::<Observations>()
-        .map(|observations| observations.0.trace())
+    let secrets = crate::model::world_diagnostic_secrets(world);
+    world.get_resource::<Observations>().map(|observations| {
+        let mut trace = observations.0.trace();
+        crate::artifacts::observations(&mut trace, &secrets);
+        trace
+    })
 }
 
 /// The session finished normally.
@@ -105,6 +189,9 @@ impl HostAction for ResultShaped {
 /// provider failure.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderRetry {
+    /// Initial completion's execution-local identity, absent without observation context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
     pub attempt: usize,
     pub wait_secs: u64,
     pub reason: String,

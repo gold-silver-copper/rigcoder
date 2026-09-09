@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 3,
+        "batch": 4,
         "id": 0,
         "kind": {
           "delivery": "outcome"
@@ -199,7 +199,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 10188007130211354893
+        "policy": 2776171666923332673
       }
     }
   },
@@ -384,16 +384,16 @@
             }
           },
           "retryable": false,
-          "message": "HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"},\"reason\":\"API_KEY_INVALID\"},{\"@type\":\"type.googleapis.com/google.rpc.LocalizedMessage\",\"locale\":\"en-US\",\"message\":\"API key not valid. Please pass a valid API key.\"}],\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\"}}",
+          "message": "[redacted]",
           "code": null,
           "http_status": 400,
           "refusal": false,
           "source_chain": [
-            "Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"},\"reason\":\"API_KEY_INVALID\"},{\"@type\":\"type.googleapis.com/google.rpc.LocalizedMessage\",\"locale\":\"en-US\",\"message\":\"API key not valid. Please pass a valid API key.\"}],\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\"}}"
+            "[redacted]"
           ],
           "provider_response": {
             "status": 400,
-            "body": "{\"error\":{\"code\":400,\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"domain\":\"googleapis.com\",\"metadata\":{\"service\":\"generativelanguage.googleapis.com\"},\"reason\":\"API_KEY_INVALID\"},{\"@type\":\"type.googleapis.com/google.rpc.LocalizedMessage\",\"locale\":\"en-US\",\"message\":\"API key not valid. Please pass a valid API key.\"}],\"message\":\"API key not valid. Please pass a valid API key.\",\"status\":\"INVALID_ARGUMENT\"}}",
+            "body": "[redacted]",
             "provider_request_id": null
           }
         }

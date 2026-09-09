@@ -2,4 +2,4 @@
 {"kind":"tool_call","name":"bash","args":"{\"command\":\"printf held > held.txt\"}"}
 {"kind":"held","name":"bash","args":"{\"operation_id\":\"d45030ba0589be56ccc9fe65ff08a2beea136908f96c4308ab067cbd1603489e\",\"tool\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"printf held > held.txt\\\"}\",\"file\":null}"}
 {"kind":"usage","input_tokens":803,"output_tokens":19,"cached_input_tokens":0,"total_tokens":884}
-{"kind":"failed","reason":"Cancelled(ErrorReport { kind: Cancelled, retryable: false, message: \"operator stop at hold\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })"}
+{"kind":"failed","reason":{"kind":"cancelled","origin":"cancelled","boundary":"host","message":"operator stop at hold","retryable":false,"http_status":null,"adapter":null}}

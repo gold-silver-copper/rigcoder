@@ -1,19 +1,19 @@
 //! Matrix A — turn shapes × delivery (`observe_turns`).
 //!
 //! Every cell is a unary/streamed parity pair recorded against the real
-//! API; the semantic facts must agree between the pair (`semantic_facts`:
-//! everything but a delivery-only truncation).
+//! API; lifecycle facts must agree between the pair. Adapter frame boundaries
+//! differ by wire and remain asserted in each complete evidence packet.
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
 //! | `text_{unary,stream}` | one text turn | settled, one request, answer says pong | `issued, landed, ended:settled`; all scoped to the run; `Landed` carries the effect id | recorded |
 //! | `one_tool_{unary,stream}` | one bash call, auto approval, then text | file written, two requests | `held`, approval `prepared`/`approved`, `released`, then the tool `issued`: the hold is the gate's decision, no churn; tool subject keyed `tool:bash`, family Tool, effect id in the log | recorded |
-//! | `calls4_c1_{unary,stream}`, `calls4_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | holds ≥ 4, each released once, four approvals; concurrency 1 holds at least as much as 4 (the batch's holds on top of the gate's, where they do not coincide) | recorded; evidence packet volatile (a hold/release race under 1, id order under 4) |
+//! | `calls4_c1_{unary,stream}`, `calls4_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | four approval owners; three batch owners under 1, none under 4; every release matches its owner by scope/order and no tool issues while held | recorded; evidence packet remains volatile under the existing comparison policy |
 //! | `two_tools_{unary,stream}` | bash, then read_file, then text | three requests, file content in answer | `Issued` subjects for the completions carry increasing `order`; tools carry their key | recorded |
 //! | `invalid_tool_{unary,stream}` | a call to a function the agent was never given | run failed `UnknownToolCall` | `invalid_call` (name, resolution `fail`), `ended:unknown_tool_call` last | recorded |
 //! | `thinking_{unary,stream}` | `includeThoughts` on (`gemini-2.5-flash`, which returns thought parts) | settled; the recorded request asks for thoughts and the recorded response carries ≥ 1 thought part; the record's outcome holds the reasoning | the trace carries no thought or reasoning text (payload policy); facts unchanged | recorded |
-//! | `max_tokens_{unary,stream}` | `finishReason: MAX_TOKENS` under a six-token cap | what the recorded bytes say: no parts → `ended:provider` (empty response), any member → `ended:settled`; never a retry | as stated; no parity claim (Gemini's shape varies per recording) | recorded |
-//! | `empty_candidate_unary` | `content: {}` (no parts), `MAX_TOKENS` | run failed on the empty response | `landed` Err `response`, not retryable, no `provider_retry` | derived from `max_tokens_unary` (content emptied) |
+//! | `max_tokens_{unary,stream}` | `finishReason: MAX_TOKENS` under a six-token cap | both fixed recordings settle with a nonempty short answer; no retry | emitted adapter verdict is MAX_TOKENS; lifecycle ends settled | recorded |
+//! | `empty_candidate_unary` | `content: {}` (no parts), `MAX_TOKENS` | run failed on the empty response | adapter HTTP 200, usage 802 input/2 output/804 total preserved before response-error closure; `landed` Err, no retry | derived from `max_tokens_unary` (content emptied) |
 //! | `empty_member_stream` | one `"text": ""` part, `MAX_TOKENS` | settled with an empty answer | `issued, landed, ended:settled` | derived from `text_stream` (text emptied) |
 
 use crate::support::*;
@@ -33,7 +33,7 @@ fn text_answer() {
             cell.answer()
         );
         assert_eq!(cell.log().records.len(), 1);
-        let facts = cell.facts();
+        let facts = cell.lifecycle_facts();
         assert_eq!(facts, ["issued", "landed", "ended:settled"], "{facts:?}");
         let trace = cell.trace();
         assert!(trace.is_complete());
@@ -61,7 +61,7 @@ fn one_tool_call() {
             "hi"
         );
         assert_eq!(cell.log().records.len(), 3, "two completions and one tool");
-        let facts = cell.facts();
+        let facts = cell.lifecycle_facts();
         assert_eq!(
             facts,
             [
@@ -121,40 +121,137 @@ fn a_batch_under_concurrency_one_and_four() {
     HOLDS.lock().unwrap().clear();
     for concurrency in [1usize, 4] {
         let holds = std::sync::Mutex::new(Vec::new());
-        pair(
-            MATRIX,
-            &format!("calls4_c{concurrency}"),
-            // Volatile packets: under concurrency 1 a policy hold and the
-            // batch's release race on the same call (one `held` more or
-            // less); under 4 the parallel dispatch issues ids in varying
-            // order. Both are recorded in the ledger.
-            if concurrency == 1 {
-                |stream| Config {
-                    concurrency: Some(1),
+        for stream in [false, true] {
+            run(
+                MATRIX,
+                &format!(
+                    "calls4_c{concurrency}_{}",
+                    if stream { "stream" } else { "unary" }
+                ),
+                // Retain the existing volatile packet policy. Owner transitions
+                // and within-trace joins are asserted on every replay; cross-run
+                // dispatch identity and semantic equality remain deferred.
+                Config {
+                    concurrency: Some(concurrency),
                     volatile: true,
                     ..Config::delivery(stream)
-                }
-            } else {
-                |stream| Config {
-                    concurrency: Some(4),
-                    volatile: true,
-                    ..Config::delivery(stream)
-                }
-            },
-            |cell, _| {
-                cell.submit(
+                },
+                |cell| {
+                    cell.submit(
                     "Run these four commands, each as its own bash call, all in this one reply: echo 1 ; echo 2 ; echo 3 ; echo 4 (four separate calls, one command each)",
                 );
-                cell.drive();
-                assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
-                assert_eq!(cell.tool_results(), 4, "{:?}", cell.events());
-                let held = cell.count("held");
-                assert!(held >= 4, "{:?}", cell.facts());
-                assert_eq!(cell.count("released"), held, "every hold is released once");
-                assert_eq!(cell.count("rigcoder/approval:approved"), 4);
-                holds.lock().unwrap().push(held);
-            },
-        );
+                    cell.drive();
+                    assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
+                    assert_eq!(cell.tool_results(), 4, "{:?}", cell.events());
+                    let held = cell.count("held");
+                    assert!(held >= 4, "{:?}", cell.facts());
+                    assert_eq!(cell.count("released"), held, "every hold is released once");
+                    assert_eq!(cell.count("rigcoder/approval:approved"), 4);
+                    let trace = cell.trace();
+                    let completion_lifecycle: Vec<_> = trace
+                        .observations
+                        .iter()
+                        .filter(|observation| {
+                            observation.subject.family != Some(rig::effect::EffectFamily::Tool)
+                        })
+                        .map(|observation| fact(&observation.action, observation.stage))
+                        .filter(|label| label != "adapter" && label != "stream_truncated")
+                        .collect();
+                    assert_eq!(
+                        completion_lifecycle,
+                        ["issued", "landed", "issued", "landed", "ended:settled"]
+                    );
+                    let mut active = std::collections::BTreeSet::new();
+                    let mut batch_holds = 0;
+                    let mut approval_holds = 0;
+                    for fact in &trace.observations {
+                        if matches!(fact.action, Action::Held { .. } | Action::Released) {
+                            assert!(fact.subject.scope.is_some());
+                            let order = fact.subject.order.expect("held tool dispatch order");
+                            let owner = fact.emitter.name.as_str();
+                            assert!(matches!(owner, "rig-ecs/batch" | "rigcoder/approval"));
+                            let key = (fact.subject.scope.as_deref(), order, owner);
+                            if matches!(fact.action, Action::Held { .. }) {
+                                assert!(active.insert(key), "duplicate acquisition: {fact:?}");
+                                if owner == "rig-ecs/batch" {
+                                    batch_holds += 1;
+                                } else {
+                                    approval_holds += 1;
+                                }
+                            } else {
+                                assert!(active.remove(&key), "release without owner: {fact:?}");
+                            }
+                        }
+                        if matches!(fact.action, Action::Issued) {
+                            assert!(
+                                !active.iter().any(|(scope, order, _)| *scope
+                                    == fact.subject.scope.as_deref()
+                                    && Some(*order) == fact.subject.order),
+                                "issued while held: {fact:?}"
+                            );
+                        }
+                    }
+                    assert!(active.is_empty());
+                    assert_eq!(approval_holds, 4);
+                    assert_eq!(batch_holds, if concurrency == 1 { 3 } else { 0 });
+                    // Independent calls may interleave. Pin each call's causal
+                    // chain and the actual concurrency bound, not a global order.
+                    let mut chains = std::collections::BTreeMap::<_, Vec<String>>::new();
+                    let mut in_flight = std::collections::BTreeSet::new();
+                    for observation in &trace.observations {
+                        if observation.subject.family != Some(rig::effect::EffectFamily::Tool) {
+                            continue;
+                        }
+                        let label = fact(&observation.action, observation.stage);
+                        if matches!(
+                            label.as_str(),
+                            "rigcoder/approval:prepared"
+                                | "rigcoder/approval:approved"
+                                | "issued"
+                                | "landed"
+                        ) || (observation.emitter.name == "rigcoder/approval"
+                            && matches!(label.as_str(), "held" | "released"))
+                        {
+                            chains
+                                .entry((
+                                    observation.subject.scope.clone(),
+                                    observation.subject.order.expect("tool order"),
+                                ))
+                                .or_default()
+                                .push(label);
+                        }
+                        if matches!(observation.action, Action::Issued) {
+                            assert!(
+                                in_flight
+                                    .insert(observation.subject.effect.expect("issued effect"))
+                            );
+                            assert!(in_flight.len() <= concurrency);
+                        } else if matches!(observation.action, Action::Landed { .. }) {
+                            assert!(
+                                in_flight
+                                    .remove(&observation.subject.effect.expect("landed effect"))
+                            );
+                        }
+                    }
+                    assert!(in_flight.is_empty());
+                    assert_eq!(chains.len(), 4);
+                    for chain in chains.values() {
+                        assert_eq!(
+                            chain,
+                            &[
+                                "held",
+                                "rigcoder/approval:prepared",
+                                "rigcoder/approval:approved",
+                                "released",
+                                "issued",
+                                "landed"
+                            ]
+                        );
+                    }
+                    holds.lock().unwrap().push(held);
+                },
+            );
+        }
         let holds = holds.into_inner().unwrap();
         eprintln!("[{MATRIX}] concurrency {concurrency}: holds {holds:?}");
         HOLDS.lock().unwrap().push((concurrency, holds));
@@ -170,8 +267,7 @@ fn a_batch_under_concurrency_one_and_four() {
         .find(|(c, _)| *c == 4)
         .map(|(_, h)| h.clone())
         .unwrap();
-    // Under 4 every hold is the gate's (one per call); under 1 the batch's
-    // own holds come on top, except where the gate's hold already stood.
+    // Under 4 every hold is the gate's; under 1 the batch also holds three calls.
     assert!(
         one[0] >= four[0] && one[1] >= four[1],
         "concurrency 1 holds at least as much as 4: {one:?} vs {four:?}"
@@ -232,7 +328,7 @@ fn an_invalid_tool_call() {
             cell.submit("Call the teleport function now.");
             cell.drive();
             assert!(
-                cell.ending().contains("UnknownToolCall"),
+                cell.failure().kind == "unknown_tool_call",
                 "{}: {:?}",
                 cell.ending(),
                 cell.events()
@@ -240,8 +336,8 @@ fn an_invalid_tool_call() {
             let facts = cell.facts();
             assert!(facts.contains(&"invalid_call".to_owned()), "{facts:?}");
             assert_eq!(
-                facts.last().map(String::as_str),
-                Some("ended:unknown_tool_call")
+                &facts[facts.len() - 2..],
+                ["ended:unknown_tool_call", "rigcoder/failure"]
             );
             let invalid = cell
                 .find(|a| matches!(a, Action::InvalidCall { .. }))
@@ -276,7 +372,7 @@ fn thinking_enabled() {
             cell.drive();
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
             assert!(cell.answer().contains("42"), "{}", cell.answer());
-            let facts = cell.facts();
+            let facts = cell.lifecycle_facts();
             assert_eq!(facts, ["issued", "landed", "ended:settled"], "{facts:?}");
             if !cell.recording() {
                 // The wire: the request asked, the response carried thoughts.
@@ -308,17 +404,34 @@ fn thinking_enabled() {
             // The record holds the reasoning; the trace only summarises the
             // outcome and never carries reasoning text.
             let log = cell.log();
-            assert!(
-                serde_json::to_string(&log.records[0].outcome)
-                    .unwrap()
-                    .contains("easoning"),
-                "the record keeps the thoughts"
-            );
+            let Ok(rig::effect::Outcome::Completion(response)) = &log.records[0].outcome else {
+                panic!("a completed model answer");
+            };
+            let thoughts: Vec<_> = response
+                .choice
+                .iter()
+                .filter_map(|content| {
+                    let rig::message::AssistantContent::Reasoning(reasoning) = content else {
+                        return None;
+                    };
+                    Some(&reasoning.content)
+                })
+                .flatten()
+                .filter_map(|content| match content {
+                    rig::message::ReasoningContent::Text { text, .. } if !text.is_empty() => {
+                        Some(text)
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert!(!thoughts.is_empty(), "the record keeps the thoughts");
             let json = serde_json::to_string(&cell.trace()).unwrap();
-            assert!(
-                !json.contains("thought") && !json.contains("easoning"),
-                "{json}"
-            );
+            for thought in thoughts {
+                assert!(
+                    !json.contains(&serde_json::to_string(thought).unwrap()),
+                    "reasoning text must not enter the trace"
+                );
+            }
         },
     );
 }
@@ -326,8 +439,8 @@ fn thinking_enabled() {
 /// A `MAX_TOKENS` finish under a six-token cap. Gemini's shape for it is
 /// not stable across recordings (seen on 2026-09-08: `content: {}` with no
 /// parts; one empty text part with a thought signature; two tokens of
-/// text), so the recorded pair asserts what its bytes say, and the two
-/// empty shapes are pinned by derived fixtures below. Rig rejects an empty
+/// text). This pair pins the current recordings and reads the verdict from
+/// adapter facts; the two empty shapes are pinned by derived fixtures below. Rig rejects an empty
 /// part *list* (`EMPTY_RESPONSE_ERROR`) and accepts an empty *member*.
 #[test]
 fn max_tokens_cut() {
@@ -350,7 +463,7 @@ fn max_tokens_cut() {
             |cell| {
                 cell.submit("Write a paragraph of at least one hundred words about rivers.");
                 cell.drive();
-                let facts = cell.facts();
+                let facts = cell.lifecycle_facts();
                 eprintln!(
                     "[{}/{}] facts: {facts:?} ending: {}",
                     MATRIX,
@@ -362,63 +475,16 @@ fn max_tokens_cut() {
                     0,
                     "a length cut is not transient"
                 );
-                if !cell.recording() {
-                    let scenario = format!("{MATRIX}/{}", cell.name);
-                    let (finish, parts) = if stream {
-                        let frames = rig_cassette::recorded_sse_json_frames(
-                            &cassette_root(),
-                            PROVIDER,
-                            &scenario,
-                        );
-                        let finish = frames.iter().rev().find_map(|f| {
-                            f["candidates"][0]["finishReason"]
-                                .as_str()
-                                .map(str::to_owned)
-                        });
-                        let parts = frames
-                            .iter()
-                            .map(|f| {
-                                f["candidates"][0]["content"]["parts"]
-                                    .as_array()
-                                    .map_or(0, Vec::len)
-                            })
-                            .sum::<usize>();
-                        (finish, parts)
-                    } else {
-                        let wire = rig_cassette::recorded_json_response(
-                            &cassette_root(),
-                            PROVIDER,
-                            &scenario,
-                        );
-                        (
-                            wire["candidates"][0]["finishReason"]
-                                .as_str()
-                                .map(str::to_owned),
-                            wire["candidates"][0]["content"]["parts"]
-                                .as_array()
-                                .map_or(0, Vec::len),
-                        )
-                    };
-                    assert_eq!(finish.as_deref(), Some("MAX_TOKENS"));
-                    if parts == 0 {
-                        assert_eq!(
-                            facts,
-                            ["issued", "landed", "ended:provider"],
-                            "no parts: rejected as empty"
-                        );
-                        assert!(
-                            cell.ending().contains("no message or tool call"),
-                            "{}",
-                            cell.ending()
-                        );
-                    } else {
-                        assert_eq!(
-                            facts,
-                            ["issued", "landed", "ended:settled"],
-                            "a member, empty or not, is an answer"
-                        );
-                    }
-                }
+                let trace = cell.trace();
+                assert!(trace.observations.iter().any(|fact| matches!(&fact.action,
+                    Action::Adapter { observation } if matches!(&observation.event,
+                        rig::observe::AdapterEvent::Provider { verdict }
+                            if verdict.finish_reason.as_deref() == Some("MAX_TOKENS")))));
+                // Both fixed recordings contain the short answer "Rivers are".
+                // The derived cells below pin rejection of an empty part list.
+                assert_eq!(cell.ending(), "settled");
+                assert_eq!(facts, ["issued", "landed", "ended:settled"]);
+                assert!(!cell.answer().is_empty());
             },
         );
     }
@@ -454,13 +520,23 @@ fn an_empty_candidate_is_rejected_unary() {
         |cell| {
             cell.submit("Write a paragraph of at least one hundred words about rivers.");
             cell.drive();
-            assert!(
-                cell.ending().contains("no message or tool call"),
-                "{}",
-                cell.ending()
-            );
+            assert!(cell.failure().kind == "response", "{}", cell.ending());
             let facts = cell.facts();
-            assert_eq!(facts, ["issued", "landed", "ended:provider"], "{facts:?}");
+            assert_eq!(
+                facts,
+                [
+                    "issued",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "landed",
+                    "ended:provider",
+                    "rigcoder/failure"
+                ],
+                "{facts:?}"
+            );
             let Action::Landed { outcome } = cell
                 .find(|a| matches!(a, Action::Landed { .. }))
                 .unwrap()
@@ -478,8 +554,57 @@ fn an_empty_candidate_is_rejected_unary() {
                 0,
                 "not transient, even with retries allowed"
             );
-            // The usage of the rejected attempt is lost with it (a follow-up
-            // for the provider decode, noted in the ledger).
+            let trace = cell.trace();
+            let adapter: Vec<_> = trace
+                .observations
+                .iter()
+                .filter_map(|o| {
+                    let Action::Adapter { observation } = &o.action else {
+                        return None;
+                    };
+                    assert_eq!(o.subject.effect, Some(cell.log().records[0].id));
+                    assert_eq!(observation.attempt, Some(1));
+                    Some(observation)
+                })
+                .collect();
+            assert_eq!(adapter.len(), 5);
+            assert!(adapter.iter().all(|f| f.operation == adapter[0].operation));
+            assert_eq!(
+                adapter[1].event,
+                rig::observe::AdapterEvent::Response { status: 200 }
+            );
+            assert_eq!(
+                adapter[2].event,
+                rig::observe::AdapterEvent::Usage {
+                    usage: rig::observe::AdapterUsage {
+                        input_tokens: Some(802),
+                        output_tokens: Some(2),
+                        total_tokens: Some(804),
+                        ..rig::observe::AdapterUsage::default()
+                    }
+                }
+            );
+            assert_eq!(
+                adapter[3].event,
+                rig::observe::AdapterEvent::Provider {
+                    verdict: rig::observe::AdapterVerdict {
+                        finish_reason: Some("MAX_TOKENS".into()),
+                        model: Some("gemini-3.8-flash".into()),
+                        ..rig::observe::AdapterVerdict::default()
+                    }
+                }
+            );
+            assert_eq!(
+                adapter[4].event,
+                rig::observe::AdapterEvent::Finished {
+                    ending: rig::observe::AdapterEnding::Error {
+                        boundary: rig::observe::AdapterErrorBoundary::Decode,
+                        kind: "response".into(),
+                        status: None,
+                        retryable: false,
+                    }
+                }
+            );
         },
     );
 }
@@ -528,7 +653,10 @@ fn an_empty_member_settles_stream() {
             cell.drive();
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
             assert_eq!(cell.answer(), "");
-            assert_eq!(cell.facts(), ["issued", "landed", "ended:settled"]);
+            assert_eq!(
+                cell.lifecycle_facts(),
+                ["issued", "landed", "ended:settled"]
+            );
         },
     );
 }

@@ -865,8 +865,10 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         if args.no_improve || generation + 1 == args.generations {
             continue;
         }
-        let report_path = report::write(&job_dir, generation, &summary, &records, best.0, best.1)?;
-        let digest = crate::digest::job(&job_dir).ok();
+        let report_path = report::write(
+            &job_dir, root, generation, &summary, &records, best.0, best.1,
+        )?;
+        let digest = crate::digest::job(&job_dir, root).ok();
         let lane = args
             .lane
             .unwrap_or_else(|| Lane::choose(digest.as_ref(), previous_lane));
@@ -1099,6 +1101,7 @@ mod lane_tests {
 
     fn digest(failed: Aggregate, passed: Aggregate) -> Digest {
         Digest {
+            evaluation: None,
             failed,
             passed,
             trials: Vec::new(),

@@ -27,6 +27,125 @@
         "key": "rigcoder/model",
         "family": "completion"
       },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 503
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "error_envelope",
+            "error": {
+              "code": "503",
+              "status": "UNAVAILABLE",
+              "message": "The model is overloaded. Please try again later."
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 503,
+              "retryable": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
       "stage": "collect",
       "emitter": {
         "name": "rig-ecs/bus",
@@ -45,7 +164,7 @@
       }
     },
     {
-      "seq": 2,
+      "seq": 6,
       "subject": {
         "scope": "rigcoder/run/1"
       },
@@ -63,7 +182,61 @@
       }
     },
     {
-      "seq": 3,
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "http",
+          "origin": "provider",
+          "boundary": "provider_response",
+          "message": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}",
+          "retryable": true,
+          "http_status": 503,
+          "adapter": {
+            "subject": {
+              "scope": "rigcoder/run/1",
+              "order": 0,
+              "effect": 0,
+              "key": "rigcoder/model",
+              "family": "completion"
+            },
+            "operation": "rigcoder/request/1/completion/0",
+            "attempt": 1,
+            "host_attempt": 1,
+            "response_status": 503,
+            "ending": {
+              "ending": "error",
+              "boundary": "provider_response",
+              "kind": "http",
+              "status": 503,
+              "retryable": true
+            },
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": null
+            },
+            "error_envelope": {
+              "code": "503",
+              "status": "UNAVAILABLE",
+              "message": "The model is overloaded. Please try again later."
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 8,
       "subject": {
         "scope": "rigcoder/run/1"
       },
@@ -76,6 +249,7 @@
         "action": "host",
         "kind": "rigcoder/provider_retry",
         "payload": {
+          "operation": "rigcoder/request/1/completion/0",
           "attempt": 1,
           "wait_secs": 2,
           "reason": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}"
@@ -83,7 +257,7 @@
       }
     },
     {
-      "seq": 4,
+      "seq": 9,
       "subject": {
         "scope": "rigcoder/run/2",
         "order": 1,
@@ -101,7 +275,255 @@
       }
     },
     {
-      "seq": 5,
+      "seq": 10,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 11,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 795,
+              "output_tokens": 1,
+              "total_tokens": 856,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 60,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 795,
+              "output_tokens": 1,
+              "total_tokens": 856,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 60,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 15,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 16,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "transport_eof",
+            "after": 2,
+            "partial_bytes": 0
+          }
+        }
+      }
+    },
+    {
+      "seq": 17,
+      "subject": {
+        "scope": "rigcoder/run/2",
+        "order": 1,
+        "effect": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 2,
+          "host_attempt": 2,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "terminal"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 18,
       "subject": {
         "scope": "rigcoder/run/2",
         "order": 1,
@@ -123,7 +545,7 @@
       }
     },
     {
-      "seq": 6,
+      "seq": 19,
       "subject": {
         "scope": "rigcoder/run/2"
       },
@@ -141,5 +563,10 @@
     }
   ],
   "dropped": 0,
-  "finalized": false
+  "finalized": false,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "derived"
 }

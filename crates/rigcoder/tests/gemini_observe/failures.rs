@@ -3,23 +3,26 @@
 //! A failed run is a join of two facts: `Ended { provider, "<kind>: <message>" }`
 //! and the `landed` summary carrying the report's kind code; every cell that
 //! fails checks the join on its ending, and every cell that retries checks
-//! it on the first ending.
+//! it on the first ending. This legacy message relation is checked before
+//! export redaction; persisted diagnostics may be replaced by privacy markers.
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
 //! | `bad_request_{unary,stream}` | HTTP 400 (an invalid `generationConfig`) | run failed, one request, no retry | `issued`, `landed` Err (http 400, not retryable), `ended:<kind>`; no `provider_retry` | recorded |
-//! | `bad_key_{unary,stream}` | an invalid API key (recorded with `bogus_api_key`) | run failed, one request | same shape; the reason names the key | recorded |
+//! | `bad_key_{unary,stream}` | an invalid API key (recorded with `bogus_api_key`); both recordings return HTTP 400 | run failed, one request | adapter status/envelope/error closure joined to the failed effect; exported credential-bearing diagnostics are redacted | recorded |
+//! | `unauthorized_{unary,stream}` | HTTP 401, which the bad-key recordings do not contain | run failed, one request despite retry budget | adapter status 401 and UNAUTHENTICATED envelope, nonretryable closure; no actual retry | derived from `text_{unary,stream}` by replacing the response status, headers and body with an HTTP 401 error |
 //! | `unknown_model_{unary,stream}` | HTTP 404 (a model that does not exist) | run failed, one request | same shape | recorded |
 //! | `rate_limited_unary` | HTTP 429 `RESOURCE_EXHAUSTED`, then the answer | settled after one retry, two requests | `landed` Err retryable, `ended:provider`, `provider_retry { attempt: 1 }`, `issued`, `landed` Ok, `ended:settled` | derived from `text_unary` (a 429 interaction prepended) |
 //! | `server_error_stream` | HTTP 503 `UNAVAILABLE`, then the answer | settled after one retry | same shape on the streamed wire | derived from `text_stream` |
 //! | `blocked_prompt_{unary,stream}` | the strictest `safetySettings` and a harassment prompt, live | the live API answered (no `promptFeedback.blockReason` in either recording): one request, settled, no retry, no truncation | `issued, landed, ended:settled`; the recorded response carries no block | recorded (the block was not obtained; a blocked prompt's trace is proven by `tests/gemini_blocked_prompt.rs` over Gemini's documented chunk) |
 //! | `stream_truncated_stream` | the stream ends before its terminal frame, then the answer | settled after one retry | `stream_truncated { delivered ≥ 1, tail non-empty }` (emitter `rig-ecs/bus`), `landed` Err, `provider_retry`, `ended:settled` | derived from `text_stream` (last frame dropped) |
-//! | `stream_error_frame_stream` | an error frame after text, no terminal | the provider's verdict (rig #2478): run failed once, no retry | `landed` Err of kind `provider_response` carrying the envelope, no `stream_truncated`, `ended:provider` naming `INTERNAL` | derived from `text_stream` (terminal replaced by an error frame) |
-//! | `malformed_frame_stream` | a frame that is not JSON | the run reports the parse failure | `landed` Err of kind `json` (`EOF while parsing`), not retryable, no `stream_truncated`, no `provider_retry` | derived from `text_stream` (first frame corrupted) |
-//! | `transport_cut_stream` | the body ends mid-frame | the run reports a truncation | **not** distinguishable from the clean truncation: kind `response`, `delivered: 2`, a tail ending with the last whole frame's delta, `errors: []` (the SSE decoder drops the partial frame — the limitation noted on rig #2478) | derived from `text_stream` (body cut mid-JSON) |
+//! | `stream_error_frame_stream` | an error frame after text, no terminal | retryable provider verdict with retries disabled: run failed once | `landed` Err of kind `http` (500, retryable) carrying the envelope, no `stream_truncated`, `ended:provider` naming `INTERNAL` | derived from `text_stream` (terminal replaced by an error frame) |
+//! | `stream_error_frame_retry_stream` | in-band HTTP 500, then answer | settled after one retry, two requests | retryable `http` landing joined to first ending, no truncation, one provider retry | derived from `text_stream` (error response prepended) |
+//! | `malformed_frame_stream` | a frame that is not JSON | the run reports the parse failure even though the adapter later reaches terminal | Corrupt frame 1, STOP verdict, EOF after 2 frames and Terminal closure; `landed` Err of kind `json`, no retry | derived from `text_stream` (first frame corrupted) |
+//! | `transport_cut_stream` | the body ends mid-frame | the run reports a truncation | native kind `response` and tail unchanged; adapter EOF and closure retain 204 partial bytes after one complete frame, distinguishing a clean cut | derived from `text_stream` (body cut mid-JSON) |
 
 use crate::support::*;
-use rig::observe::{Action, OutcomeSummary};
+use rig::observe::{Action, AdapterEnding, AdapterEvent, OutcomeSummary};
 
 const MATRIX: &str = "observe_failures";
 
@@ -29,8 +32,14 @@ const MATRIX: &str = "observe_failures";
 /// report's own kind (`http`, `json`, `response`, …) is on the `landed`
 /// fact's summary. Returns (ending code, landed kind code, summary).
 fn ending_matches_landed(cell: &Cell) -> (String, String, OutcomeSummary) {
-    let landed = cell
-        .trace()
+    let raw = cell
+        .app
+        .world()
+        .resource::<rigcoder::observe::Observations>()
+        .0
+        .trace();
+    let landed = raw
+        .clone()
         .observations
         .into_iter()
         .filter(|o| {
@@ -46,8 +55,7 @@ fn ending_matches_landed(cell: &Cell) -> (String, String, OutcomeSummary) {
     let Action::Landed { outcome } = landed.action.clone() else {
         unreachable!()
     };
-    let Action::Ended { ending } = cell
-        .trace()
+    let Action::Ended { ending } = raw
         .observations
         .into_iter()
         .filter(|o| matches!(o.action, Action::Ended { .. }))
@@ -82,9 +90,20 @@ fn ending_matches_landed(cell: &Cell) -> (String, String, OutcomeSummary) {
 fn failed_once(cell: &Cell, expect_status: Option<u16>) {
     assert_ne!(cell.ending(), "settled", "{:?}", cell.events());
     let facts = cell.facts();
-    assert_eq!(facts.len(), 3, "{facts:?}");
-    assert_eq!(&facts[..2], ["issued", "landed"]);
-    assert!(facts[2].starts_with("ended:"), "{facts:?}");
+    assert_eq!(
+        facts,
+        [
+            "issued",
+            "adapter",
+            "adapter",
+            "adapter",
+            "adapter",
+            "landed",
+            "ended:provider",
+            "rigcoder/failure"
+        ],
+        "{facts:?}"
+    );
     assert_eq!(cell.count("rigcoder/provider_retry"), 0, "{facts:?}");
     let (code, kind, outcome) = ending_matches_landed(cell);
     let OutcomeSummary::Err { reason, retryable } = outcome else {
@@ -103,6 +122,72 @@ fn failed_once(cell: &Cell, expect_status: Option<u16>) {
     if let Some(status) = expect_status {
         assert_eq!(report.http_status, Some(status), "{report:?}");
     }
+    let status = report.http_status.expect("recorded HTTP failure");
+    let failure = cell.failure();
+    assert_eq!(failure.kind, report.kind.code());
+    assert_eq!(failure.origin, "provider");
+    assert_eq!(failure.retryable, Some(false));
+    assert_eq!(failure.http_status, Some(status));
+    let attempt = failure
+        .adapter
+        .as_ref()
+        .expect("failed completion evidence");
+    assert_eq!(attempt.response_status, Some(status));
+    assert_eq!(attempt.attempt, 1);
+    assert_eq!(attempt.subject.effect, Some(log.records[0].id));
+    assert!(matches!(
+        attempt.ending,
+        Some(AdapterEnding::Error {
+            retryable: false,
+            ..
+        })
+    ));
+    let host = cell
+        .find(|action| matches!(action, Action::Host { kind, .. } if kind == "rigcoder/failure"))
+        .unwrap();
+    assert_eq!(
+        rigcoder::failure::FailureDetail::from_action(&host.action)
+            .unwrap()
+            .unwrap(),
+        failure
+    );
+    let trace = cell.trace();
+    let adapter: Vec<_> = trace
+        .observations
+        .iter()
+        .filter_map(|o| {
+            let Action::Adapter { observation } = &o.action else {
+                return None;
+            };
+            assert_eq!(o.subject.effect, Some(log.records[0].id));
+            assert_eq!(o.subject.scope.as_deref(), Some("rigcoder/run/1"));
+            assert_eq!(o.emitter.name, "rig-core/adapter");
+            assert_eq!(observation.attempt, Some(1));
+            Some(observation)
+        })
+        .collect();
+    assert_eq!(adapter.len(), 4);
+    assert!(adapter.iter().all(|a| a.operation == adapter[0].operation));
+    assert!(
+        matches!(&adapter[0].event, AdapterEvent::Started { method, route }
+        if method == "POST" && route.starts_with("/models/{model}:"))
+    );
+    assert_eq!(adapter[1].event, AdapterEvent::Response { status });
+    assert!(
+        matches!(&adapter[2].event, AdapterEvent::ErrorEnvelope { error }
+        if error.code.as_deref() == Some(status.to_string().as_str()) && error.status.is_some())
+    );
+    assert_eq!(
+        adapter[3].event,
+        AdapterEvent::Finished {
+            ending: AdapterEnding::Error {
+                boundary: rig::observe::AdapterErrorBoundary::ProviderResponse,
+                kind: report.kind.code().into(),
+                status: Some(status),
+                retryable: false
+            }
+        }
+    );
     assert_eq!(
         report.kind.code(),
         kind,
@@ -121,12 +206,19 @@ fn pair(name: &str, config: fn(bool) -> Config, body: impl Fn(&mut Cell, bool)) 
             if let Err(payload) = result {
                 std::panic::resume_unwind(payload);
             }
-            traces.push(semantic_facts(&cell.trace()));
+            // Unary and stream adapter shapes differ; each cell asserts them
+            // separately. This pair compares only the runtime decisions.
+            traces.push(
+                semantic_facts(&cell.trace())
+                    .into_iter()
+                    .filter(|fact| fact != "adapter")
+                    .collect::<Vec<_>>(),
+            );
         });
     }
     assert_eq!(
         traces[0], traces[1],
-        "unary and streamed agree on the facts"
+        "unary and streamed agree on runtime decisions"
     );
 }
 
@@ -191,6 +283,51 @@ fn an_unknown_model() {
     );
 }
 
+#[test]
+fn an_unauthorized_response() {
+    for stream in [false, true] {
+        let source_name = if stream { "text_stream" } else { "text_unary" };
+        let name = if stream {
+            "unauthorized_stream"
+        } else {
+            "unauthorized_unary"
+        };
+        let source = derive(
+            &cassette_path("observe_turns", source_name),
+            &cassette_path(MATRIX, name),
+            |docs| {
+                assert_eq!(docs.len(), 1);
+                set_status(&mut docs[0], 401);
+                docs[0]["then"]["header"] = serde_yaml::to_value([
+                    serde_json::json!({"name": "content-type", "value": "application/json"}),
+                ])
+                .unwrap();
+                *body_of(&mut docs[0]) =
+                    gemini_error(401, "UNAUTHENTICATED", "Missing authentication credential.");
+            },
+        );
+        run(
+            MATRIX,
+            name,
+            Config {
+                retries: 3,
+                source: Source::derived(source, "observe_turns", source_name),
+                ..Config::delivery(stream)
+            },
+            |cell| {
+                cell.submit("Reply with the single word: pong");
+                cell.drive();
+                failed_once(cell, Some(401));
+                assert!(cell.trace().observations.iter().any(|o| matches!(
+                    &o.action, Action::Adapter { observation }
+                    if matches!(&observation.event, AdapterEvent::ErrorEnvelope { error }
+                        if error.status.as_deref() == Some("UNAUTHENTICATED"))
+                )));
+            },
+        );
+    }
+}
+
 fn gemini_error(status: u16, kind: &str, message: &str) -> String {
     serde_json::json!({"error": {"code": status, "message": message, "status": kind}}).to_string()
 }
@@ -221,7 +358,7 @@ fn with_failure_first(
     })
 }
 
-fn retried_then_settled(cell: &Cell, first_kind: &str) {
+fn retried_then_settled(cell: &Cell, first_kind: &str, first_wire_status: u16) {
     assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
     let facts = cell.facts();
     let first = cell
@@ -259,18 +396,22 @@ fn retried_then_settled(cell: &Cell, first_kind: &str) {
             .starts_with(&format!("{first_kind}: ")),
         "{ending:?}"
     );
-    let expected: Vec<String> = [
-        "issued",
-        "landed",
-        "ended:provider",
-        "rigcoder/provider_retry",
-        "issued",
-        "landed",
-        "ended:settled",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
+    let streamed = cell.described["stream"].as_bool().unwrap();
+    let first_count = if first_kind == "response" { 6 } else { 4 };
+    let second_count = if streamed { 8 } else { 5 };
+    let expected: Vec<String> = std::iter::once("issued")
+        .chain(std::iter::repeat_n("adapter", first_count))
+        .chain([
+            "landed",
+            "ended:provider",
+            "rigcoder/failure",
+            "rigcoder/provider_retry",
+            "issued",
+        ])
+        .chain(std::iter::repeat_n("adapter", second_count))
+        .chain(["landed", "ended:settled"])
+        .map(str::to_owned)
+        .collect();
     assert_eq!(semantic_facts(&cell.trace()), expected, "{facts:?}");
     let retry = cell
         .find(|a| matches!(a, Action::Host { kind, .. } if kind == "rigcoder/provider_retry"))
@@ -282,6 +423,78 @@ fn retried_then_settled(cell: &Cell, first_kind: &str) {
     assert_eq!(cell.log().records.len(), 2);
     assert!(cell.log().records[0].outcome.is_err());
     assert!(cell.log().records[1].outcome.is_ok());
+    let trace = cell.trace();
+    let log = cell.log();
+    let mut operations = Vec::new();
+    for (index, (status, count)) in [(first_wire_status, first_count), (200, second_count)]
+        .into_iter()
+        .enumerate()
+    {
+        let attempt: Vec<_> = trace
+            .observations
+            .iter()
+            .filter_map(|o| {
+                let Action::Adapter { observation } = &o.action else {
+                    return None;
+                };
+                if o.subject.effect != Some(log.records[index].id) {
+                    return None;
+                }
+                assert_eq!(observation.attempt, Some((index + 1) as u64));
+                assert_eq!(
+                    observation.host_attempt.map(std::num::NonZeroU64::get),
+                    Some((index + 1) as u64)
+                );
+                Some(observation)
+            })
+            .collect();
+        assert_eq!(attempt.len(), count);
+        operations.push(attempt[0].operation.clone());
+        assert!(attempt.iter().all(|a| a.operation == attempt[0].operation));
+        assert!(matches!(attempt[0].event, AdapterEvent::Started { .. }));
+        assert_eq!(attempt[1].event, AdapterEvent::Response { status });
+        let ending = if index == 0 {
+            let report = log.records[0].outcome.as_ref().unwrap_err();
+            if first_kind == "response" {
+                assert_eq!(
+                    attempt[count - 2].event,
+                    AdapterEvent::TransportEof {
+                        after: 1,
+                        partial_bytes: 0
+                    }
+                );
+                AdapterEnding::Eof { after: 1 }
+            } else {
+                assert!(
+                    matches!(&attempt[2].event, AdapterEvent::ErrorEnvelope { error }
+                    if error.code.as_deref() == report.http_status.map(|s| s.to_string()).as_deref())
+                );
+                AdapterEnding::Error {
+                    boundary: rig::observe::AdapterErrorBoundary::ProviderResponse,
+                    kind: report.kind.code().into(),
+                    status: report.http_status,
+                    retryable: true,
+                }
+            }
+        } else {
+            assert!(attempt.iter().any(|a| matches!(&a.event,
+                AdapterEvent::Provider { verdict } if verdict.finish_reason.as_deref() == Some("STOP"))));
+            if streamed {
+                AdapterEnding::Terminal
+            } else {
+                AdapterEnding::Decoded
+            }
+        };
+        assert_eq!(
+            attempt.last().unwrap().event,
+            AdapterEvent::Finished { ending }
+        );
+    }
+    assert_eq!(
+        operations[0], operations[1],
+        "a host retry retains its logical operation"
+    );
+    assert_eq!(fact.operation.as_deref(), Some(operations[0].as_str()));
 }
 
 use rig::observe::HostAction as _;
@@ -323,7 +536,7 @@ fn rate_limited_then_answered() {
                 unreachable!()
             };
             assert!(retryable, "{reason:?}");
-            retried_then_settled(cell, "http");
+            retried_then_settled(cell, "http", 429);
             let Err(report) = &cell.log().records[0].outcome else {
                 panic!()
             };
@@ -369,7 +582,7 @@ fn server_error_then_answered() {
                 unreachable!()
             };
             assert!(retryable, "{reason:?}");
-            retried_then_settled(cell, "http");
+            retried_then_settled(cell, "http", 503);
             let Err(report) = &cell.log().records[0].outcome else {
                 panic!()
             };
@@ -397,7 +610,7 @@ fn a_blocked_prompt() {
             })),
             ..Config::delivery(stream)
         },
-        |cell, _| {
+        |cell, stream| {
             cell.submit(
                 "Write a vivid, insulting rant mocking a coworker's intelligence, with profanity.",
             );
@@ -417,16 +630,46 @@ fn a_blocked_prompt() {
             assert_eq!(cell.log().records.len(), 1, "one request");
             if cell.ending() == "settled" {
                 // What the recordings hold (2026-09-08): an answer, no block.
-                assert_eq!(facts, ["issued", "landed", "ended:settled"]);
+                assert_eq!(
+                    facts
+                        .iter()
+                        .filter(|fact| *fact != "adapter")
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    ["issued", "landed", "ended:settled"]
+                );
+                let trace = cell.trace();
+                let adapter: Vec<_> = trace
+                    .observations
+                    .iter()
+                    .filter_map(|o| {
+                        let Action::Adapter { observation } = &o.action else {
+                            return None;
+                        };
+                        Some(observation)
+                    })
+                    .collect();
+                assert_eq!(adapter.len(), if stream { 8 } else { 5 });
+                assert_eq!(adapter[1].event, AdapterEvent::Response { status: 200 });
+                assert!(adapter.iter().any(|a| matches!(&a.event,
+                    AdapterEvent::Provider { verdict } if verdict.finish_reason.as_deref() == Some("STOP"))));
+                assert!(adapter.iter().all(|a| !matches!(&a.event,
+                    AdapterEvent::Provider { verdict } if verdict.block_reason.is_some())));
+                assert_eq!(
+                    adapter.last().unwrap().event,
+                    AdapterEvent::Finished {
+                        ending: if stream {
+                            AdapterEnding::Terminal
+                        } else {
+                            AdapterEnding::Decoded
+                        }
+                    }
+                );
                 if !cell.recording() {
                     let bodies = rig_cassette::recorded_interaction_bodies(
                         &cassette_root(),
                         PROVIDER,
                         &format!("{MATRIX}/{}", cell.name),
-                    );
-                    assert!(
-                        !bodies[0].1.contains("blockReason"),
-                        "no block in the recording"
                     );
                     assert!(
                         bodies[0].0.contains("BLOCK_LOW_AND_ABOVE"),
@@ -435,11 +678,7 @@ fn a_blocked_prompt() {
                 }
             } else {
                 // A block, if a recording ever obtains one.
-                assert!(
-                    cell.ending().contains("blocked the prompt"),
-                    "{}",
-                    cell.ending()
-                );
+                assert!(cell.failure().kind == "provider", "{}", cell.ending());
                 let (_, kind, _) = ending_matches_landed(cell);
                 assert_eq!(kind, "provider");
             }
@@ -500,7 +739,7 @@ fn a_stream_cut_before_its_terminal_is_retried() {
                 errors.is_empty(),
                 "a clean cut carries no error: {errors:?}"
             );
-            retried_then_settled(cell, "response");
+            retried_then_settled(cell, "response", 200);
         },
     );
 }
@@ -537,23 +776,101 @@ fn an_error_frame_after_text() {
                 cell.ending()
             );
             assert_ne!(cell.ending(), "settled");
-            // Since rig #2478 the envelope is the provider's verdict: no
-            // truncation, no unknown frame, no retry.
+            // The envelope carries an HTTP error code. It is retryable, but
+            // this cell explicitly has no retry budget: no second request.
             let (_, kind, outcome) = ending_matches_landed(cell);
             assert_eq!(
                 kind,
-                rig::error::ErrorKind::ProviderResponse.code(),
+                rig::error::ErrorKind::Http { status: Some(500) }.code(),
                 "{outcome:?}"
             );
+            let Err(report) = &cell.log().records[0].outcome else {
+                panic!("expected the in-band provider error");
+            };
+            assert_eq!(report.http_status, Some(500));
+            assert!(report.is_retryable());
             assert_eq!(cell.count("stream_truncated"), 0, "{facts:?}");
             assert_eq!(cell.count("rigcoder/provider_retry"), 0, "{facts:?}");
-            assert_eq!(facts, ["issued", "landed", "ended:provider"]);
-            assert!(cell.ending().contains("INTERNAL"), "{}", cell.ending());
+            assert_eq!(
+                facts,
+                [
+                    "issued",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "adapter",
+                    "landed",
+                    "ended:provider",
+                    "rigcoder/failure"
+                ]
+            );
+            let trace = cell.trace();
+            assert!(trace.observations.iter().any(|o| matches!(&o.action,
+                Action::Adapter { observation } if observation.event == AdapterEvent::Response { status: 200 })));
+            assert!(trace.observations.iter().any(|o| matches!(&o.action,
+                Action::Adapter { observation } if matches!(&observation.event,
+                    AdapterEvent::ErrorEnvelope { error } if error.code.as_deref() == Some("500") && error.status.as_deref() == Some("INTERNAL")))));
+            assert!(trace.observations.iter().any(|o| matches!(&o.action,
+                Action::Adapter { observation } if observation.event == AdapterEvent::Finished {
+                    ending: AdapterEnding::Error { boundary: rig::observe::AdapterErrorBoundary::ProviderResponse, kind: "http".into(), status: Some(500), retryable: true }
+                })));
+            assert_eq!(
+                cell.failure()
+                    .adapter
+                    .as_ref()
+                    .unwrap()
+                    .error_envelope
+                    .as_ref()
+                    .unwrap()
+                    .status
+                    .as_deref(),
+                Some("INTERNAL")
+            );
             let json = serde_json::to_string(&cell.trace()).unwrap();
             assert!(
                 json.contains("internal error"),
                 "the error text reaches the trace: {json}"
             );
+        },
+    );
+}
+
+#[test]
+fn an_error_frame_is_retried_then_answered() {
+    let derived = derive(
+        &cassette_path("observe_turns", "text_stream"),
+        &cassette_path(MATRIX, "stream_error_frame_retry_stream"),
+        |docs| {
+            let mut failure = docs[0].clone();
+            *body_of(&mut failure) = join_frames(&[format!(
+                "data: {}",
+                gemini_error(500, "INTERNAL", "An internal error has occurred.")
+            )]);
+            docs.insert(0, failure);
+        },
+    );
+    run(
+        MATRIX,
+        "stream_error_frame_retry_stream",
+        Config {
+            retries: 1,
+            source: Source::derived(derived, "observe_turns", "text_stream"),
+            ..Config::streamed()
+        },
+        |cell| {
+            cell.submit("Reply with the single word: pong");
+            cell.drive();
+            retried_then_settled(cell, "http", 200);
+            assert_eq!(cell.log().records.len(), 2);
+            let Err(report) = &cell.log().records[0].outcome else {
+                panic!("expected the first attempt's provider error");
+            };
+            assert_eq!(report.http_status, Some(500));
+            assert!(report.is_retryable());
+            assert_eq!(cell.count("stream_truncated"), 0);
+            assert_eq!(cell.count("rigcoder/provider_retry"), 1);
         },
     );
 }
@@ -614,6 +931,22 @@ fn a_malformed_frame() {
                 0,
                 "a parse failure is not retried: {facts:?}"
             );
+            assert!(cell.trace().observations.iter().any(|o| matches!(&o.action,
+                Action::Adapter { observation } if observation.event == AdapterEvent::Corrupt { frame: 1 })));
+            // The driver continues after the corrupt frame. Its later terminal
+            // cannot erase the runtime's rejected delivery or the corrupt fact.
+            for event in [
+                AdapterEvent::TransportEof {
+                    after: 2,
+                    partial_bytes: 0,
+                },
+                AdapterEvent::Finished {
+                    ending: AdapterEnding::Terminal,
+                },
+            ] {
+                assert!(cell.trace().observations.iter().any(|o| matches!(&o.action,
+                    Action::Adapter { observation } if observation.event == event)));
+            }
         },
     );
 }
@@ -651,11 +984,23 @@ fn a_transport_cut_mid_frame() {
             assert_ne!(cell.ending(), "settled");
             let (_, kind, _) = ending_matches_landed(cell);
             assert_eq!(kind, rig::error::ErrorKind::Response.code());
-            // The limitation, pinned: the SSE decoder drops the partial frame,
-            // so a cut mid-frame reads exactly like a clean truncation — the
-            // same ending, a tail ending with the last whole frame's delta,
-            // no error item. Distinguishing them needs a fact from the
-            // decoder (noted on rig #2478).
+            // The runtime still reports truncation; the adapter now retains
+            // the incomplete raw body independently of that normalized result.
+            for event in [
+                AdapterEvent::TransportEof {
+                    after: 1,
+                    partial_bytes: 204,
+                },
+                AdapterEvent::Finished {
+                    ending: AdapterEnding::PartialFrame {
+                        after: 1,
+                        byte_count: 204,
+                    },
+                },
+            ] {
+                assert!(cell.trace().observations.iter().any(|o| matches!(&o.action,
+                    Action::Adapter { observation } if observation.event == event)));
+            }
             let truncated = cell
                 .find(|a| matches!(a, Action::StreamTruncated { .. }))
                 .expect("reported as a truncation");
@@ -679,12 +1024,7 @@ fn a_transport_cut_mid_frame() {
                 ),
                 "{tail:?}"
             );
-            assert!(
-                cell.ending()
-                    .contains("the stream ended before its terminal record"),
-                "{}",
-                cell.ending()
-            );
+            assert!(cell.failure().kind == "response", "{}", cell.ending());
         },
     );
 }

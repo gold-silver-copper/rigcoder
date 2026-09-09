@@ -1,0 +1,282 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 2000000
+      }
+    },
+    {
+      "seq": 1,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:generateContent"
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 4000000
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 6000000
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 795,
+              "output_tokens": 1,
+              "total_tokens": 888,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 92,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 7000000
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 8000000
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "decoded"
+            }
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": null,
+            "timing": {
+              "request_duration": {
+                "secs": 0,
+                "nanos": 6000000
+              },
+              "time_to_first_byte": {
+                "secs": 0,
+                "nanos": 2000000
+              }
+            }
+          }
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 10000000
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "completion"
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 12000000
+      },
+      "handler_timing": {
+        "interval": "execution",
+        "duration": {
+          "secs": 0,
+          "nanos": 10000000
+        },
+        "complete": true
+      }
+    },
+    {
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "runtime",
+      "emitter": {
+        "name": "rig-ecs/agent",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "ended",
+        "ending": {
+          "code": "settled"
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 14000000
+      },
+      "run_timing": {
+        "duration": {
+          "secs": 0,
+          "nanos": 13000000
+        },
+        "complete": true
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "scripted"
+  },
+  "recording_provenance": "live"
+}

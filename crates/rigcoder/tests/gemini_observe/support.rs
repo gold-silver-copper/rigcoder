@@ -66,6 +66,7 @@ pub fn paced(source: (&str, &str), index: usize, pace: Duration) -> Source {
         frames: recorded_frames(&path, index),
         pace,
         workspace: (source.0.to_owned(), source.1.to_owned()),
+        provenance: rigcoder::observe::RecordingProvenance::Live,
     }
 }
 
@@ -145,6 +146,7 @@ pub enum Source {
     Replay {
         path: PathBuf,
         workspace: (String, String),
+        provenance: rigcoder::observe::RecordingProvenance,
     },
     /// No provider wire at all: the cell never reaches a handler.
     None,
@@ -153,6 +155,7 @@ pub enum Source {
         frames: Vec<String>,
         pace: Duration,
         workspace: (String, String),
+        provenance: rigcoder::observe::RecordingProvenance,
     },
 }
 
@@ -162,6 +165,7 @@ impl Source {
         Self::Replay {
             path: cassette_path(matrix, name),
             workspace: (matrix.to_owned(), name.to_owned()),
+            provenance: rigcoder::observe::RecordingProvenance::Live,
         }
     }
 
@@ -170,6 +174,7 @@ impl Source {
         Self::Replay {
             path,
             workspace: (matrix.to_owned(), name.to_owned()),
+            provenance: rigcoder::observe::RecordingProvenance::Derived,
         }
     }
 }
@@ -259,6 +264,52 @@ fn http() -> rig::http_client::BoxedHttpClient {
 }
 
 impl Cell {
+    /// Exercise CompletionModel directly against this replay, retaining the
+    /// existing packet sink but bypassing the World and dispatch handler.
+    pub fn direct_completion(
+        &self,
+        mut request: rig::completion::CompletionRequest,
+        streamed: bool,
+    ) -> Result<Vec<rig::message::AssistantContent>, Box<dyn std::error::Error>> {
+        use futures::StreamExt;
+        use rig::{client::CompletionClient, completion::CompletionModel};
+        assert_eq!(
+            self.mode,
+            CassetteMode::Replay,
+            "direct parity is replay-only"
+        );
+        let cassette = self.cassette.as_ref().expect("direct provider replay");
+        let sink = self
+            .app
+            .world()
+            .resource::<rigcoder::observe::Observations>()
+            .0
+            .clone();
+        request.observation = Some(rig::observe::AdapterContext::new(
+            sink,
+            rig::observe::Subject::scoped("direct"),
+            "direct/1",
+        ));
+        self.rt.block_on(async {
+            let client = rig::providers::gemini::Client::builder()
+                .api_key(cassette.api_key(KEY_ENV))
+                .base_url(cassette.base_url())
+                .http_client(http())
+                .build()
+                .unwrap();
+            let model = client.completion_model(self.described["model"].as_str().unwrap());
+            if streamed {
+                let mut response = model.stream(request).await?;
+                while let Some(event) = response.next().await {
+                    event?;
+                }
+                Ok(response.finish().choice)
+            } else {
+                Ok(model.completion(request).await?.choice)
+            }
+        })
+    }
+
     /// Build the cell: start the cassette, build the product app, apply the
     /// configuration, run startup.
     pub fn new(matrix: &str, name: &str, config: Config) -> Self {
@@ -272,20 +323,45 @@ impl Cell {
                 cassette_path(matrix, name),
                 (matrix.to_owned(), name.to_owned()),
             ),
-            Source::Replay { path, workspace } => {
-                (Some(CassetteMode::Replay), path.clone(), workspace.clone())
-            }
+            Source::Replay {
+                path, workspace, ..
+            } => (Some(CassetteMode::Replay), path.clone(), workspace.clone()),
             Source::None => (None, PathBuf::new(), (matrix.to_owned(), name.to_owned())),
             Source::Paced { workspace, .. } => (None, PathBuf::new(), workspace.clone()),
         };
+        let recording_provenance = match &config.source {
+            Source::Ambient => rigcoder::observe::RecordingProvenance::Live,
+            Source::Replay { provenance, .. } | Source::Paced { provenance, .. } => *provenance,
+            Source::None => rigcoder::observe::RecordingProvenance::NotApplicable,
+        };
+        let measurement_context =
+            config
+                .witness
+                .as_ref()
+                .map(|witness| rigcoder::observe::MeasurementContext {
+                    execution_mode: match (&config.source, mode) {
+                        (Source::None, _) => rigcoder::observe::ExecutionMode::LocalOnly,
+                        (Source::Paced { .. }, _) => rigcoder::observe::ExecutionMode::PacedReplay,
+                        (_, Some(CassetteMode::Replay)) => {
+                            rigcoder::observe::ExecutionMode::CassetteReplay
+                        }
+                        (_, Some(CassetteMode::Record)) => rigcoder::observe::ExecutionMode::Live,
+                        _ => unreachable!("wire sources have a cassette mode"),
+                    },
+                    clock_source: if witness.clock {
+                        rigcoder::observe::ClockSource::Scripted
+                    } else {
+                        rigcoder::observe::ClockSource::Absent
+                    },
+                });
         let described = serde_json::json!({
             "matrix": matrix,
             "cell": name,
             "source": match &config.source {
                 Source::Ambient => serde_json::json!({"kind": "cassette", "scenario": format!("{matrix}/{name}")}),
-                Source::Replay { path, workspace } => serde_json::json!({"kind": "replay", "path": path.strip_prefix(fixture_root()).map(|p| p.display().to_string()).unwrap_or_else(|_| path.display().to_string()), "workspace_of": format!("{}/{}", workspace.0, workspace.1)}),
+                Source::Replay { path, workspace, .. } => serde_json::json!({"kind": "replay", "path": path.strip_prefix(fixture_root()).map(|p| p.display().to_string()).unwrap_or_else(|_| path.display().to_string()), "workspace_of": format!("{}/{}", workspace.0, workspace.1)}),
                 Source::None => serde_json::json!({"kind": "none"}),
-                Source::Paced { frames, pace, workspace } => serde_json::json!({"kind": "paced", "frames": frames.len(), "pace_ms": pace.as_millis(), "workspace_of": format!("{}/{}", workspace.0, workspace.1)}),
+                Source::Paced { frames, pace, workspace, .. } => serde_json::json!({"kind": "paced", "frames": frames.len(), "pace_ms": pace.as_millis(), "workspace_of": format!("{}/{}", workspace.0, workspace.1)}),
             },
             "model": config.model,
             "stream": config.stream,
@@ -404,6 +480,10 @@ impl Cell {
             }
         }
         // Startup: the model and the tools register, the agent spawns.
+        if let Some(context) = measurement_context {
+            app.insert_resource(context);
+            app.insert_resource(recording_provenance);
+        }
         app.update();
         if let Some(concurrency) = config.concurrency {
             let agent = app.world().resource::<rigcoder::AgentHandle>().agent;
@@ -443,7 +523,7 @@ impl Cell {
         files.push(("cell.json".into(), pretty(&self.described)));
         let log = rigcoder::effect_log(world);
         files.push(("effects.json".into(), pretty(&log)));
-        if let Some(trace) = rigcoder::observations(world) {
+        if let Some(trace) = rigcoder::observe::artifact(world) {
             files.push(("observations.json".into(), pretty(&trace)));
         }
         let transcript: String = world
@@ -502,12 +582,23 @@ impl Cell {
                 continue;
             }
             let (a, b) = (normalized(name, &committed), normalized(name, content));
+            let difference = a
+                .chars()
+                .zip(b.chars())
+                .position(|(a, b)| a != b)
+                .unwrap_or_else(|| a.chars().count().min(b.chars().count()));
+            let context = |text: &str| {
+                text.chars()
+                    .skip(difference.saturating_sub(200))
+                    .take(1200)
+                    .collect::<String>()
+            };
             assert!(
                 a == b,
-                "{}/{name} drifted from the committed evidence; regenerate with RIGCODER_EVIDENCE=write if the change is intended\n--- committed\n{}\n--- now\n{}",
+                "{}/{name} drifted from the committed evidence at character {difference}; regenerate with RIGCODER_EVIDENCE=write if the change is intended\n--- committed around difference\n{}\n--- now around difference\n{}",
                 packet.display(),
-                &a[..a.len().min(2000)],
-                &b[..b.len().min(2000)]
+                context(&a),
+                context(&b)
             );
         }
         let mut listed = Vec::new();
@@ -594,10 +685,21 @@ impl Cell {
             .rev()
             .find_map(|e| match e {
                 Event::Settled { .. } => Some("settled".to_owned()),
-                Event::Failed { reason } => Some(reason.clone()),
+                Event::Failed { reason } => Some(reason.kind.clone()),
                 _ => None,
             })
             .unwrap_or_else(|| "none".into())
+    }
+
+    pub fn failure(&self) -> rigcoder::failure::FailureDetail {
+        self.events()
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::Failed { reason } => Some(reason),
+                _ => None,
+            })
+            .expect("a structured failure")
     }
 
     pub fn answer(&self) -> String {
@@ -640,6 +742,15 @@ impl Cell {
 
     pub fn facts(&self) -> Vec<String> {
         facts(&self.trace())
+    }
+
+    /// Lifecycle ordering assertions omit interleaved adapter facts; the full
+    /// packet and boundary-specific assertions still retain those facts.
+    pub fn lifecycle_facts(&self) -> Vec<String> {
+        self.facts()
+            .into_iter()
+            .filter(|fact| fact != "adapter")
+            .collect()
     }
 
     pub fn count(&self, fact: &str) -> usize {
@@ -724,6 +835,7 @@ pub fn facts(trace: &ObservationTrace) -> Vec<String> {
 
 pub fn fact(action: &Action, stage: Stage) -> String {
     match action {
+        Action::Adapter { .. } => "adapter".into(),
         Action::Host { kind, payload } => match payload.get("decision") {
             Some(decision) => format!("{kind}:{}", decision.as_str().unwrap_or("")),
             None => kind.clone(),
@@ -922,7 +1034,8 @@ pub fn recorded_frames(path: &Path, index: usize) -> Vec<String> {
 }
 
 /// A unary/streamed parity pair: `body` runs once per wire under
-/// `config(stream)`, and the cells' semantic facts must agree.
+/// `config(stream)`, and the cells' lifecycle facts must agree. Adapter frame
+/// and transport boundaries differ by wire; each full packet asserts its own.
 pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(&mut Cell, bool)) {
     let mut traces = Vec::new();
     for stream in [false, true] {
@@ -941,17 +1054,22 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
             if let Err(payload) = result {
                 std::panic::resume_unwind(payload);
             }
-            traces.push(semantic_facts(&cell.trace()));
+            traces.push(
+                semantic_facts(&cell.trace())
+                    .into_iter()
+                    .filter(|fact| fact != "adapter")
+                    .collect::<Vec<_>>(),
+            );
         });
     }
     assert_eq!(
         traces[0], traces[1],
-        "unary and streamed agree on the facts"
+        "unary and streamed agree on lifecycle facts"
     );
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "a219d2b0c73d87bd8d1fe080c0cbdf95e0b35fe4";
+pub const RIG_REV: &str = "92d5dc482f38e460f0f888d863ce275e50405280";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"
@@ -1027,7 +1145,7 @@ fn base64_encode(bytes: &[u8]) -> String {
 
 /// A packet file with its measurements stripped: delivery pass numbers in
 /// the effect log, clock stamps in the trace.
-fn normalized(name: &str, content: &str) -> String {
+pub(super) fn normalized(name: &str, content: &str) -> String {
     match name {
         "effects.json" => {
             let mut v: serde_json::Value = serde_json::from_str(content).unwrap();
@@ -1036,12 +1154,24 @@ fn normalized(name: &str, content: &str) -> String {
         }
         "observations.json" => {
             let mut v: serde_json::Value = serde_json::from_str(content).unwrap();
+            // Execution mode and clock source label measurements, not behavior.
+            // Retain them in persisted artifacts and the digest; a recorded
+            // execution and its replay can still have equal semantic facts.
+            v.as_object_mut().unwrap().remove("measurement_context");
             if let Some(observations) = v
                 .pointer_mut("/observations")
                 .and_then(|d| d.as_array_mut())
             {
                 for o in observations {
                     o.as_object_mut().map(|o| o.remove("at"));
+                    o.as_object_mut().map(|o| o.remove("run_timing"));
+                    o.as_object_mut().map(|o| o.remove("handler_timing"));
+                    if let Some(adapter) = o
+                        .pointer_mut("/action/observation")
+                        .and_then(serde_json::Value::as_object_mut)
+                    {
+                        adapter.remove("analysis");
+                    }
                 }
             }
             pretty(&v)
@@ -1053,6 +1183,40 @@ fn normalized(name: &str, content: &str) -> String {
             .into_owned(),
         _ => content.to_owned(),
     }
+}
+
+#[test]
+fn adapter_analysis_is_excluded_without_erasing_semantic_response_facts() {
+    let original = include_str!(
+        "../../../../fixtures/evidence/gemini/observe_wire/retry_headers_unary/observations.json"
+    );
+    let mut changed: serde_json::Value = serde_json::from_str(original).unwrap();
+    let observations = changed["observations"].as_array_mut().unwrap();
+    for o in observations.iter_mut() {
+        if let Some(fact) = o
+            .pointer_mut("/action/observation")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            fact.remove("analysis");
+        }
+    }
+    assert_eq!(
+        normalized("observations.json", original),
+        normalized("observations.json", &changed.to_string())
+    );
+    for o in changed["observations"].as_array_mut().unwrap() {
+        if o.pointer("/action/observation/event/event")
+            .and_then(serde_json::Value::as_str)
+            == Some("response")
+        {
+            o["action"]["observation"]["event"]["status"] = serde_json::json!(503);
+            break;
+        }
+    }
+    assert_ne!(
+        normalized("observations.json", original),
+        normalized("observations.json", &changed.to_string())
+    );
 }
 
 static DATE_HEADER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {

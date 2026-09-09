@@ -1,0 +1,33 @@
+{
+  "observations": [
+    {
+      "seq": 0,
+      "subject": {},
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "invalid_configuration",
+          "origin": "invalid_configuration",
+          "boundary": "host",
+          "message": "max_tokens must be greater than zero",
+          "retryable": false,
+          "http_status": null,
+          "adapter": null
+        }
+      }
+    }
+  ],
+  "dropped": 0,
+  "finalized": true,
+  "measurement_context": {
+    "execution_mode": "local_only",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "not_applicable"
+}

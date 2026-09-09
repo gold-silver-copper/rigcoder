@@ -14,12 +14,26 @@ use std::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+mod metadata;
+use metadata::{EvaluationMetadata, TaskSource};
+
 /// Counted facts about one trial.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct TrialFacts {
     pub trial: String,
-    pub task: String,
-    pub reward: f64,
+    pub task: Option<String>,
+    /// Whether task identity was recorded or inferred from a legacy directory.
+    #[serde(default)]
+    pub task_source: Option<TaskSource>,
+    /// Recorded trial ordinal; never inferred from the directory name.
+    #[serde(default)]
+    pub attempt: Option<usize>,
+    /// Recorded task score. Missing, malformed or non-finite scores stay unknown.
+    pub reward: Option<f64>,
+    // Preserve legacy diagnostic routing for non-finite verifier values without
+    // exporting them as recorded scores. Missing/unparseable values use zero.
+    #[serde(skip)]
+    unavailable_selection_reward: f64,
     pub tool_calls: u64,
     /// Per tool name: (ok, error) results.
     pub by_tool: BTreeMap<String, (u64, u64)>,
@@ -43,6 +57,9 @@ pub struct TrialFacts {
     /// when it settled; `unknown` when the transcript ends without either).
     #[serde(default)]
     pub ending: String,
+    /// Structured transcript failure, including failures before a run starts.
+    #[serde(default)]
+    pub failure: Option<rigcoder::failure::FailureDetail>,
     /// What the witness saw (`observations.json`), when the trial has one.
     #[serde(default)]
     pub observed: Observed,
@@ -51,6 +68,14 @@ pub struct TrialFacts {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub final_text_chars: u64,
+}
+
+impl TrialFacts {
+    /// Preserve existing investigation-bucket policy, including its handling of
+    /// non-finite input. This is not a recorded score; export `reward` as evidence.
+    fn selection_reward(&self) -> f64 {
+        self.reward.unwrap_or(self.unavailable_selection_reward)
+    }
 }
 
 /// Mean of each counted fact over a set of trials.
@@ -70,46 +95,261 @@ pub struct Aggregate {
     pub last_tool: BTreeMap<String, u64>,
 }
 
+/// An adapter fact with its original effect/run correlation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedAdapter {
+    pub subject: rig::observe::Subject,
+    pub fact: rig::observe::AdapterObservation,
+}
+
+/// One send's latest usage and closure, without summing cumulative snapshots.
+/// A closure describes the provider boundary, never independent task success.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedAttempt {
+    pub subject: rig::observe::Subject,
+    pub operation: String,
+    pub attempt: u64,
+    pub host_attempt: Option<std::num::NonZeroU64>,
+    pub started: bool,
+    pub status: Option<u16>,
+    pub ending: Option<rig::observe::AdapterEnding>,
+    /// Observed body EOF, even when the adapter also produced a terminal.
+    pub transport_eof: Option<ObservedEof>,
+    /// Last reported value of each provider metadata field.
+    pub verdict: rig::observe::AdapterVerdict,
+    pub error_envelope: Option<rig::observe::AdapterErrorEnvelope>,
+    /// Volatile diagnostics remain separate from semantic provider facts.
+    pub analysis: rig::observe::AdapterAnalysis,
+    /// Last reported snapshot, potentially partial even when the send closed.
+    /// None means no usage report was observed, not zero consumption.
+    pub usage: Option<rig::observe::AdapterUsage>,
+}
+
+/// Body completeness is independent of the provider verdict and task score.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedEof {
+    pub after: usize,
+    pub partial_bytes: usize,
+}
+
+/// An actual host retry decision, independent of provider retryability.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedRetry {
+    pub subject: rig::observe::Subject,
+    pub operation: Option<String>,
+    /// One-based retry decision ordinal (retry 1 follows host attempt 1).
+    pub retry: Option<u64>,
+    pub wait_secs: Option<u64>,
+}
+
+/// One owner's acquisition or release, in trace order. These are transitions,
+/// not an active-owner snapshot: denial, cancellation or missing facts can end
+/// a hold without an ordinary release.
+/// Pre-dispatch subjects join by scope and order; effect IDs may be absent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedHold {
+    pub subject: rig::observe::Subject,
+    pub owner: rig::observe::Emitter,
+    pub acquired: bool,
+}
+
 /// The decision trace, counted: the facts a failure classification needs
 /// that no transcript line carries.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Observed {
-    /// The trace was present and complete (no dropped facts).
+    /// Execution and clock provenance; absent in legacy/unlabelled artifacts.
+    #[serde(default)]
+    pub measurement_context: Option<rigcoder::observe::MeasurementContext>,
+    /// Provider content origin, independent of measurement execution mode.
+    #[serde(default)]
+    pub recording_provenance: Option<rigcoder::observe::RecordingProvenance>,
+    /// Handler intervals attached to their landing/cancellation facts.
+    #[serde(default)]
+    pub handler_timings: Vec<ObservedHandlerTiming>,
+    /// Typed provider boundary facts; no reconstruction from cassette bodies.
+    #[serde(default)]
+    pub adapter: Vec<ObservedAdapter>,
+    /// Attempt summaries in first-observed order; failures keep their own usage.
+    #[serde(default)]
+    pub attempts: Vec<ObservedAttempt>,
+    /// A valid trace was present, finalized, and had no dropped facts.
     pub complete: bool,
+    /// Whether a trace could be decoded; missing/malformed is not empty success.
+    #[serde(default)]
+    pub trace_present: bool,
+    /// Whether the producer explicitly finalized the trace, when available.
+    #[serde(default)]
+    pub finalized: Option<bool>,
+    /// Facts the sink dropped; unknown when no valid trace was available.
+    #[serde(default)]
+    pub dropped: Option<u64>,
     /// Provider streams that ended before their terminal record.
     pub stream_truncations: u64,
     /// Tool calls a gate or steering rule denied.
     pub denials: u64,
     /// Whole-prompt provider retries the session made.
     pub provider_retries: u64,
+    #[serde(default)]
+    pub retry_decisions: Vec<ObservedRetry>,
     /// Intents the driver refused (no handler, re-entrant, ids exhausted).
     pub refusals: u64,
     /// Approval holds, and how many of them were denied by the reviewer.
     pub holds: u64,
     pub held_denied: u64,
+    /// Named batch/policy transitions, separate from approval decision counts.
+    #[serde(default)]
+    pub hold_transitions: Vec<ObservedHold>,
     /// Dispatches cancelled while a handler served them (a tool still
     /// running when the run was cancelled).
     pub cancelled_in_flight: u64,
-    /// Every run ending the witness saw, in order (`settled`, `provider`,
-    /// `cancelled`, `max_turns`, …).
-    pub endings: Vec<String>,
-    /// The reason detail of the last non-settled ending, if any.
+    /// Every run ending the witness saw, in order, with its scope and optional
+    /// interval (`settled`, `provider`, `cancelled`, `max_turns`, …).
+    pub endings: Vec<ObservedRunEnding>,
+    /// Latest structured failure, retained even when a later retry settles.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_failure: Option<String>,
+    pub last_failure: Option<rigcoder::failure::FailureDetail>,
+}
+
+/// A run ending and its optional injected-clock interval, joined by scope.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedRunEnding {
+    pub subject: rig::observe::Subject,
+    pub ending: String,
+    pub timing: Option<rig::observe::RunTiming>,
+}
+
+/// One measured handler boundary with its execution-local subject and outcome.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ObservedHandlerTiming {
+    pub subject: rig::observe::Subject,
+    pub timing: rig::observe::HandlerTiming,
+    pub ending: rig::observe::Action,
 }
 
 /// Count what an observation trace says. A missing or unparsable trace is
 /// an incomplete, empty `Observed`, never a claim that nothing happened.
 pub fn observed(trace: &str) -> Observed {
-    let Ok(trace) = serde_json::from_str::<rig::observe::ObservationTrace>(trace) else {
+    let Ok(artifact) = serde_json::from_str::<rigcoder::observe::ObservationArtifact>(trace) else {
         return Observed::default();
     };
+    let trace = artifact.trace;
     let mut o = Observed {
-        complete: trace.is_complete(),
+        measurement_context: artifact.measurement_context,
+        recording_provenance: artifact.recording_provenance,
+        complete: trace.finalized && trace.is_complete(),
+        trace_present: true,
+        finalized: Some(trace.finalized),
+        dropped: Some(trace.dropped),
         ..Observed::default()
     };
+    let mut attempts = BTreeMap::new();
     for observation in &trace.observations {
+        if let Some(timing) = &observation.handler_timing {
+            o.handler_timings.push(ObservedHandlerTiming {
+                subject: observation.subject.clone(),
+                timing: timing.clone(),
+                ending: observation.action.clone(),
+            });
+        }
         match &observation.action {
+            rig::observe::Action::Held { .. } | rig::observe::Action::Released => {
+                o.hold_transitions.push(ObservedHold {
+                    subject: observation.subject.clone(),
+                    owner: observation.emitter.clone(),
+                    acquired: matches!(observation.action, rig::observe::Action::Held { .. }),
+                });
+            }
+            rig::observe::Action::Adapter { observation: fact } => {
+                o.adapter.push(ObservedAdapter {
+                    subject: observation.subject.clone(),
+                    fact: fact.clone(),
+                });
+                if let Some(attempt) = fact.attempt {
+                    let key = (
+                        observation.subject.scope.clone(),
+                        fact.operation.clone(),
+                        attempt,
+                    );
+                    let index = *attempts.entry(key).or_insert_with(|| {
+                        let index = o.attempts.len();
+                        o.attempts.push(ObservedAttempt {
+                            subject: observation.subject.clone(),
+                            operation: fact.operation.clone(),
+                            attempt,
+                            host_attempt: fact.host_attempt,
+                            started: false,
+                            status: None,
+                            ending: None,
+                            transport_eof: None,
+                            verdict: rig::observe::AdapterVerdict::default(),
+                            error_envelope: None,
+                            analysis: rig::observe::AdapterAnalysis::default(),
+                            usage: None,
+                        });
+                        index
+                    });
+                    let summary = &mut o.attempts[index];
+                    if let Some(analysis) = &fact.analysis {
+                        if analysis.response_id.is_some() {
+                            summary
+                                .analysis
+                                .response_id
+                                .clone_from(&analysis.response_id);
+                        }
+                        if analysis.headers.is_some() {
+                            summary.analysis.headers.clone_from(&analysis.headers);
+                        }
+                        if analysis.timing.is_some() {
+                            summary.analysis.timing.clone_from(&analysis.timing);
+                        }
+                    }
+                    match &fact.event {
+                        rig::observe::AdapterEvent::Provider { verdict } => {
+                            if verdict.finish_reason.is_some() {
+                                summary
+                                    .verdict
+                                    .finish_reason
+                                    .clone_from(&verdict.finish_reason);
+                            }
+                            if verdict.block_reason.is_some() {
+                                summary
+                                    .verdict
+                                    .block_reason
+                                    .clone_from(&verdict.block_reason);
+                            }
+                            if verdict.detail.is_some() {
+                                summary.verdict.detail.clone_from(&verdict.detail);
+                            }
+                            if verdict.model.is_some() {
+                                summary.verdict.model.clone_from(&verdict.model);
+                            }
+                        }
+                        rig::observe::AdapterEvent::ErrorEnvelope { error } => {
+                            summary.error_envelope = Some(error.clone())
+                        }
+                        rig::observe::AdapterEvent::Started { .. } => summary.started = true,
+                        rig::observe::AdapterEvent::Response { status } => {
+                            summary.status = Some(*status)
+                        }
+                        rig::observe::AdapterEvent::Finished { ending } => {
+                            summary.ending = Some(ending.clone())
+                        }
+                        rig::observe::AdapterEvent::Usage { usage } => {
+                            summary.usage = Some(usage.clone())
+                        }
+                        rig::observe::AdapterEvent::TransportEof {
+                            after,
+                            partial_bytes,
+                        } => {
+                            summary.transport_eof = Some(ObservedEof {
+                                after: *after,
+                                partial_bytes: *partial_bytes,
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
             rig::observe::Action::StreamTruncated { .. } => o.stream_truncations += 1,
             rig::observe::Action::Denied { .. } => o.denials += 1,
             rig::observe::Action::Refused { .. } => o.refusals += 1,
@@ -119,13 +359,25 @@ pub fn observed(trace: &str) -> Observed {
                 o.cancelled_in_flight += 1;
             }
             rig::observe::Action::Ended { ending } => {
-                o.endings.push(ending.code.clone());
-                if ending.code != "settled" {
-                    o.last_failure = ending.detail.clone();
-                }
+                o.endings.push(ObservedRunEnding {
+                    subject: observation.subject.clone(),
+                    ending: ending.code.clone(),
+                    timing: observation.run_timing.clone(),
+                });
             }
             rig::observe::Action::Host { kind, payload } => match kind.as_str() {
-                "rigcoder/provider_retry" => o.provider_retries += 1,
+                "rigcoder/failure" => {
+                    o.last_failure = serde_json::from_value(payload.clone()).ok();
+                }
+                "rigcoder/provider_retry" => {
+                    o.provider_retries += 1;
+                    o.retry_decisions.push(ObservedRetry {
+                        subject: observation.subject.clone(),
+                        operation: payload["operation"].as_str().map(str::to_owned),
+                        retry: payload["attempt"].as_u64(),
+                        wait_secs: payload["wait_secs"].as_u64(),
+                    });
+                }
                 "rigcoder/approval" => match payload["decision"].as_str() {
                     Some("held") => o.holds += 1,
                     Some("denied") => o.held_denied += 1,
@@ -141,6 +393,8 @@ pub fn observed(trace: &str) -> Observed {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Digest {
+    #[serde(default)]
+    pub evaluation: Option<EvaluationMetadata>,
     pub failed: Aggregate,
     pub passed: Aggregate,
     pub trials: Vec<TrialFacts>,
@@ -164,7 +418,7 @@ struct Event {
     #[serde(default)]
     output_tokens: u64,
     #[serde(default)]
-    reason: String,
+    reason: serde_json::Value,
 }
 
 const DELIBERATION: &[&str] = &[
@@ -243,7 +497,13 @@ pub fn facts(transcript: &str) -> TrialFacts {
                 }
             }
             "assistant" => final_text = e.text,
-            "failed" => f.ending = e.reason,
+            "failed" => {
+                f.failure = serde_json::from_value(e.reason).ok();
+                f.ending = f
+                    .failure
+                    .as_ref()
+                    .map_or_else(|| "unknown".into(), |failure| failure.kind.clone());
+            }
             "settled" => f.ending = "settled".into(),
             "usage" => {
                 f.input_tokens += e.input_tokens;
@@ -274,7 +534,11 @@ fn short(text: &str, max: usize) -> String {
 /// say about why a run ended.
 pub fn render_observed(d: &Digest) -> String {
     let mut out = String::new();
-    let failed: Vec<&TrialFacts> = d.trials.iter().filter(|t| t.reward < 1.0).collect();
+    let failed: Vec<&TrialFacts> = d
+        .trials
+        .iter()
+        .filter(|t| t.selection_reward() < 1.0)
+        .collect();
     if failed.iter().all(|t| t.observed == Observed::default()) {
         return out;
     }
@@ -292,10 +556,14 @@ pub fn render_observed(d: &Digest) -> String {
             o.holds,
             o.held_denied,
             o.cancelled_in_flight,
-            o.endings.join(" → "),
+            o.endings
+                .iter()
+                .map(|run| run.ending.as_str())
+                .collect::<Vec<_>>()
+                .join(" → "),
             o.last_failure
-                .as_deref()
-                .map(|s| short(s, 80))
+                .as_ref()
+                .map(|failure| short(&failure.to_string(), 80))
                 .unwrap_or_default()
         ));
     }
@@ -355,26 +623,25 @@ pub fn aggregate(trials: &[&TrialFacts]) -> Aggregate {
     }
 }
 
-fn reward_of(trial_dir: &Path) -> f64 {
+fn reward_of(trial_dir: &Path) -> Option<f64> {
     if let Ok(text) = std::fs::read_to_string(trial_dir.join("verifier").join("reward.txt"))
         && let Ok(reward) = text.trim().parse::<f64>()
     {
-        return reward;
+        return Some(reward);
     }
     let Ok(text) = std::fs::read_to_string(trial_dir.join("result.json")) else {
-        return 0.0;
+        return None;
     };
     let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return 0.0;
+        return None;
     };
     value["reward"]
         .as_f64()
         .or_else(|| value["verifier_result"]["rewards"]["reward"].as_f64())
-        .unwrap_or(0.0)
 }
 
 /// Digest every trial under `job_dir`.
-pub fn job(job_dir: &Path) -> Result<Digest> {
+pub fn job(job_dir: &Path, harness_root: &Path) -> Result<Digest> {
     let mut trials = Vec::new();
     for entry in
         std::fs::read_dir(job_dir).with_context(|| format!("reading {}", job_dir.display()))?
@@ -392,14 +659,23 @@ pub fn job(job_dir: &Path) -> Result<Digest> {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        f.task = f.trial.split("__").next().unwrap_or_default().to_owned();
-        f.reward = reward_of(&dir);
+        (f.task, f.task_source, f.attempt) = metadata::trial(&dir, &f.trial);
+        let reward = reward_of(&dir);
+        f.unavailable_selection_reward = reward.unwrap_or(0.0);
+        f.reward = reward.filter(|reward| reward.is_finite());
         trials.push(f);
     }
     trials.sort_by(|a, b| a.trial.cmp(&b.trial));
-    let failed: Vec<&TrialFacts> = trials.iter().filter(|t| t.reward < 1.0).collect();
-    let passed: Vec<&TrialFacts> = trials.iter().filter(|t| t.reward >= 1.0).collect();
+    let failed: Vec<&TrialFacts> = trials
+        .iter()
+        .filter(|t| t.selection_reward() < 1.0)
+        .collect();
+    let passed: Vec<&TrialFacts> = trials
+        .iter()
+        .filter(|t| t.selection_reward() >= 1.0)
+        .collect();
     Ok(Digest {
+        evaluation: metadata::evaluation(harness_root, job_dir),
         failed: aggregate(&failed),
         passed: aggregate(&passed),
         trials,
@@ -413,6 +689,9 @@ pub fn render(d: &Digest) -> String {
         "## Digest: {} failed trial(s) vs {} passed\n\n",
         d.failed.trials, d.passed.trials
     ));
+    if d.trials.iter().any(|trial| trial.reward.is_none()) {
+        out.push_str("The failed bucket includes unscored trials under the existing selection policy. A null reward means unavailable evidence, not a recorded task failure.\n\n");
+    }
     out.push_str("### What failed trials did more of\n\n| fact (mean per trial) | failed | passed |\n|---|---|---|\n");
     let rows: [(&str, f64, f64); 9] = [
         ("tool calls", d.failed.tool_calls, d.passed.tool_calls),
@@ -489,7 +768,7 @@ pub fn render(d: &Digest) -> String {
         ));
     }
     out.push_str("\n### Failed trials\n\n| trial | calls | timeouts | truncated | repeats | missing paths | ending | last tool |\n|---|---|---|---|---|---|---|---|\n");
-    for t in d.trials.iter().filter(|t| t.reward < 1.0) {
+    for t in d.trials.iter().filter(|t| t.selection_reward() < 1.0) {
         let ending = if t.no_settle {
             format!("no settle: {}", short(&t.ending, 80))
         } else if t.ended_deliberating {
@@ -513,12 +792,18 @@ pub fn render(d: &Digest) -> String {
     out
 }
 
-pub fn write(job_dir: &Path) -> Result<(Digest, PathBuf)> {
-    let d = job(job_dir)?;
+pub fn write(job_dir: &Path, harness_root: &Path) -> Result<(Digest, PathBuf)> {
+    let d = job(job_dir, harness_root)?;
     let path = job_dir.join("digest.json");
     std::fs::write(&path, serde_json::to_string_pretty(&d)?)?;
     Ok((d, path))
 }
+
+#[cfg(test)]
+mod evidence_tests;
+
+#[cfg(test)]
+mod metadata_tests;
 
 #[cfg(test)]
 mod tests {
@@ -632,7 +917,7 @@ mod tests {
             ]
             .join("\n"),
         );
-        a.reward = 0.0;
+        a.reward = Some(0.0);
         let mut b = facts(
             &[
                 call("bash", "{}"),
@@ -641,8 +926,9 @@ mod tests {
             ]
             .join("\n"),
         );
-        b.reward = 1.0;
+        b.reward = Some(1.0);
         let d = Digest {
+            evaluation: None,
             failed: aggregate(&[&a]),
             passed: aggregate(&[&b]),
             trials: vec![a, b],

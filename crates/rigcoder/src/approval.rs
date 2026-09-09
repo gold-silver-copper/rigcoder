@@ -307,7 +307,7 @@ fn deny(world: &mut World, entity: Entity, tool: &str, reason: String) {
         ))));
     world
         .entity_mut(entity)
-        .remove::<(Held, PolicyHold, rig_ecs::bus::PolicyHeld, Invocation)>();
+        .remove::<(Held, PolicyHold, rig_ecs::bus::HoldOwners, Invocation)>();
     world.resource_mut::<Transcript>().push(Event::Denied {
         name: tool.to_owned(),
         reason,
@@ -407,6 +407,12 @@ pub(crate) fn gate(world: &mut World) {
                 );
                 continue;
             }
+            // Preparation owns the dispatch barrier from its start, even if
+            // its task finishes before the first poll. Otherwise the hold
+            // lifecycle depends on worker timing rather than approval state.
+            // A ready auto approval can still release it in this same pass.
+            world.entity_mut(entity).insert(PolicyHold);
+            rig_ecs::bus::acquire_hold(world, entity, crate::observe::emitter("approval"));
             let root = world.resource::<Workspace>().root.clone();
             let name = tool.clone();
             let arguments = args.clone();
@@ -562,19 +568,11 @@ pub(crate) fn gate(world: &mut World) {
             // The runtime lifts only the holds it placed (`BatchHeld`): this
             // gate's hold is its own to remove. A call the batch still holds
             // keeps `Held` until the batch releases it in call order.
-            let batch_held = world.get::<rig_ecs::systems::BatchHeld>(entity).is_some();
-            world
-                .entity_mut(entity)
-                .remove::<(PolicyHold, rig_ecs::bus::PolicyHeld)>();
-            if !batch_held {
-                world.entity_mut(entity).remove::<Held>();
-            }
+            world.entity_mut(entity).remove::<PolicyHold>();
+            rig_ecs::bus::release_hold(world, entity, "rigcoder/approval");
         } else {
-            // `PolicyHeld` beside `Held`: on a call the batch also holds, the
-            // batch lifts only its own marker and `Held` stands for this gate.
-            world
-                .entity_mut(entity)
-                .insert((Held, PolicyHold, rig_ecs::bus::PolicyHeld));
+            world.entity_mut(entity).insert(PolicyHold);
+            rig_ecs::bus::acquire_hold(world, entity, crate::observe::emitter("approval"));
         }
         world.entity_mut(entity).insert(invocation);
     }

@@ -191,13 +191,31 @@ struct EffectLogOut {
     written: bool,
 }
 
-/// Once the run has ended, write the effect log; the world is not readable
-/// after `App::run` returns, so this runs inside the app.
+fn session_ended(world: &World) -> bool {
+    let conversation = world.resource::<rigcoder::Conversation>();
+    !conversation.is_busy()
+        && (conversation.runs > 0
+            || world
+                .get_resource::<Transcript>()
+                .is_some_and(|transcript| {
+                    transcript
+                        .events
+                        .iter()
+                        .any(|event| matches!(event, Event::Failed { .. }))
+                }))
+}
+
+fn artifacts_due(world: &World) -> bool {
+    session_ended(world)
+        || world
+            .get_resource::<Messages<AppExit>>()
+            .is_some_and(|exits| !exits.is_empty())
+}
+
+/// At session end or requested exit, write the effect log; the world is not
+/// readable after `App::run` returns, so this runs inside the app.
 fn write_effect_log(world: &mut World) {
-    let over = {
-        let c = world.resource::<rigcoder::Conversation>();
-        c.runs > 0 && !c.is_busy()
-    };
+    let over = artifacts_due(world);
     let due = {
         let out = world.resource::<EffectLogOut>();
         over && !out.written && out.path.is_some()
@@ -230,13 +248,10 @@ struct ObservationsOut {
     written: bool,
 }
 
-/// Once the run has ended, finalize and write the observation trace beside
-/// the effect log.
+/// Write observations at session end or requested exit. Only an ended session
+/// is finalized; an exit during active work preserves a partial trace.
 fn write_observations(world: &mut World) {
-    let over = {
-        let c = world.resource::<rigcoder::Conversation>();
-        c.runs > 0 && !c.is_busy()
-    };
+    let over = artifacts_due(world);
     let due = {
         let out = world.resource::<ObservationsOut>();
         over && !out.written && out.path.is_some()
@@ -249,8 +264,12 @@ fn write_observations(world: &mut World) {
         .path
         .clone()
         .expect("checked");
-    rigcoder::observe::finalize(world);
-    let result = rigcoder::observations(world)
+    // An exit can interrupt a still-active run (for example a failed
+    // checkpoint write). Export its evidence, but do not call it finalized.
+    if session_ended(world) {
+        rigcoder::observe::finalize(world);
+    }
+    let result = rigcoder::observe::artifact(world)
         .ok_or_else(|| "no witness is installed".to_owned())
         .and_then(|trace| serde_json::to_vec(&trace).map_err(|error| error.to_string()))
         .and_then(|json| write_log_atomically(&path, &json).map_err(|error| error.to_string()));
@@ -440,6 +459,16 @@ fn main() -> anyhow::Result<()> {
     })
     .add_systems(PostStartup, start)
     .add_systems(Update, (report, watchdog));
+    rigcoder::observe::install_monotonic(
+        app.world_mut(),
+        if args.replay.is_some() {
+            rigcoder::observe::ExecutionMode::EffectLogReplay
+        } else {
+            rigcoder::observe::ExecutionMode::Live
+        },
+    );
+    // Neither live CLI execution nor effect-log replay uses an HTTP cassette.
+    app.insert_resource(rigcoder::observe::RecordingProvenance::NotApplicable);
     if args.approve == "ask" {
         app.insert_resource(ApprovalInput::new())
             .add_systems(Update, handle_approval_input);
@@ -465,7 +494,7 @@ fn start(world: &mut World) {
         match rigcoder::checkpoint::resume(world, &scene) {
             Ok(_) => return,
             Err(report) => {
-                eprintln!("rigcoder: could not resume: {report}");
+                rigcoder::failure::record_host_report(world, "checkpoint_resume", &report);
                 world.write_message(AppExit::error());
                 return;
             }
@@ -522,16 +551,11 @@ fn report(transcript: Res<Transcript>, mut cli: ResMut<Cli>, mut exit: MessageWr
             }
             Event::Failed { reason } => {
                 let _ = writeln!(stdout, "[failed] {reason}");
-                exit.write(
-                    if reason.contains("replay")
-                        || reason.contains("diverg")
-                        || reason.contains("recorded")
-                    {
-                        AppExit::Error(std::num::NonZero::new(3).expect("nonzero"))
-                    } else {
-                        AppExit::error()
-                    },
-                );
+                exit.write(if reason.is_replay_failure() {
+                    AppExit::Error(std::num::NonZero::new(3).expect("nonzero"))
+                } else {
+                    AppExit::error()
+                });
             }
             Event::Denied { name, reason } => {
                 let _ = writeln!(stdout, "[denied] {name}: {reason}");
@@ -658,6 +682,173 @@ mod tests {
         });
         write_effect_log(app.world_mut());
         assert!(matches!(app.should_exit(), Some(AppExit::Error(_))));
+    }
+
+    #[test]
+    fn setup_failure_writes_requested_artifacts_without_a_run() {
+        let dir = scratch("setup-artifacts");
+        let mut app = App::new();
+        app.add_plugins(RigcoderPlugin {
+            workspace: dir.clone(),
+            model: ModelChoice::parse("gemini", None).unwrap(),
+            max_turns: 4,
+            mode: rigcoder::Mode::Replay(rigcoder::EffectLog::default().into()),
+            prompt_override: None,
+            keep_stream_events: false,
+        });
+        let effects = dir.join("effects.json");
+        let observations = dir.join("observations.json");
+        app.insert_resource(EffectLogOut {
+            path: Some(effects.clone()),
+            written: false,
+        });
+        app.insert_resource(ObservationsOut {
+            path: Some(observations.clone()),
+            written: false,
+        });
+        write_effect_log(app.world_mut());
+        write_observations(app.world_mut());
+        assert!(!effects.exists());
+        assert!(!observations.exists());
+        app.update();
+        assert_eq!(app.world().resource::<rigcoder::Conversation>().runs, 0);
+        write_effect_log(app.world_mut());
+        write_observations(app.world_mut());
+        let log: rigcoder::EffectLog =
+            serde_json::from_slice(&std::fs::read(&effects).unwrap()).unwrap();
+        assert!(log.records.is_empty());
+        let trace: rig::observe::ObservationTrace =
+            serde_json::from_slice(&std::fs::read(&observations).unwrap()).unwrap();
+        assert!(trace.finalized && trace.is_complete());
+        assert!(trace.observations.iter().any(|o| matches!(&o.action,
+            rig::observe::Action::Host { kind, .. } if kind == "rigcoder/failure")));
+        assert!(app.world().resource::<EffectLogOut>().written);
+        assert!(app.world().resource::<ObservationsOut>().written);
+    }
+
+    #[test]
+    fn rejected_resume_exports_a_structured_host_failure() {
+        use rig::observe::HostAction as _;
+        let dir = scratch("resume-failure");
+        let mut app = App::new();
+        app.add_plugins(RigcoderPlugin {
+            workspace: dir.clone(),
+            model: ModelChoice::parse("gemini", None).unwrap(),
+            max_turns: 4,
+            mode: rigcoder::Mode::Replay(rigcoder::EffectLog::default().into()),
+            prompt_override: None,
+            keep_stream_events: false,
+        });
+        app.insert_resource(Resume(Some(Default::default())));
+        let path = dir.join("observations.json");
+        app.insert_resource(ObservationsOut {
+            path: Some(path.clone()),
+            written: false,
+        });
+        // Exercise the CLI rejection before startup can reject the empty replay.
+        start(app.world_mut());
+        assert!(matches!(app.should_exit(), Some(AppExit::Error(_))));
+        let failures: Vec<_> = app
+            .world()
+            .resource::<Transcript>()
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Failed { reason } => Some(reason.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].origin, "checkpoint_resume");
+        assert_eq!(
+            failures[0].boundary,
+            rigcoder::failure::FailureBoundary::Host
+        );
+        assert!(failures[0].adapter.is_none());
+        write_observations(app.world_mut());
+        let trace: rig::observe::ObservationTrace =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert!(trace.finalized);
+        let observed: Vec<_> = trace
+            .observations
+            .iter()
+            .filter_map(|observation| {
+                rigcoder::failure::FailureDetail::from_action(&observation.action)
+                    .map(Result::unwrap)
+            })
+            .collect();
+        assert_eq!(observed, failures);
+    }
+
+    #[test]
+    fn exit_during_an_active_run_exports_unfinalized_evidence() {
+        let dir = scratch("active-exit");
+        let mut app = App::new();
+        app.add_plugins(RigcoderPlugin {
+            workspace: dir.clone(),
+            model: ModelChoice::parse("gemini", None).unwrap(),
+            max_turns: 4,
+            mode: rigcoder::Mode::Replay(rigcoder::EffectLog::default().into()),
+            prompt_override: None,
+            keep_stream_events: false,
+        });
+        let active = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .resource_mut::<rigcoder::Conversation>()
+            .active = Some(active);
+        let path = dir.join("observations.json");
+        let effects = dir.join("effects.json");
+        app.insert_resource(EffectLogOut {
+            path: Some(effects.clone()),
+            written: false,
+        });
+        app.insert_resource(ObservationsOut {
+            path: Some(path.clone()),
+            written: false,
+        });
+        write_observations(app.world_mut());
+        write_effect_log(app.world_mut());
+        assert!(
+            !path.exists(),
+            "an active session is not an export boundary"
+        );
+        assert!(!effects.exists());
+        rigcoder::failure::record_host_report(
+            app.world_mut(),
+            "checkpoint",
+            &rig::error::ErrorReport::new(
+                rig::error::ErrorKind::Internal,
+                "checkpoint write failed",
+            ),
+        );
+        write_observations(app.world_mut());
+        assert!(
+            !path.exists(),
+            "the library may continue after reporting an error"
+        );
+        app.world_mut().write_message(AppExit::error());
+        write_observations(app.world_mut());
+        write_effect_log(app.world_mut());
+        let log: rigcoder::EffectLog =
+            serde_json::from_slice(&std::fs::read(effects).unwrap()).unwrap();
+        assert!(log.records.is_empty());
+        let trace: rig::observe::ObservationTrace =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert!(
+            !trace.finalized,
+            "exit must not imply an active run finished"
+        );
+        assert!(
+            trace
+                .observations
+                .iter()
+                .any(|observation| matches!(&observation.action,
+            rig::observe::Action::Host { kind, .. } if kind == "rigcoder/failure"))
+        );
+        assert_eq!(
+            app.world().resource::<rigcoder::Conversation>().active,
+            Some(active)
+        );
     }
 
     #[test]

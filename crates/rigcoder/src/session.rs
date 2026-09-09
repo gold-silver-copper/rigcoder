@@ -47,6 +47,34 @@ pub struct Conversation {
     /// A resubmission due at this instant.
     retry_at: Option<std::time::Instant>,
     pub provider_retries: usize,
+    /// Runtime-only identity of the initial completion, shared by safe prompt retries.
+    provider_operation: Option<rig::observe::AdapterContext>,
+}
+
+/// Consumed by the first completion effect of this run, never inherited by
+/// later tool-result turns. Whole-prompt retries are permitted only before tools.
+#[derive(Component)]
+pub(crate) struct InitialProviderOperation(Option<rig_ecs::bus::AdapterOperation>);
+
+pub(crate) fn correlate_provider_attempts(
+    mut commands: Commands,
+    effects: Query<(Entity, &PendingEffect, &ChildOf), Added<PendingEffect>>,
+    parents: Query<&ChildOf>,
+    mut runs: Query<&mut InitialProviderOperation>,
+) {
+    for (entity, effect, turn) in &effects {
+        if !matches!(effect.kind, EffectKind::Completion { .. }) {
+            continue;
+        }
+        let Ok(run) = parents.get(turn.parent()) else {
+            continue;
+        };
+        if let Ok(mut initial) = runs.get_mut(run.parent())
+            && let Some(operation) = initial.0.take()
+        {
+            commands.entity(entity).insert(operation);
+        }
+    }
 }
 
 /// Transient provider failures are retried this many times, with backoff.
@@ -70,6 +98,11 @@ impl Conversation {
         }
     }
 }
+
+/// Runtime marker for a failed pre-dispatch replay compatibility check.
+/// Keeps its known origin without changing Rig's error kind or retry policy.
+#[derive(Component)]
+pub struct ReplayRejected;
 
 /// One thing that happened, in the order it happened.
 #[derive(Debug, Clone, Serialize)]
@@ -99,7 +132,7 @@ pub enum Event {
     /// string cannot be serialized, which silently dropped every ending
     /// from `transcript.jsonl`.
     Failed {
-        reason: String,
+        reason: crate::failure::FailureDetail,
     },
     /// The run failed on a transient provider error and will be submitted again.
     Retrying {
@@ -173,15 +206,29 @@ fn start_run(
         return None;
     }
     if settings.max_tokens == 0 {
-        world.resource_mut::<Transcript>().push(Event::Failed {
-            reason: "max_tokens must be greater than zero".to_owned(),
-        });
+        crate::failure::record_world(
+            world,
+            rig::observe::Subject::default(),
+            "session",
+            crate::failure::FailureDetail::host(
+                "invalid_configuration",
+                "max_tokens must be greater than zero",
+                &[],
+            ),
+        );
         return None;
     }
     let Some(sequence) = world.resource::<Conversation>().runs.checked_add(1) else {
-        world.resource_mut::<Transcript>().push(Event::Failed {
-            reason: "run sequence exhausted".to_owned(),
-        });
+        crate::failure::record_world(
+            world,
+            rig::observe::Subject::default(),
+            "session",
+            crate::failure::FailureDetail::host(
+                "identity_exhausted",
+                "run sequence exhausted",
+                &[],
+            ),
+        );
         return None;
     };
     world
@@ -229,6 +276,33 @@ fn start_run(
         ));
     }
     let run = spawn_run(world, agent, &history, prompt, settings.stream, None);
+    if announce {
+        let context = world
+            .get_resource::<rig_ecs::bus::Witnessing>()
+            .map(|witness| {
+                rig::observe::AdapterContext::new(
+                    witness.sink().clone(),
+                    rig::observe::Subject::default(),
+                    format!("rigcoder/request/{sequence}/completion/0"),
+                )
+            });
+        world.resource_mut::<Conversation>().provider_operation = context;
+    }
+    let operation = {
+        let conversation = world.resource::<Conversation>();
+        conversation.provider_operation.clone().and_then(|context| {
+            let ordinal = conversation.provider_retries.checked_add(1)?;
+            Some(rig_ecs::bus::AdapterOperation {
+                context,
+                host_attempt: std::num::NonZeroU64::new(u64::try_from(ordinal).ok()?)?,
+            })
+        })
+    };
+    if operation.is_some() {
+        world
+            .entity_mut(run)
+            .insert(InitialProviderOperation(operation));
+    }
     world.entity_mut(run).insert((
         crate::RunConfiguration(settings),
         crate::approval::RunApproval(approval),
@@ -249,6 +323,7 @@ fn start_run(
         crate::Mode::Replay(log) => rig_ecs::replay::check_replayable(world, run, log),
     });
     if let Err(report) = compatible {
+        world.entity_mut(run).insert(ReplayRejected);
         world
             .entity_mut(run)
             .insert(Failed(rig_ecs::agent::Failure::Provider(report)));
@@ -272,9 +347,13 @@ pub fn cancel(world: &mut World, reason: &str) {
         .is_some()
     {
         world.resource_mut::<Conversation>().last = None;
-        world.resource_mut::<Transcript>().push(Event::Failed {
-            reason: format!("cancelled: {reason}"),
-        });
+        let secrets = crate::model::world_diagnostic_secrets(world);
+        crate::failure::record_world(
+            world,
+            rig::observe::Subject::default(),
+            "session",
+            crate::failure::FailureDetail::host("cancelled", reason, &secrets),
+        );
     }
     if let Some(run) = world.resource::<Conversation>().active {
         world.entity_mut(run).insert(Cancelled(reason.to_owned()));
@@ -364,7 +443,7 @@ pub fn on_settled(
 #[allow(clippy::too_many_arguments)] // Bevy injects independent event/query resources.
 pub fn on_failed(
     failed: On<Add, Failed>,
-    failures: Query<&Failed>,
+    failures: Query<(&Failed, Has<ReplayRejected>)>,
     usage: Query<&Usage>,
     utterances: Query<(&ChildOf, &Order, &Parts), With<Utterance>>,
     mut conversation: ResMut<Conversation>,
@@ -373,6 +452,9 @@ pub fn on_failed(
     settings: Query<&crate::RunConfiguration>,
     witness: Option<Res<rig_ecs::bus::Witnessing>>,
     scopes: Query<&rig_ecs::bus::Scope>,
+    observations: Option<Res<crate::observe::Observations>>,
+    connection: Option<Res<crate::model::ModelConnection>>,
+    mut commands: Commands,
 ) {
     let run = failed.event().entity;
     if conversation.active != Some(run) {
@@ -383,10 +465,30 @@ pub fn on_failed(
     let failure = failures
         .get(run)
         .ok()
-        .map(|Failed(failure)| failure.clone());
-    let reason = failure
-        .as_ref()
-        .map_or_else(|| "unknown".to_owned(), |f| format!("{f:?}"));
+        .map(|(Failed(failure), _)| failure.clone());
+    let secrets =
+        crate::model::diagnostic_secrets(connection.as_deref(), Some(&setup.diagnostic_secrets));
+    let mut reason = crate::failure::FailureDetail::runtime(failure.as_ref(), &secrets);
+    if failures.get(run).is_ok_and(|(_, rejected)| rejected) {
+        reason.origin = "replay_validation".into();
+        reason.boundary = crate::failure::FailureBoundary::Host;
+    }
+    if let (Ok(scope), Some(observations)) = (scopes.get(run), observations.as_ref()) {
+        reason.attach(&scope.0, &observations.0.trace());
+    }
+    let subject = scopes.get(run).map_or_else(
+        |_| rig::observe::Subject::default(),
+        |scope| rig::observe::Subject::scoped(scope.0.clone()),
+    );
+    // Lifecycle observers have no ordering guarantee. Emit host diagnostics
+    // after they finish, so the owning runtime's Ended fact comes first.
+    if let Some(witness) = witness.as_deref().cloned() {
+        let subject = subject.clone();
+        let reason = reason.clone();
+        commands.queue(move |_: &mut World| {
+            crate::observe::emit(Some(&witness), subject, "session", &reason);
+        });
+    }
     // A whole-prompt retry is safe only before this request has produced
     // tool calls. Completed tools may have irreversible side effects, so a
     // later provider failure must preserve their history and end the run.
@@ -408,19 +510,18 @@ pub fn on_failed(
         };
         conversation.history = history;
         conversation.retry_at = Some(std::time::Instant::now() + wait);
-        crate::observe::emit(
-            witness.as_deref(),
-            scopes
-                .get(run)
-                .map_or_else(|_| rig::observe::Subject::default(), |scope| rig::observe::Subject::scoped(scope.0.clone())),
-            "session",
-            &crate::observe::ProviderRetry {
+        if let Some(witness) = witness.as_deref().cloned() {
+            let retry = crate::observe::ProviderRetry {
+                operation: conversation.provider_operation.as_ref().map(|context| context.operation().to_owned()),
                 attempt: conversation.provider_retries,
                 wait_secs: wait.as_secs(),
-                reason: report.message.clone(),
-            },
-        );
-        transcript.push(Event::Retrying { reason: reason.clone(), attempt: conversation.provider_retries, wait_secs: wait.as_secs() });
+                reason: reason.message.clone(),
+            };
+            commands.queue(move |_: &mut World| {
+                crate::observe::emit(Some(&witness), subject, "session", &retry);
+            });
+        }
+        transcript.push(Event::Retrying { reason: reason.to_string(), attempt: conversation.provider_retries, wait_secs: wait.as_secs() });
         return;
     }
     transcript.push(Event::Failed { reason });
@@ -529,11 +630,18 @@ pub fn resubmit_when_due(world: &mut World) {
         conversation.history = history.clone();
         (prompt, settings, approval)
     };
-    if start_run(world, &prompt, false, settings, approval).is_none() {
-        world.resource_mut::<Transcript>().push(Event::Failed {
-            reason: "could not retry: no agent is registered".to_owned(),
-        });
-    } else {
+    if world.get_resource::<AgentHandle>().is_none() {
+        crate::failure::record_world(
+            world,
+            rig::observe::Subject::default(),
+            "session",
+            crate::failure::FailureDetail::host(
+                "retry_submission",
+                "could not retry: no agent is registered",
+                &[],
+            ),
+        );
+    } else if start_run(world, &prompt, false, settings, approval).is_some() {
         world.resource_mut::<rig_ecs::bus::Progress>().mark();
     }
 }
@@ -651,7 +759,7 @@ mod retry_tests {
         // internally tagged newtype variant of a string does not serialize.
         for event in [
             Event::Failed {
-                reason: "cancelled".into(),
+                reason: crate::failure::FailureDetail::host("cancelled", "cancelled", &[]),
             },
             Event::Settled {
                 answer: "ok".into(),
@@ -664,10 +772,14 @@ mod retry_tests {
             let line = serde_json::to_string(&event).expect("every event is a line");
             assert!(line.contains("\"kind\":"), "{line}");
         }
-        assert_eq!(
-            serde_json::to_string(&Event::Failed { reason: "x".into() }).unwrap(),
-            r#"{"kind":"failed","reason":"x"}"#
-        );
+        let event = serde_json::to_value(Event::Failed {
+            reason: crate::failure::FailureDetail::host("cancelled", "operator stop", &[]),
+        })
+        .unwrap();
+        assert_eq!(event["kind"], "failed");
+        assert_eq!(event["reason"]["kind"], "cancelled");
+        assert_eq!(event["reason"]["message"], "operator stop");
+        assert!(event["reason"]["adapter"].is_null());
     }
 
     #[test]
@@ -888,8 +1000,87 @@ mod retry_tests {
         assert!(!app.world().resource::<Conversation>().is_busy());
         assert_eq!(app.world().resource::<Conversation>().runs, 1);
         assert!(app.world().resource::<Transcript>().events.iter().any(
-            |e| matches!(e, Event::Failed { reason } if reason.contains("stop during backoff"))
+            |e| matches!(e, Event::Failed { reason } if reason.kind == "cancelled" && reason.message == "stop during backoff")
         ));
+        use rig::observe::HostAction as _;
+        let cancellations: Vec<_> = crate::observations(app.world())
+            .unwrap()
+            .observations
+            .iter()
+            .filter_map(|observation| {
+                crate::failure::FailureDetail::from_action(&observation.action)
+            })
+            .map(Result::unwrap)
+            .filter(|failure| failure.kind == "cancelled")
+            .collect();
+        assert_eq!(cancellations.len(), 1);
+        assert_eq!(cancellations[0].message, "stop during backoff");
+        assert!(cancellations[0].adapter.is_none());
+    }
+
+    #[test]
+    fn rejected_retry_reports_its_actual_failure_once() {
+        use rig::observe::HostAction as _;
+        for missing_agent in [false, true] {
+            let dir = scratch(if missing_agent {
+                "retry-no-agent"
+            } else {
+                "retry-id-exhausted"
+            });
+            let mut app = app(&dir, crate::Mode::Live, Some(vec![transient_failure()]));
+            submit(app.world_mut(), "first").unwrap();
+            for _ in 0..2_000 {
+                app.update();
+                if app.world().resource::<Conversation>().has_pending_retry() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            assert!(app.world().resource::<Conversation>().has_pending_retry());
+            if missing_agent {
+                app.world_mut().remove_resource::<AgentHandle>();
+            } else {
+                app.world_mut().resource_mut::<Conversation>().runs = usize::MAX;
+            }
+            app.world_mut()
+                .resource_mut::<Conversation>()
+                .expire_backoff();
+            resubmit_when_due(app.world_mut());
+            let expected = if missing_agent {
+                "retry_submission"
+            } else {
+                "identity_exhausted"
+            };
+            let failures: Vec<_> = app
+                .world()
+                .resource::<Transcript>()
+                .events
+                .iter()
+                .filter_map(|event| match event {
+                    Event::Failed { reason } => Some(reason),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(failures.len(), 1);
+            assert_eq!(failures[0].kind, expected);
+            let observed: Vec<_> = crate::observations(app.world())
+                .unwrap()
+                .observations
+                .iter()
+                .filter_map(|observation| {
+                    crate::failure::FailureDetail::from_action(&observation.action)
+                })
+                .map(Result::unwrap)
+                .collect();
+            assert_eq!(
+                observed.len(),
+                2,
+                "original retryable failure and one retry rejection"
+            );
+            assert_eq!(observed.last().unwrap(), failures[0]);
+            assert!(!app.world().resource::<Conversation>().is_busy());
+            assert_eq!(crate::effect_log(app.world()).records.len(), 1);
+        }
     }
 
     #[test]

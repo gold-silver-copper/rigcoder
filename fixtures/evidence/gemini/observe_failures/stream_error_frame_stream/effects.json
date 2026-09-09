@@ -207,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 9648865585586762506
+        "policy": 3119079924129507690
       }
     }
   },
@@ -386,15 +386,21 @@
       },
       "outcome": {
         "Err": {
-          "kind": "provider_response",
-          "retryable": false,
-          "message": "ProviderResponseError: {\"error\":{\"code\":500,\"message\":\"An internal error has occurred.\",\"status\":\"INTERNAL\"}}",
+          "kind": {
+            "http": {
+              "status": 500
+            }
+          },
+          "retryable": true,
+          "message": "HttpError: Invalid status code 500 Internal Server Error with message: {\"error\":{\"code\":500,\"message\":\"An internal error has occurred.\",\"status\":\"INTERNAL\"}}",
           "code": null,
-          "http_status": null,
+          "http_status": 500,
           "refusal": false,
-          "source_chain": [],
+          "source_chain": [
+            "Invalid status code 500 Internal Server Error with message: {\"error\":{\"code\":500,\"message\":\"An internal error has occurred.\",\"status\":\"INTERNAL\"}}"
+          ],
           "provider_response": {
-            "status": null,
+            "status": 500,
             "body": "{\"error\":{\"code\":500,\"message\":\"An internal error has occurred.\",\"status\":\"INTERNAL\"}}",
             "provider_request_id": null
           }

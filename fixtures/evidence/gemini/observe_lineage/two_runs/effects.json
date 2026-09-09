@@ -222,7 +222,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 12675358180827212922
+        "policy": 6831833617779840827
       },
       "rigcoder/run/2": {
         "required": {
@@ -234,7 +234,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 12675358180827212922
+        "policy": 6831833617779840827
       }
     }
   },

@@ -27,20 +27,30 @@
         "key": "rigcoder/model",
         "family": "completion"
       },
-      "stage": "collect",
+      "stage": "handler",
       "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
+        "name": "rig-core/adapter"
       },
       "action": {
-        "action": "landed",
-        "outcome": {
-          "outcome": "ok",
-          "family": "completion"
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
         }
       }
     }
   ],
-  "dropped": 1,
-  "finalized": false
+  "dropped": 9,
+  "finalized": false,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "live"
 }

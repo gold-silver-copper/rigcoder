@@ -7,7 +7,9 @@
 //! here awaits.
 
 pub mod approval;
+mod artifacts;
 pub mod checkpoint;
+pub mod failure;
 mod file_change;
 pub mod model;
 pub mod observe;
@@ -37,9 +39,13 @@ use rig_ecs::{
 pub use model::ModelChoice;
 pub use rig_effect_log::EffectLog;
 
-/// The effect log recorded so far.
+/// The effect log recorded so far, with bounded, scrubbed error diagnostics.
+/// Requests, successful outcomes and stream content retain their replay values.
 pub fn effect_log(world: &World) -> EffectLog {
-    world.resource::<EffectLogResource>().log()
+    let mut log = world.resource::<EffectLogResource>().log();
+    let secrets = model::world_diagnostic_secrets(world);
+    artifacts::effect_log(&mut log, &secrets);
+    log
 }
 pub use observe::trace as observations;
 pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
@@ -156,6 +162,7 @@ impl Plugin for RigcoderPlugin {
             .insert_resource(Setup {
                 mode,
                 prompt_override,
+                diagnostic_secrets: Default::default(),
             })
             .init_resource::<SceneExtensions>()
             .init_resource::<checkpoint::Checkpoint>()
@@ -174,6 +181,7 @@ impl Plugin for RigcoderPlugin {
                 RigSchedule,
                 (
                     session::announce_tool_calls.in_set(BusSet::Gate),
+                    session::correlate_provider_attempts.in_set(BusSet::Gate),
                     session::stream_text.after(RigSet::Fold),
                 ),
             )
@@ -205,10 +213,12 @@ pub fn setup(
     choice: Res<ModelChoice>,
     connection: Option<Res<model::ModelConnection>>,
     budget: Res<AgentBudget>,
-    setup: Res<Setup>,
+    mut setup: ResMut<Setup>,
     mut transcript: ResMut<Transcript>,
     mut extensions: ResMut<SceneExtensions>,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
 ) {
+    setup.diagnostic_secrets.capture(connection.as_deref());
     let _ =
         extensions.register_component::<steer::DeliverableRetries>("rigcoder.deliverable_retries");
     let _ = extensions.register_component::<RunConfiguration>("rigcoder.run_settings");
@@ -220,9 +230,17 @@ pub fn setup(
                 .find(|(_, b)| b.key.as_str() == model::MODEL_KEY)
                 .map(|(e, _)| e);
             let Some(model) = model else {
-                transcript.push(Event::Failed {
-                    reason: "the effect log records no model exchange".to_owned(),
-                });
+                failure::record(
+                    &mut transcript,
+                    witness.as_deref(),
+                    rig::observe::Subject::default(),
+                    "session",
+                    failure::FailureDetail::host(
+                        "replay_setup",
+                        "the effect log records no model exchange",
+                        &[],
+                    ),
+                );
                 return;
             };
             let mut tools: Vec<(usize, String, Entity)> = bound
@@ -252,9 +270,17 @@ pub fn setup(
             }) {
                 Ok(model) => model,
                 Err(report) => {
-                    transcript.push(Event::Failed {
-                        reason: format!("could not register the model: {report}"),
-                    });
+                    failure::record(
+                        &mut transcript,
+                        witness.as_deref(),
+                        rig::observe::Subject::default(),
+                        "session",
+                        failure::FailureDetail::report(
+                            "model_registration",
+                            &report,
+                            &model::diagnostic_secrets(connection.as_deref(), None),
+                        ),
+                    );
                     return;
                 }
             };
@@ -301,16 +327,26 @@ pub fn setup(
 pub struct Setup {
     pub mode: Mode,
     pub prompt_override: Option<String>,
+    pub(crate) diagnostic_secrets: model::DiagnosticSecrets,
 }
 
 /// In replay mode, bind a replayer for every recorded key before `setup`
 /// looks the handler entities up (commands apply between the two).
-fn bind_replayers(mut handlers: Handlers, setup: Res<Setup>, mut transcript: ResMut<Transcript>) {
+fn bind_replayers(
+    mut handlers: Handlers,
+    setup: Res<Setup>,
+    mut transcript: ResMut<Transcript>,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
+) {
     if let Mode::Replay(log) = &setup.mode
         && let Err(report) = Replay::default().register(&mut handlers, log)
     {
-        transcript.push(Event::Failed {
-            reason: format!("could not bind the replayers: {report}"),
-        });
+        failure::record(
+            &mut transcript,
+            witness.as_deref(),
+            rig::observe::Subject::default(),
+            "session",
+            failure::FailureDetail::report("replay_binding", &report, &[]),
+        );
     }
 }

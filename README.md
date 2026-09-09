@@ -48,6 +48,38 @@ Model selection: `RIGCODER_PROVIDER` (`anthropic` default, or `openai`) and
 `--provider` and `--model`. Other CLI flags: `--max-turns`, `--timeout-secs`,
 `--transcript out.jsonl`, `--verbose`.
 
+`--observations out.json` writes the decision trace with `measurement_context`:
+execution mode and clock source. The CLI installs a host monotonic clock before
+startup; `--replay` labels measurements `effect_log_replay`. HTTP cassette and
+paced replay tests label their own execution modes separately. The existing
+digest retains these labels alongside per-attempt, handler and run durations.
+The separate `recording_provenance` field identifies live or derived provider
+content, or `not_applicable` when no HTTP recording is used. Artificial pacing
+does not change the origin of unchanged recorded frames.
+Unlabelled older artifacts remain unknown. Replay timings describe the replay
+environment and cannot establish live provider performance or task success.
+
+`rigcoder-bench digest <job>` retains recorded task/attempt identity from
+`result.json`; legacy directory-derived task names are labelled as such.
+Using the existing `--root`, it links a unique matching `harness/ledger.jsonl`
+entry for the job's recorded model, slice, attempts and revisions. Missing,
+malformed or ambiguous ledger evidence stays unknown. `recorded_commit` can
+predate uncommitted candidate edits, and `meta_commit` identifies the editor;
+neither establishes the evaluated candidate revision. Candidate revision and
+complete configuration ID remain explicitly absent. These links do not alter
+task rewards or candidate selection. Replay packets retain their partial test
+configuration in sibling `cell.json`; its package version is not a candidate SHA.
+Digest trial `reward` is null when no finite score is available. Existing
+investigation buckets retain their zero fallback for missing/unparseable input
+and legacy routing for non-finite input; that policy does not make either a
+recorded finite score.
+
+The digest's `hold_transitions` retains each batch or approval owner's acquisition
+and release in trace order. Before dispatch, joins use the subject's scope and
+order; an effect ID is only available after issue. These transitions are separate
+from approval decision counts. Denial and cancellation do not invent releases,
+and an incomplete trace cannot establish which owners remain active.
+
 ## How a run works
 
 1. `setup` (Startup) registers the provider model under `rigcoder/model` and

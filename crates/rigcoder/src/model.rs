@@ -89,6 +89,11 @@ pub struct ModelConnection {
 }
 
 impl ModelConnection {
+    pub(crate) fn diagnostic_secrets(&self) -> Vec<String> {
+        let mut secrets = rig::observe::diagnostic_url_secrets(&self.base_url);
+        secrets.extend([self.api_key.clone(), self.base_url.clone()]);
+        secrets.into_iter().filter(|s| !s.is_empty()).collect()
+    }
     pub fn new(
         base_url: impl Into<String>,
         api_key: impl Into<String>,
@@ -100,6 +105,50 @@ impl ModelConnection {
             http,
         }
     }
+}
+
+/// Runtime-only credentials retained for diagnostic redaction after startup.
+/// Kept in host setup, never included in observation or checkpoint artifacts.
+#[derive(Clone, Default)]
+pub(crate) struct DiagnosticSecrets(Vec<String>);
+
+impl DiagnosticSecrets {
+    pub(crate) fn capture(&mut self, connection: Option<&ModelConnection>) {
+        self.0 = diagnostic_secrets(connection, Some(self));
+    }
+}
+
+impl std::fmt::Debug for DiagnosticSecrets {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DiagnosticSecrets").finish_non_exhaustive()
+    }
+}
+
+pub(crate) fn diagnostic_secrets(
+    connection: Option<&ModelConnection>,
+    captured: Option<&DiagnosticSecrets>,
+) -> Vec<String> {
+    let mut secrets = captured.map_or_else(Vec::new, |captured| captured.0.clone());
+    secrets.extend(match connection {
+        Some(connection) => connection.diagnostic_secrets(),
+        None => ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"]
+            .into_iter()
+            .filter_map(|key| std::env::var(key).ok())
+            .filter(|s| !s.is_empty())
+            .collect(),
+    });
+    secrets.sort();
+    secrets.dedup();
+    secrets
+}
+
+pub(crate) fn world_diagnostic_secrets(world: &World) -> Vec<String> {
+    diagnostic_secrets(
+        world.get_resource::<ModelConnection>(),
+        world
+            .get_resource::<crate::Setup>()
+            .map(|setup| &setup.diagnostic_secrets),
+    )
 }
 
 impl std::fmt::Debug for ModelConnection {

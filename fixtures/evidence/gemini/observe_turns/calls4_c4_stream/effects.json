@@ -17,51 +17,43 @@
         }
       },
       {
-        "batch": 15,
-        "id": 4,
-        "kind": {
-          "delivery": "outcome"
-        }
-      },
-      {
-        "batch": 17,
+        "batch": 16,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 17,
-        "id": 3,
-        "kind": {
-          "delivery": "outcome"
-        }
-      },
-      {
-        "batch": 19,
+        "batch": 16,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 22,
-        "id": 5,
+        "batch": 16,
+        "id": 3,
         "kind": {
-          "delivery": "stream",
-          "items": 2
+          "delivery": "outcome"
         }
       },
       {
-        "batch": 26,
-        "id": 5,
+        "batch": 16,
+        "id": 4,
         "kind": {
-          "delivery": "stream",
-          "items": 3
+          "delivery": "outcome"
         }
       },
       {
-        "batch": 26,
+        "batch": 19,
+        "id": 5,
+        "kind": {
+          "delivery": "stream",
+          "items": 5
+        }
+      },
+      {
+        "batch": 19,
         "id": 5,
         "kind": {
           "delivery": "outcome"
@@ -259,7 +251,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 9776864470218819400
+        "policy": 3799105739397278184
       }
     }
   },

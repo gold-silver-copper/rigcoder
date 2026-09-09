@@ -86,15 +86,32 @@ pub fn save_between_turns(world: &mut World) {
         Err(error) => {
             // One actionable failure, rather than another failure every tick.
             world.resource_mut::<Checkpoint>().dir = None;
-            world.resource_mut::<Transcript>().push(Event::Failed {
-                reason: format!("checkpoint {materialised}: {error}"),
-            });
+            let secrets = crate::model::world_diagnostic_secrets(world);
+            let subject = world
+                .resource::<Conversation>()
+                .active
+                .and_then(|run| world.get::<rig_ecs::bus::Scope>(run))
+                .map_or_else(rig::observe::Subject::default, |scope| {
+                    rig::observe::Subject::scoped(scope.0.clone())
+                });
+            crate::failure::record_world(
+                world,
+                subject,
+                "checkpoint",
+                crate::failure::FailureDetail::host(
+                    "checkpoint",
+                    &format!("checkpoint {materialised}: {error}"),
+                    &secrets,
+                ),
+            );
         }
     }
 }
 
 fn write_checkpoint(world: &mut World, dir: &Path, turn: usize, tar: bool) -> Result<(), String> {
-    let scene = save_world(world).map_err(|e| e.to_string())?;
+    let mut scene = save_world(world).map_err(|e| e.to_string())?;
+    let secrets = crate::model::world_diagnostic_secrets(world);
+    crate::artifacts::scene(&mut scene, &secrets).map_err(|e| e.to_string())?;
     let json = serde_json::to_vec(&scene).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let dir = dir.canonicalize().map_err(|e| e.to_string())?;

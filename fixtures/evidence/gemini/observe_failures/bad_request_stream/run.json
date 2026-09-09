@@ -1,8 +1,8 @@
 {
   "runs": 1,
-  "ending": "Provider(ErrorReport { kind: Http { status: Some(400) }, retryable: false, message: \"HttpError: Invalid status code 400 Bad Request with message: {\\\"error\\\":{\\\"code\\\":400,\\\"message\\\":\\\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\\\n\\\",\\\"status\\\":\\\"INVALID_ARGUMENT\\\"}}\", code: None, http_status: Some(400), refusal: false, source_chain: [\"Invalid status code 400 Bad Request with message: {\\\"error\\\":{\\\"code\\\":400,\\\"message\\\":\\\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\\\n\\\",\\\"status\\\":\\\"INVALID_ARGUMENT\\\"}}\"], request_id: None, provider_response: Some(ProviderResponseError { status: Some(400), body: \"{\\\"error\\\":{\\\"code\\\":400,\\\"message\\\":\\\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\\\n\\\",\\\"status\\\":\\\"INVALID_ARGUMENT\\\"}}\", provider_request_id: None, headers: Some({\"content-type\": \"text/event-stream\", \"transfer-encoding\": \"chunked\", \"date\": \"Tue, 08 Sep 2026 17:49:25 GMT\"}) }) })",
+  "ending": "http",
   "answer": "",
   "provider_retries": 0,
   "records": 1,
-  "observations": 3
+  "observations": 8
 }

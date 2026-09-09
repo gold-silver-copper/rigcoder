@@ -12,6 +12,7 @@ mod host;
 mod interruptions;
 mod lineage;
 mod turns;
+mod wire;
 
 /// Every cassette these matrices hold is in scrubbed form and carries no
 /// secret, token or local path — including the derived ones.

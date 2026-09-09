@@ -6,19 +6,11 @@
         "id": 0,
         "kind": {
           "delivery": "stream",
-          "items": 2
+          "items": 6
         }
       },
       {
-        "batch": 5,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 4
-        }
-      },
-      {
-        "batch": 5,
+        "batch": 4,
         "id": 0,
         "kind": {
           "delivery": "outcome"
@@ -215,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 15562024394957506735
+        "policy": 845576461746814647
       }
     }
   },

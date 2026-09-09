@@ -78,13 +78,14 @@ pub fn render_transcript(jsonl: &str) -> String {
 
 pub fn write(
     job_dir: &Path,
+    harness_root: &Path,
     generation: usize,
     summary: &Summary,
     trials: &[TrialRecord],
     best_score: f64,
     best_low: f64,
 ) -> Result<PathBuf> {
-    let (d, _) = digest::write(job_dir)?;
+    let (d, _) = digest::write(job_dir, harness_root)?;
     let mut out = String::new();
     out.push_str(&format!("# Generation {generation}\n\n"));
     out.push_str(&format!(
@@ -264,7 +265,7 @@ mod tests {
         std::fs::write(trial.join("agent/transcript.jsonl"), "").unwrap();
         let verifier = format!("{}END-OF-VERIFIER", "界\nx\n".repeat(REPORT_CAP));
         std::fs::write(trial.join("verifier/output.txt"), &verifier).unwrap();
-        let report = write(&root, 0, &Summary::default(), &[record], 0.0, 0.0).unwrap();
+        let report = write(&root, &root, 0, &Summary::default(), &[record], 0.0, 0.0).unwrap();
         let text = std::fs::read_to_string(report).unwrap();
         assert!(text.len() <= REPORT_CAP);
         assert!(text.contains("report.full.md"));

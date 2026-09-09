@@ -349,6 +349,47 @@ fn finish_app(app: &mut App) {
 }
 
 #[test]
+fn checkpoint_publication_scrubs_failure_diagnostics_and_can_resume() {
+    use rig_ecs::agent::{Failed, Failure, Run, Settled};
+    let dir = scratch("scrubbed-failure");
+    let scenes = dir.join("scenes");
+    let mut app = live_app(&dir, vec![vec![AssistantContent::text("done")]]);
+    rigcoder::submit(app.world_mut(), "finish").unwrap();
+    finish_app(&mut app);
+    let run = app
+        .world_mut()
+        .query_filtered::<Entity, With<Run>>()
+        .single(app.world())
+        .unwrap();
+    let message = "api_key=synthetic-checkpoint-secret";
+    app.world_mut()
+        .entity_mut(run)
+        .remove::<Settled>()
+        .insert(Failed(Failure::Provider(rig::error::ErrorReport::new(
+            rig::error::ErrorKind::Request,
+            message,
+        ))));
+    app.world_mut().insert_resource(Checkpoint {
+        dir: Some(scenes.clone()),
+        ..Default::default()
+    });
+    app.update();
+    let bytes = std::fs::read(rigcoder::checkpoint::scene_path(&scenes, 1)).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).contains("synthetic-checkpoint-secret"));
+    assert!(matches!(&app.world().get::<Failed>(run).unwrap().0,
+        Failure::Provider(error) if error.message == message));
+    let scene: WorldScene = serde_json::from_slice(&bytes).unwrap();
+    let mut resumed = live_app(&dir, vec![]);
+    rigcoder::checkpoint::resume(resumed.world_mut(), &scene).unwrap();
+    finish_app(&mut resumed);
+    assert!(rigcoder::effect_log(resumed.world()).records.is_empty());
+    assert!(resumed.world().resource::<Transcript>().events.iter().any(
+        |event| matches!(event, Event::Failed { reason } if reason.kind == "request"
+            && reason.message == "[redacted]" && reason.retryable == Some(false))
+    ));
+}
+
+#[test]
 fn a_terminal_checkpoint_reports_its_saved_answer_without_another_model_call() {
     let dir = scratch("terminal");
     let scenes = dir.join("scenes");
@@ -452,11 +493,24 @@ fn checkpoint_archives_require_a_directory_outside_the_workspace() {
     rigcoder::submit(app.world_mut(), "finish").unwrap();
     finish_app(&mut app);
     assert!(app.world().resource::<Transcript>().events.iter().any(
-        |e| matches!(e, Event::Failed { reason: error } if error.contains("outside the workspace"))
+        |e| matches!(e, Event::Failed { reason: error } if error.kind == "checkpoint" && error.message.contains("outside the workspace"))
     ));
     assert!(!rigcoder::checkpoint::scene_path(&scenes, 1).exists());
     assert!(!rigcoder::checkpoint::tar_path(&scenes, 1).exists());
     assert_eq!(app.world().resource::<Checkpoint>().turns_saved, 0);
+    use rig::observe::HostAction as _;
+    let failures: Vec<_> = rigcoder::observations(app.world())
+        .unwrap()
+        .observations
+        .into_iter()
+        .filter_map(|observation| {
+            rigcoder::failure::FailureDetail::from_action(&observation.action)
+        })
+        .map(Result::unwrap)
+        .filter(|failure| failure.kind == "checkpoint")
+        .collect();
+    assert_eq!(failures.len(), 1);
+    assert!(failures[0].adapter.is_none());
 }
 
 #[test]
@@ -512,7 +566,8 @@ fn replay_rejects_changed_run_settings_before_dispatch() {
             .resource::<Transcript>()
             .events
             .iter()
-            .any(|e| matches!(e, Event::Failed { reason: error } if error.contains("policy")))
+            .any(|e| matches!(e, Event::Failed { reason: error } if error.kind == "internal" && error.origin == "replay_validation" && error.is_replay_failure() && error.adapter.is_none())),
+        "{:?}", app.world().resource::<Transcript>().events
     );
     assert!(
         rigcoder::effect_log(app.world()).records.is_empty(),
@@ -539,7 +594,7 @@ fn a_failed_tar_command_does_not_publish_a_scene() {
             .resource::<Transcript>()
             .events
             .iter()
-            .any(|e| matches!(e, Event::Failed { reason: error } if error.contains("tar failed")))
+            .any(|e| matches!(e, Event::Failed { reason: error } if error.kind == "checkpoint" && error.message.contains("tar failed")))
     );
     assert!(!rigcoder::checkpoint::scene_path(&scenes, 1).exists());
     assert!(!rigcoder::checkpoint::tar_path(&scenes, 1).exists());
@@ -601,7 +656,7 @@ fn checkpoint_collisions_preserve_the_existing_snapshot() {
     );
     assert!(
         app.world().resource::<Transcript>().events.iter().any(
-            |e| matches!(e, Event::Failed { reason: error } if error.contains("already exists"))
+            |e| matches!(e, Event::Failed { reason: error } if error.kind == "checkpoint" && error.message.contains("already exists"))
         )
     );
 }

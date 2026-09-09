@@ -27,6 +27,458 @@
         "key": "rigcoder/model",
         "family": "completion"
       },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 834,
+              "output_tokens": 16,
+              "total_tokens": 920,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 70,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 4,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 834,
+              "output_tokens": 32,
+              "total_tokens": 936,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 70,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 6,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 7,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 834,
+              "output_tokens": 48,
+              "total_tokens": 952,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 70,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 8,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 9,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 834,
+              "output_tokens": 64,
+              "total_tokens": 968,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 70,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 11,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 834,
+              "output_tokens": 64,
+              "total_tokens": 968,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 70,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_1",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "transport_eof",
+            "after": 5,
+            "partial_bytes": 0
+          }
+        }
+      }
+    },
+    {
+      "seq": 14,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "rigcoder/request/1/completion/0",
+          "attempt": 1,
+          "host_attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "terminal"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 15,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 0,
+        "effect": 0,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
       "stage": "collect",
       "emitter": {
         "name": "rig-ecs/bus",
@@ -41,318 +493,22 @@
       }
     },
     {
-      "seq": 2,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 1,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
-        }
-      }
-    },
-    {
-      "seq": 3,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 2,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
-        }
-      }
-    },
-    {
-      "seq": 4,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
-        }
-      }
-    },
-    {
-      "seq": 5,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 4,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
-        }
-      }
-    },
-    {
-      "seq": 6,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 1,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "70c0958ddb2dc6dd35e61d6a76594233eda9359195212ee45e83648b0bf97831",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
-      "seq": 7,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 1,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "70c0958ddb2dc6dd35e61d6a76594233eda9359195212ee45e83648b0bf97831",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "approved"
-        }
-      }
-    },
-    {
-      "seq": 8,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 1,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "released"
-      }
-    },
-    {
-      "seq": 9,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 2,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
-      "seq": 10,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 2,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "approved"
-        }
-      }
-    },
-    {
-      "seq": 11,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 2,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "released"
-      }
-    },
-    {
-      "seq": 12,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
-      "seq": 13,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "approved"
-        }
-      }
-    },
-    {
-      "seq": 14,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "released"
-      }
-    },
-    {
-      "seq": 15,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 4,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
       "seq": 16,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 4,
+        "order": 1,
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "host",
+      "stage": "gate",
       "emitter": {
         "name": "rigcoder/approval",
         "version": "0.1.0"
       },
       "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
-          "tool": "bash",
-          "mode": "auto",
-          "decision": "approved"
+        "action": "held",
+        "reason": {
+          "code": "unknown"
         }
       }
     },
@@ -360,54 +516,59 @@
       "seq": 17,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 4,
+        "order": 2,
         "key": "tool:bash",
         "family": "tool"
       },
       "stage": "gate",
       "emitter": {
-        "name": "unknown"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
-        "action": "released"
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
       }
     },
     {
       "seq": 18,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 1,
-        "effect": 1,
+        "order": 3,
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "dispatch",
+      "stage": "gate",
       "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
-        "action": "issued"
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
       }
     },
     {
       "seq": 19,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 2,
+        "order": 4,
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "dispatch",
+      "stage": "gate",
       "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
-        "action": "deferred",
+        "action": "held",
         "reason": {
-          "code": "serial_key_busy",
-          "detail": "`tool:bash` is served one at a time and is in flight"
+          "code": "unknown"
         }
       }
     },
@@ -415,20 +576,23 @@
       "seq": 20,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 3,
+        "order": 1,
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "dispatch",
+      "stage": "host",
       "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
-        "action": "deferred",
-        "reason": {
-          "code": "serial_key_busy",
-          "detail": "`tool:bash` is served one at a time and is in flight"
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "70c0958ddb2dc6dd35e61d6a76594233eda9359195212ee45e83648b0bf97831",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
         }
       }
     },
@@ -436,20 +600,23 @@
       "seq": 21,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 4,
+        "order": 1,
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "dispatch",
+      "stage": "host",
       "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
       },
       "action": {
-        "action": "deferred",
-        "reason": {
-          "code": "serial_key_busy",
-          "detail": "`tool:bash` is served one at a time and is in flight"
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "70c0958ddb2dc6dd35e61d6a76594233eda9359195212ee45e83648b0bf97831",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "approved"
         }
       }
     },
@@ -458,6 +625,299 @@
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "released"
+      }
+    },
+    {
+      "seq": 23,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
+        }
+      }
+    },
+    {
+      "seq": 24,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "approved"
+        }
+      }
+    },
+    {
+      "seq": 25,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "released"
+      }
+    },
+    {
+      "seq": 26,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
+        }
+      }
+    },
+    {
+      "seq": 27,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "approved"
+        }
+      }
+    },
+    {
+      "seq": 28,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "released"
+      }
+    },
+    {
+      "seq": 29,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
+        }
+      }
+    },
+    {
+      "seq": 30,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "approved"
+        }
+      }
+    },
+    {
+      "seq": 31,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "released"
+      }
+    },
+    {
+      "seq": 32,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "effect": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
+      }
+    },
+    {
+      "seq": 33,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "deferred",
+        "reason": {
+          "code": "serial_key_busy",
+          "detail": "`tool:bash` is served one at a time and is in flight"
+        }
+      }
+    },
+    {
+      "seq": 34,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "deferred",
+        "reason": {
+          "code": "serial_key_busy",
+          "detail": "`tool:bash` is served one at a time and is in flight"
+        }
+      }
+    },
+    {
+      "seq": 35,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "deferred",
+        "reason": {
+          "code": "serial_key_busy",
+          "detail": "`tool:bash` is served one at a time and is in flight"
+        }
+      }
+    },
+    {
+      "seq": 36,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
         "effect": 1,
         "key": "tool:bash",
         "family": "tool"
@@ -476,7 +936,7 @@
       }
     },
     {
-      "seq": 23,
+      "seq": 37,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -494,7 +954,7 @@
       }
     },
     {
-      "seq": 24,
+      "seq": 38,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -516,7 +976,7 @@
       }
     },
     {
-      "seq": 25,
+      "seq": 39,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -534,7 +994,7 @@
       }
     },
     {
-      "seq": 26,
+      "seq": 40,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -556,7 +1016,7 @@
       }
     },
     {
-      "seq": 27,
+      "seq": 41,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -574,7 +1034,7 @@
       }
     },
     {
-      "seq": 28,
+      "seq": 42,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -596,7 +1056,7 @@
       }
     },
     {
-      "seq": 29,
+      "seq": 43,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -614,7 +1074,313 @@
       }
     },
     {
-      "seq": 30,
+      "seq": 44,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "started",
+            "method": "POST",
+            "route": "/models/{model}:streamGenerateContent"
+          }
+        }
+      }
+    },
+    {
+      "seq": 45,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "response",
+            "status": 200
+          },
+          "analysis": {
+            "response_id": null,
+            "headers": {}
+          }
+        }
+      }
+    },
+    {
+      "seq": 46,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 972,
+              "output_tokens": 7,
+              "total_tokens": 988,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 9,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 47,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_2",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 48,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 972,
+              "output_tokens": 8,
+              "total_tokens": 989,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 9,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 49,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": null,
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_2",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 50,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "usage",
+            "usage": {
+              "input_tokens": 1042,
+              "output_tokens": 8,
+              "total_tokens": 1059,
+              "cached_input_tokens": null,
+              "reasoning_tokens": 9,
+              "tool_input_tokens": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 51,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "provider",
+            "verdict": {
+              "finish_reason": "STOP",
+              "block_reason": null,
+              "detail": null,
+              "model": "gemini-3.8-flash"
+            }
+          },
+          "analysis": {
+            "response_id": "id_REDACTED_2",
+            "headers": null
+          }
+        }
+      }
+    },
+    {
+      "seq": 52,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "transport_eof",
+            "after": 3,
+            "partial_bytes": 0
+          }
+        }
+      }
+    },
+    {
+      "seq": 53,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 5,
+        "effect": 5,
+        "key": "rigcoder/model",
+        "family": "completion"
+      },
+      "stage": "handler",
+      "emitter": {
+        "name": "rig-core/adapter"
+      },
+      "action": {
+        "action": "adapter",
+        "observation": {
+          "operation": "effect/effect:5",
+          "attempt": 1,
+          "event": {
+            "event": "finished",
+            "ending": {
+              "ending": "terminal"
+            }
+          }
+        }
+      }
+    },
+    {
+      "seq": 54,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -636,7 +1402,7 @@
       }
     },
     {
-      "seq": 31,
+      "seq": 55,
       "subject": {
         "scope": "rigcoder/run/1"
       },
@@ -654,5 +1420,10 @@
     }
   ],
   "dropped": 0,
-  "finalized": false
+  "finalized": false,
+  "measurement_context": {
+    "execution_mode": "cassette_replay",
+    "clock_source": "absent"
+  },
+  "recording_provenance": "live"
 }

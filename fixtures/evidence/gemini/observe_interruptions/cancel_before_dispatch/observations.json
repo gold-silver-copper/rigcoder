@@ -15,6 +15,10 @@
           "code": "cancelled",
           "detail": "operator stop before dispatch"
         }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 1000000
       }
     },
     {
@@ -33,9 +37,53 @@
           "code": "cancelled",
           "detail": "operator stop before dispatch"
         }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 3000000
+      },
+      "run_timing": {
+        "duration": {
+          "secs": 0,
+          "nanos": 2000000
+        },
+        "complete": true
+      }
+    },
+    {
+      "seq": 2,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "cancelled",
+          "origin": "cancelled",
+          "boundary": "host",
+          "message": "operator stop before dispatch",
+          "retryable": false,
+          "http_status": null,
+          "adapter": null
+        }
+      },
+      "at": {
+        "secs": 0,
+        "nanos": 4000000
       }
     }
   ],
   "dropped": 0,
-  "finalized": false
+  "finalized": false,
+  "measurement_context": {
+    "execution_mode": "local_only",
+    "clock_source": "scripted"
+  },
+  "recording_provenance": "not_applicable"
 }

@@ -10,6 +10,7 @@ name = "rigcoder-bench"
 path = "src/main.rs"
 
 [dependencies]
+rigcoder = { path = "../rigcoder" }
 rig = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }

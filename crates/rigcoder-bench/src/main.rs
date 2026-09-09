@@ -79,7 +79,7 @@ fn main() -> anyhow::Result<()> {
         Command::Iterate(args) => evolve::iterate(&root, args),
         Command::Ledger => ledger::print(&root),
         Command::Digest { job_dir } => {
-            let (digest, path) = digest::write(&job_dir)?;
+            let (digest, path) = digest::write(&job_dir, &root)?;
             print!("{}", digest::render(&digest));
             eprintln!("wrote {}", path.display());
             Ok(())

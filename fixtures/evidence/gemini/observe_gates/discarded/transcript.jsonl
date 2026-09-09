@@ -1,3 +1,3 @@
 {"kind":"user","text":"Reply with the single word: never"}
 {"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
-{"kind":"failed","reason":"Provider(ErrorReport { kind: Denied, retryable: false, message: \"not on the list\", code: None, http_status: None, refusal: false, source_chain: [], request_id: None, provider_response: None })"}
+{"kind":"failed","reason":{"kind":"denied","origin":"provider","boundary":"host","message":"not on the list","retryable":false,"http_status":null,"adapter":null}}

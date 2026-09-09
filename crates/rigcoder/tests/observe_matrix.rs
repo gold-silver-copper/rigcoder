@@ -189,7 +189,7 @@ impl Cell {
             .rev()
             .find_map(|e| match e {
                 Event::Settled { .. } => Some("settled".to_owned()),
-                Event::Failed { reason } => Some(reason.clone()),
+                Event::Failed { reason } => Some(reason.kind.clone()),
                 _ => None,
             })
             .unwrap_or_else(|| "none".into())
@@ -211,6 +211,7 @@ impl Cell {
             .observations
             .iter()
             .map(|o| match &o.action {
+                Action::Adapter { .. } => "adapter".into(),
                 Action::Host { kind, payload } => match payload.get("decision") {
                     Some(decision) => format!("{kind}:{}", decision.as_str().unwrap_or("")),
                     None => kind.clone(),
@@ -396,16 +397,12 @@ fn an_invalid_tool_call_fails_the_run_with_its_resolution() {
     cell.settings(false, 0);
     cell.start("go");
     cell.drive();
-    assert!(
-        cell.ending().contains("UnknownToolCall"),
-        "{}",
-        cell.ending()
-    );
+    assert!(cell.ending() == "unknown_tool_call", "{}", cell.ending());
     let facts = cell.facts();
     assert!(facts.contains(&"invalid_call".to_owned()), "{facts:?}");
     assert_eq!(
-        facts.last().map(String::as_str),
-        Some("ended:unknown_tool_call")
+        &facts[facts.len() - 2..],
+        ["ended:unknown_tool_call", "rigcoder/failure"]
     );
 }
 
@@ -523,7 +520,7 @@ fn cancelling_with_bash_in_flight_is_requested_then_ends_cancelled() {
     cell.app.update();
     rigcoder::cancel(cell.app.world_mut(), "operator stop");
     cell.drive();
-    assert!(cell.ending().contains("operator stop"), "{}", cell.ending());
+    assert_eq!(cell.ending(), "cancelled");
     let facts = cell.facts();
     let ending = facts
         .iter()
@@ -551,9 +548,13 @@ fn a_non_transient_provider_error_ends_the_run_without_a_retry() {
     cell.settings(false, 3);
     cell.start("hi");
     cell.drive();
-    assert!(cell.ending().contains("blocked the prompt"));
+    assert_eq!(cell.ending(), "provider");
     let facts = cell.facts();
-    assert_eq!(facts, ["issued", "landed", "ended:provider"], "{facts:?}");
+    assert_eq!(
+        facts,
+        ["issued", "landed", "ended:provider", "rigcoder/failure"],
+        "{facts:?}"
+    );
     assert_eq!(cell.count("rigcoder/provider_retry"), 0);
 }
 
@@ -571,6 +572,7 @@ fn a_transient_provider_error_is_retried_as_a_named_decision() {
             "issued",
             "landed",
             "ended:provider",
+            "rigcoder/failure",
             "rigcoder/provider_retry",
             "issued",
             "landed",
@@ -641,10 +643,10 @@ fn the_model_call_budget_ends_the_run_as_max_turns() {
     cell.settings(false, 0);
     cell.start("loop");
     cell.drive();
-    assert!(cell.ending().contains("MaxTurns"), "{}", cell.ending());
+    assert_eq!(cell.ending(), "max_turns");
     assert_eq!(
-        cell.facts().last().map(String::as_str),
-        Some("ended:max_turns")
+        &cell.facts()[cell.facts().len() - 2..],
+        ["ended:max_turns", "rigcoder/failure"]
     );
 }
 
