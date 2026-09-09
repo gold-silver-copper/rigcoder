@@ -10,11 +10,11 @@ repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
 # Keep all Rig dependencies on the head of Rig PR #2476 (feat/observe-1, stacked on #2443).
-rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "92d5dc482f38e460f0f888d863ce275e50405280", default-features = false }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "92d5dc482f38e460f0f888d863ce275e50405280" }
-rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "92d5dc482f38e460f0f888d863ce275e50405280", default-features = false }
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "92d5dc482f38e460f0f888d863ce275e50405280", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "92d5dc482f38e460f0f888d863ce275e50405280", default-features = false, features = ["reqwest", "rustls"] }
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "89f6980f5ba1137161e96484d67b5b38c56f217d", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "89f6980f5ba1137161e96484d67b5b38c56f217d" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "89f6980f5ba1137161e96484d67b5b38c56f217d", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "89f6980f5ba1137161e96484d67b5b38c56f217d", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "89f6980f5ba1137161e96484d67b5b38c56f217d", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }

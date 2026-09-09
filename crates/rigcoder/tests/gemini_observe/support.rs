@@ -268,7 +268,7 @@ impl Cell {
     /// existing packet sink but bypassing the World and dispatch handler.
     pub fn direct_completion(
         &self,
-        mut request: rig::completion::CompletionRequest,
+        request: rig::completion::CompletionRequest,
         streamed: bool,
     ) -> Result<Vec<rig::message::AssistantContent>, Box<dyn std::error::Error>> {
         use futures::StreamExt;
@@ -285,7 +285,7 @@ impl Cell {
             .resource::<rigcoder::observe::Observations>()
             .0
             .clone();
-        request.observation = Some(rig::observe::AdapterContext::new(
+        let context = Some(rig::observe::AdapterContext::new(
             sink,
             rig::observe::Subject::scoped("direct"),
             "direct/1",
@@ -299,13 +299,16 @@ impl Cell {
                 .unwrap();
             let model = client.completion_model(self.described["model"].as_str().unwrap());
             if streamed {
-                let mut response = model.stream(request).await?;
+                let mut response = model.stream_with_context(request, context).await?;
                 while let Some(event) = response.next().await {
                     event?;
                 }
                 Ok(response.finish().choice)
             } else {
-                Ok(model.completion(request).await?.choice)
+                Ok(model
+                    .completion_with_context(request, context)
+                    .await?
+                    .choice)
             }
         })
     }
@@ -1069,7 +1072,7 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "92d5dc482f38e460f0f888d863ce275e50405280";
+pub const RIG_REV: &str = "89f6980f5ba1137161e96484d67b5b38c56f217d";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"

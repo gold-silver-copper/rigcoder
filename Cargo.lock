@@ -7267,7 +7267,7 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 [[package]]
 name = "rig"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "rig-core",
  "rig-effect-log",
@@ -7282,7 +7282,7 @@ dependencies = [
 [[package]]
 name = "rig-cassette"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -7301,7 +7301,7 @@ dependencies = [
 [[package]]
 name = "rig-core"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "as-any",
  "async-stream",
@@ -7331,7 +7331,7 @@ dependencies = [
 [[package]]
 name = "rig-ecs"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "bevy_ecs",
  "bevy_platform",
@@ -7347,7 +7347,7 @@ dependencies = [
 [[package]]
 name = "rig-effect-log"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "futures",
  "rig-core",
@@ -7358,7 +7358,7 @@ dependencies = [
 [[package]]
 name = "rig-fastembed"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "fastembed",
  "rig-core",
@@ -7371,7 +7371,7 @@ dependencies = [
 [[package]]
 name = "rig-helixdb"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "reqwest 0.13.4",
  "rig-core",
@@ -7383,7 +7383,7 @@ dependencies = [
 [[package]]
 name = "rig-lancedb"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "arrow-array",
  "futures",
@@ -7397,7 +7397,7 @@ dependencies = [
 [[package]]
 name = "rig-milvus"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "reqwest 0.13.4",
  "rig-core",
@@ -7410,7 +7410,7 @@ dependencies = [
 [[package]]
 name = "rig-reqwest"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "bytes",
  "futures",
@@ -7428,7 +7428,7 @@ dependencies = [
 [[package]]
 name = "rig-tungstenite"
 version = "0.42.0"
-source = "git+https://github.com/0xPlaygrounds/rig?rev=92d5dc482f38e460f0f888d863ce275e50405280#92d5dc482f38e460f0f888d863ce275e50405280"
+source = "git+https://github.com/0xPlaygrounds/rig?rev=89f6980f5ba1137161e96484d67b5b38c56f217d#89f6980f5ba1137161e96484d67b5b38c56f217d"
 dependencies = [
  "futures",
  "rig-core",
