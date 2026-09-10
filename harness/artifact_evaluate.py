@@ -17,9 +17,11 @@ def evaluate(container, spec, evidence, timeout):
     else:
         with (evidence / "artifact.tar").open("xb") as output:
             output.write(archive)
-        reward = score_line(archive, Path(spec["artifact"]).name, spec["expected"])
+        reward = score_line(archive, Path(spec["artifact"]).name, spec["expected"],
+                            spec.get("comparison", "line_membership"))
         digest = hashlib.sha256(archive).hexdigest()
     record = {"scorer": "output_line_v1", "reward": reward,
+              "comparison": spec.get("comparison", "line_membership"),
               "artifact_missing": archive is None, "archive_sha256": digest}
     with (evidence / "output-line-result.json").open("x") as output:
         json.dump(record, output, sort_keys=True)

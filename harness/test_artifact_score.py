@@ -19,6 +19,18 @@ def archive(entries):
 
 
 class ArtifactTests(unittest.TestCase):
+    def test_exact_text_rejects_an_answer_embedded_in_extra_lines(self):
+        for body, expected in [(b"wrong\nSYNTHETIC\n", 0.0),
+                               (b"SYNTHETIC\nextra", 0.0),
+                               (b" \r\nSYNTHETIC\r\n", 1.0),
+                               (b"SYNTHETIC\nSYNTHETIC", 0.0),
+                               (b"\xff", 0.0)]:
+            captured = archive([("answer.txt", body, tarfile.REGTYPE)])
+            self.assertEqual(score_line(captured, "answer.txt", "SYNTHETIC",
+                                        "exact_stripped_text"), expected)
+        with self.assertRaises(ValueError):
+            score_line(archive([]), "answer.txt", "SYNTHETIC", "unknown")
+
     def test_line_membership_is_scored_as_data(self):
         for body, expected in [(b"wrong\nSYNTHETIC\n", 1.0),
                                (b" SYNTHETIC \r\n", 1.0),

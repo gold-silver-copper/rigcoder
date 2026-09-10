@@ -344,10 +344,84 @@ fn verify_polyglot(task: &Task, image: &str, container: &str, dir: &Path) -> Res
     parse_reward(std::str::from_utf8(&output.stdout)?)
 }
 
+fn verify_vim(
+    task: &Task,
+    image: &str,
+    container: &str,
+    dir: &Path,
+    oracle: &crate::task::VimMacros,
+) -> Result<f64> {
+    use std::{
+        io::Write,
+        process::{Command, Stdio},
+    };
+    let modules = [
+        (
+            "artifact_score",
+            include_str!("../../../harness/artifact_score.py"),
+        ),
+        (
+            "artifact_capture",
+            include_str!("../../../harness/artifact_capture.py"),
+        ),
+        (
+            "polyglot_artifact",
+            include_str!("../../../harness/polyglot_artifact.py"),
+        ),
+        (
+            "polyglot_execute",
+            include_str!("../../../harness/polyglot_execute.py"),
+        ),
+        (
+            "prompt_workspace",
+            include_str!("../../../harness/prompt_workspace.py"),
+        ),
+        ("vim_script", include_str!("../../../harness/vim_script.py")),
+        (
+            "vim_execute",
+            include_str!("../../../harness/vim_execute.py"),
+        ),
+    ];
+    let mut script = String::from("import sys, types\n");
+    for (name, source) in modules {
+        script.push_str(&format!(
+            "m = types.ModuleType({name:?}); sys.modules[{name:?}] = m\nexec({}, m.__dict__)\n",
+            serde_json::to_string(source)?
+        ));
+    }
+    script.push_str(include_str!("../../../harness/vim_evaluate.py"));
+    let mut child = Command::new("python3")
+        .args(["-I", "-c", &script])
+        .arg(container)
+        .arg(image)
+        .arg(dir.join("verifier"))
+        .arg(task.verifier_timeout_secs.to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("starting Vim scorer")?;
+    child
+        .stdin
+        .take()
+        .context("Vim scorer stdin")?
+        .write_all(&serde_json::to_vec(oracle)?)?;
+    let output = child.wait_with_output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "Vim scorer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_reward(std::str::from_utf8(&output.stdout)?)
+}
+
 /// Install the verifier after the agent stops, discard agent-written reward
 /// files, and require a successful verifier invocation with a valid reward.
 /// The container is a benchmark environment, not a security sandbox for root.
 pub(crate) fn verify(task: &Task, image: &str, container: &str, dir: &Path) -> Result<f64> {
+    if let Some(oracle) = &task.vim_macros {
+        return verify_vim(task, image, container, dir, oracle);
+    }
     if task.polyglot {
         return verify_polyglot(task, image, container, dir);
     }

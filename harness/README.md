@@ -292,10 +292,16 @@ invalidate the trial. Captured archives and scoring receipts remain under the
 trial's `verifier/` directory. The oracle is part of the existing task snapshot
 and its recorded identity; it must remain inaccessible to the improver.
 
+For tasks requiring the entire stripped text to equal one expected line, add
+`"comparison":"exact_stripped_text"` to the oracle. This rejects an otherwise
+correct answer surrounded by extra non-whitespace lines. The default is
+`"line_membership"`; unknown comparison names are rejected. The scoring receipt
+records which comparison was applied.
+
 This option supports only that declared output contract. It is not a safe
 replacement for arbitrary verifiers that execute submitted programs. Tests cover
 real host subprocess limits and the bench CLI with a substituted Docker command;
-real Docker compatibility and isolation verification remain pending.
+the real Docker budgeted-trial canary also covers both comparison modes.
 
 ### Prompt improver sandbox preflight (macOS)
 
@@ -415,3 +421,25 @@ final score. Interrupted functional evaluation can leave partial evidence but
 cannot publish a score. Real Docker coverage is supplied by
 `python3 -B harness/check_polyglot_docker.py`; passing mocked unit tests alone
 is not evidence of container compatibility or isolation.
+
+### Isolated Vim macro scoring (experimental)
+
+The large CSV macro contract uses `tests/vim-macros.json` with `version: 1` and
+`expected_sha256`, the trusted SHA-256 of the complete expected CSV. The marker
+cannot coexist with either other host scorer. The runner captures regular
+`/app/apply_macros.vim` and `/app/input.csv` files after stopping the agent.
+It validates the declared command grammar, measures the three registers in a
+separate Vim process, then runs the script in a fresh restricted container.
+The host checks the transformed file hash after that container is removed.
+Expected output and scoring code are never mounted into the macro process.
+
+The script is limited to 64 KiB; captured CSV archives and transformed files are
+limited to 64 MiB. Macro execution has 2 GiB memory and one CPU. Scorer OOM,
+transport errors and incomplete capture invalidate a trial. Wrong output,
+invalid scripts and failing Vim commands are task failures. Evidence includes
+both captured archives, process results and a host scoring receipt. This is a
+specific macro-task contract, not an arbitrary Vimscript verifier.
+
+`python3 -B harness/check_vim_docker.py` builds a synthetic Vim image and checks
+native counts, correct/wrong results and real Docker capture. An existing
+immutable image ID can also be supplied as its argument.

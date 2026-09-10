@@ -485,10 +485,10 @@ pub fn evaluate(
         .transpose()?;
     if budget.is_some() {
         anyhow::ensure!(
-            loaded
-                .iter()
-                .all(|task| (task.output_line.is_some() || task.polyglot)
-                    && task.agent_timeout_secs <= 7200),
+            loaded.iter().all(|task| (task.output_line.is_some()
+                || task.polyglot
+                || task.vim_macros.is_some())
+                && task.agent_timeout_secs <= 7200),
             "budgeted trials require trusted host scoring and timeouts at most 7200 seconds"
         );
     }

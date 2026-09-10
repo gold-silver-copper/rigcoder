@@ -20,8 +20,12 @@ MAX_BINARY = 32 * 1024 * 1024
 CASES = ((0, b"1"), (1, b"1"), (2, b"2"), (10, b"89"), (42, b"433494437"))
 
 
-def execute(image, arguments, mounts, timeout):
+def execute(image, arguments, mounts, timeout, *, file_size_limit=MAX_BINARY, memory_mib=512):
     """Return Engine-confirmed exit status and bounded stdout of one fresh run."""
+    if type(memory_mib) is not int or not 128 <= memory_mib <= 4096:
+        raise ValueError("invalid isolated process memory limit")
+    if type(file_size_limit) is not int or not 1 <= file_size_limit <= 128 * 1024 * 1024:
+        raise ValueError("invalid isolated process file size limit")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image):
         raise ValueError("functional scorer requires an immutable image ID")
     if not arguments or not all(isinstance(arg, str) and '\x00' not in arg for arg in arguments):
@@ -39,8 +43,8 @@ def execute(image, arguments, mounts, timeout):
 
     command = ['create', '--pull', 'never', '--name', name, '--network', 'none',
                '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-               '--user', '65534:65534', '--pids-limit', '128', '--memory', '512m',
-               '--cpus', '1', '--ulimit', f'fsize={MAX_BINARY}:{MAX_BINARY}',
+               '--user', '65534:65534', '--pids-limit', '128', '--memory', f'{memory_mib}m',
+               '--cpus', '1', '--ulimit', f'fsize={file_size_limit}:{file_size_limit}',
                '--tmpfs', '/tmp:rw,nosuid,nodev,size=64m,mode=1777', '-w', '/tmp']
     for source, target, readonly in mounts:
         # Mount only host-created private inputs/outputs, never a repository.

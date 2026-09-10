@@ -1,4 +1,5 @@
 """Real bench/controller/relay/scorer exercise; synthetic agent, zero API calls."""
+import hashlib
 import json
 import os
 import re
@@ -10,6 +11,7 @@ import textwrap
 import uuid
 
 from gemini_budget import Budget
+from check_vim_docker import SOURCE as VIM_SOURCE
 
 
 def agent_source(answer):
@@ -58,8 +60,29 @@ def check(binary):
         budget = Budget(root / "budget.sqlite")
         budget.initialize()
         try:
-            for answer, expected in [("SYNTHETIC", 1.0), ("wrong", 0.0)]:
-                agent.write_text(agent_source(answer))
+            for answer, expected, comparison in [
+                    ("SYNTHETIC", 1.0, "line_membership"),
+                    ("wrong", 0.0, "line_membership"),
+                    ("extra\nSYNTHETIC", 0.0, "exact_stripped_text"),
+                    (" \r\nSYNTHETIC\r\n", 1.0, "exact_stripped_text"),
+                    ("x", 1.0, "vim_macros"),
+                    ("wrong", 0.0, "vim_macros")]:
+                for name in names.values():
+                    marker = root / "harness/tasks" / name / "tests/output-line.json"
+                    if comparison == "vim_macros":
+                        marker.unlink(missing_ok=True)
+                        marker.with_name('vim-macros.json').write_text(json.dumps({
+                            'version':1, 'expected_sha256':hashlib.sha256(b'x123\n').hexdigest()}))
+                        (marker.parent.parent/'environment/Dockerfile').write_text(
+                            'FROM python:3.13-slim\nRUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\n')
+                    else:
+                        marker.write_text(json.dumps({"artifact": "/app/answer.txt", "expected": "SYNTHETIC",
+                                                      "comparison": comparison}))
+                source = agent_source(answer)
+                if comparison == 'vim_macros':
+                    source += f"pathlib.Path('/app/input.csv').write_text({(answer+chr(10))!r})\n"
+                    source += f"pathlib.Path('/app/apply_macros.vim').write_bytes({VIM_SOURCE!r})\n"
+                agent.write_text(source)
                 subprocess.run([binary, "--root", root, "iterate", "--no-improve", "--no-build",
                                 "--binary", agent, "--gemini-budget", budget.path, "--generations", "1",
                                 "-k", "1", "-n", "1"], check=True, timeout=180,
@@ -72,9 +95,15 @@ def check(binary):
                     assert manifest["budget_phase"] == phase
                     assert manifest["provider_transport"] == "host_budgeted_pipe_relay"
                     assert manifest["binary"]["source_binding"] == "unverified"
-                    results = list(job.glob("*/verifier/output-line-result.json"))
+                    result_name = "vim-result.json" if comparison == "vim_macros" else "output-line-result.json"
+                    results = list(job.glob("*/verifier/" + result_name))
                     assert len(results) == 1
-                    assert json.loads(results[0].read_text())["reward"] == expected
+                    scored = json.loads(results[0].read_text())
+                    assert scored["reward"] == expected
+                    if comparison != "vim_macros":
+                        assert scored["comparison"] == comparison
+                    else:
+                        assert scored["scorer"] == "vim_macros_v1"
                     trial = results[0].parent.parent
                     link = json.loads((trial / "budget-link.json").read_text())
                     assert link == {"ledger": str(budget.path), "context": str(trial), "phase": phase}

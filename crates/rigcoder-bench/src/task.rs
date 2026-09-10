@@ -23,6 +23,7 @@ pub struct Task {
     pub difficulty: String,
     pub output_line: Option<OutputLine>,
     pub polyglot: bool,
+    pub vim_macros: Option<VimMacros>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -30,6 +31,23 @@ pub struct Task {
 pub struct OutputLine {
     pub artifact: String,
     pub expected: String,
+    #[serde(default)]
+    pub comparison: OutputComparison,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputComparison {
+    #[default]
+    LineMembership,
+    ExactStrippedText,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VimMacros {
+    pub version: u32,
+    pub expected_sha256: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -155,6 +173,30 @@ impl Task {
                 true
             }
         };
+        let vim_path = dir.join("tests/vim-macros.json");
+        let vim_macros = match std::fs::symlink_metadata(&vim_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+            Ok(meta) => {
+                anyhow::ensure!(
+                    meta.is_file() && meta.len() <= 256,
+                    "invalid Vim scorer marker"
+                );
+                let marker: VimMacros = serde_json::from_slice(&std::fs::read(&vim_path)?)?;
+                anyhow::ensure!(
+                    marker.version == 1
+                        && output_line.is_none()
+                        && !polyglot
+                        && marker.expected_sha256.len() == 64
+                        && marker
+                            .expected_sha256
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+                    "invalid or conflicting Vim scorer marker"
+                );
+                Some(marker)
+            }
+        };
         Ok(Self {
             name: name.to_owned(),
             dir,
@@ -174,6 +216,7 @@ impl Task {
             difficulty: parsed.metadata.difficulty,
             output_line,
             polyglot,
+            vim_macros,
         })
     }
 
