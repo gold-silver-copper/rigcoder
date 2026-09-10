@@ -140,3 +140,10 @@ Run the preserved offline matrix with
 `cargo run --locked -p rigcoder-verify -- verify`. See the
 [consumer guide](crates/rigcoder-verify/src/consumer/README.md) for case selection,
 recording, replay, resume and failure diagnostics.
+
+## Development checks
+
+See [the verification policy](docs/verification.md) for focused local commands,
+routine CI coverage, and the manual/nightly full gate required for release
+candidates. Product and verifier contracts run on both Linux and macOS; the
+optimized CLI build runs in full verification.
