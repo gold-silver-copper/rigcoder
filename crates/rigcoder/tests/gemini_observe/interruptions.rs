@@ -240,13 +240,20 @@ fn cancel_with_bash_in_flight() {
         run(MATRIX, &name, Config::delivery(stream), |cell| {
             cell.submit("Run this command: sleep 4; printf late > late.txt");
             cell.drive_until("bash in flight", |world| {
-                world
-                    .resource::<rigcoder::Transcript>()
-                    .events
-                    .iter()
-                    .any(|e| matches!(e, rigcoder::Event::ToolCall { .. }))
+                // A ToolCall event can precede approval and dispatch. Wait for
+                // issuance so cancellation exercises an in-flight handler,
+                // rather than occasionally cancelling at the approval hold.
+                rigcoder::observations(world).is_some_and(|trace| {
+                    trace.observations.iter().any(|observation| {
+                        matches!(observation.action, Action::Issued)
+                            && observation
+                                .subject
+                                .key
+                                .as_ref()
+                                .is_some_and(|key| key.as_str() == "tool:bash")
+                    })
+                })
             });
-            cell.app.update();
             cell.cancel(TIMEOUT_REASON);
             cell.drive();
             assert_eq!(cell.failure().kind, "cancelled");
