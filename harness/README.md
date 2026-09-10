@@ -243,3 +243,27 @@ until scoring, improver/build access, and alternate network egress have enforced
 boundaries verified with real process/container tests. Trial infrastructure errors
 already invalidate an evaluation before any keep decision; that protection does
 not solve the scoring boundary.
+
+### Interrupted self-editing
+
+Before launching an improver, `iterate` writes and synchronizes
+`rigcoder-pending-improvement.json` in the current worktree's Git directory.
+It records the baseline commit, candidate binary path and improvement note.
+Successful rollback or a recorded decision removes the marker. A hard kill
+leaves it in place, and subsequent `run` and `iterate` commands refuse to start.
+Find its location with:
+
+```sh
+git rev-parse --git-path rigcoder-pending-improvement.json
+```
+
+Recovery is currently manual. First stop any surviving improver/build/container
+processes. Preserve the marker, current source changes, staged changes, untracked
+files and trial evidence before restoring the intended baseline. Check whether
+HEAD moved after the marker was created; a kill may have occurred after committing
+a decision. Invalidate the candidate binary and its build receipt and rebuild
+from the chosen source. Remove the marker only after source, index, binary and
+evaluation state have been reconciled. Merely deleting it bypasses detection.
+
+The marker provides interruption detection, not process cleanup, automatic
+recovery, concurrent-run exclusion or isolation from candidate access to Git.

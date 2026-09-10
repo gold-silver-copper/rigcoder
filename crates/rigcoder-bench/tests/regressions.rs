@@ -864,6 +864,11 @@ bash harness/write-receipt.sh
             .collect();
         assert_eq!(archived.len(), 1);
         assert_eq!(fs::read(&archived[0]).unwrap(), b"unscored note\n");
+        assert!(
+            !f.root
+                .join(".git/rigcoder-pending-improvement.json")
+                .exists()
+        );
     }
 }
 
@@ -923,12 +928,22 @@ fn host_deadline_stops_execution_that_ignores_the_container_timeout() {
 fn a_missing_host_timeout_fails_before_starting_docker() {
     let f = Fixture::new();
     fs::remove_file(f.root.join("fakebin/timeout")).unwrap();
+    // Keep the Git prerequisite available while excluding both timeout names.
+    let git = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|path| path.join("git"))
+        .find(|path| path.is_file())
+        .unwrap();
+    std::os::unix::fs::symlink(git, f.root.join("fakebin/git")).unwrap();
     let output = f.run(
         &["run", "--no-build"],
         &[("PATH", f.root.join("fakebin").to_str().unwrap())],
     );
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("GNU timeout is required"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("GNU timeout is required"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(!f.root.join("mock.log").exists());
     assert!(f.ledger().is_empty());
 }
@@ -1030,4 +1045,87 @@ fn branching_checks_restore_failure_and_installs_tests_after_resume() {
             assert!(!log.contains("harness/tasks/a/tests "));
         }
     }
+}
+
+#[test]
+fn killed_improver_leaves_recovery_evidence_and_blocks_reuse() {
+    let f = Fixture::new();
+    f.script(
+        "fakebin/agent",
+        "#!/bin/sh\nprintf 'interrupted candidate\\n' > crates/rigcoder/src/prompt.md\nkill -KILL \"$PPID\"\n",
+    );
+    let baseline = f.git(&["rev-parse", "HEAD"]);
+    let output = f.run(
+        &["iterate", "--generations", "2", "--holdout", "false"],
+        &[],
+    );
+    assert!(!output.status.success());
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(output.status.signal(), Some(9));
+    let marker = f.root.join(".git/rigcoder-pending-improvement.json");
+    let record: Value = serde_json::from_slice(&fs::read(&marker).unwrap()).unwrap();
+    assert_eq!(record["baseline"], baseline);
+    assert_eq!(
+        fs::read_to_string(f.root.join(PROMPT)).unwrap(),
+        "interrupted candidate\n"
+    );
+    let log = fs::read(f.root.join("mock.log")).unwrap();
+    for args in [
+        vec!["run", "--no-build"],
+        vec!["iterate", "--generations", "1"],
+    ] {
+        let output = f.run(&args, &[]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("unfinished self-improvement"));
+        assert_eq!(fs::read(f.root.join("mock.log")).unwrap(), log);
+        assert!(marker.exists());
+    }
+    assert_eq!(f.ledger().len(), 1); // Only the completed baseline has a decision.
+}
+
+#[test]
+fn completed_candidate_decisions_clear_the_interruption_marker() {
+    for unchanged in [false, true] {
+        let f = Fixture::new();
+        if unchanged {
+            f.script("fakebin/agent", "#!/bin/sh\nexit 0\n");
+        }
+        success(&f.run(
+            &["iterate", "--generations", "2", "--holdout", "false"],
+            &[],
+        ));
+        assert_eq!(
+            f.ledger()[1]["decision"],
+            if unchanged { "tie" } else { "reverted" }
+        );
+        assert!(
+            !f.root
+                .join(".git/rigcoder-pending-improvement.json")
+                .exists()
+        );
+    }
+}
+
+#[test]
+fn interruption_marker_is_local_to_the_linked_worktree() {
+    let f = Fixture::new();
+    let linked = f.root.join("linked");
+    f.git(&["worktree", "add", "-b", "linked", linked.to_str().unwrap()]);
+    let linked = Fixture { root: linked };
+    let marker = linked.root.join(linked.git(&[
+        "rev-parse",
+        "--git-path",
+        "rigcoder-pending-improvement.json",
+    ]));
+    fs::write(&marker, b"interrupted marker").unwrap();
+    let output = linked.run(&["run", "--no-build"], &[]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unfinished self-improvement"));
+    assert!(marker.exists());
+    assert!(
+        !f.root
+            .join(".git/rigcoder-pending-improvement.json")
+            .exists()
+    );
+    success(&f.run(&["run", "--no-build"], &[]));
 }

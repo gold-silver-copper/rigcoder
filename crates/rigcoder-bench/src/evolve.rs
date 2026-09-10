@@ -682,6 +682,7 @@ fn tasks_for(root: &Path, args: &RunArgs) -> Result<Vec<String>> {
 }
 
 pub fn run(root: &Path, args: RunArgs) -> Result<()> {
+    require_no_pending_improvement(root)?;
     let tasks = tasks_for(root, &args)?;
     validate_run(&args, &tasks)?;
     if !args.no_build {
@@ -731,6 +732,51 @@ fn entry(
         time: now(),
         summary,
     })
+}
+
+fn pending_improvement(root: &Path) -> Result<PathBuf> {
+    Ok(root.join(git(
+        root,
+        &[
+            "rev-parse",
+            "--git-path",
+            "rigcoder-pending-improvement.json",
+        ],
+    )?))
+}
+
+fn require_no_pending_improvement(root: &Path) -> Result<()> {
+    let path = pending_improvement(root)?;
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+        Ok(_) => bail!(
+            "unfinished self-improvement recorded at {}; inspect and recover source, index and binary before removing this marker",
+            path.display()
+        ),
+    }
+}
+
+fn begin_improvement(root: &Path, binary: &Path, note: &Path, head: &str) -> Result<()> {
+    use std::io::Write;
+    let path = pending_improvement(root)?;
+    let mut file = std::fs::File::create_new(&path)?;
+    let record = serde_json::json!({"baseline": head, "binary": binary, "note": note});
+    file.write_all(serde_json::to_string_pretty(&record)?.as_bytes())?;
+    file.sync_all()?;
+    std::fs::File::open(path.parent().context("marker parent")?)?.sync_all()?;
+    Ok(())
+}
+
+fn finish_improvement(root: &Path) -> Result<()> {
+    let path = pending_improvement(root)?;
+    match std::fs::remove_file(&path) {
+        Ok(()) => std::fs::File::open(path.parent().context("marker parent")?)?
+            .sync_all()
+            .map_err(Into::into),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn improve(
@@ -803,6 +849,7 @@ fn improve(
     let branch = git(root, &["rev-parse", "--symbolic-full-name", "HEAD"])?;
     let ledger_path = root.join("harness/ledger.jsonl");
     let ledger_before = std::fs::read(&ledger_path).ok();
+    begin_improvement(root, &args.run.binary, &note, &head)?;
     let result = cmd.status();
     if git(root, &["rev-parse", "HEAD"])? != head
         || git(root, &["rev-parse", "--symbolic-full-name", "HEAD"])? != branch
@@ -834,6 +881,7 @@ fn improve(
         if let Err(cleanup) = rollback_unscored(root, &args.run.binary, &note) {
             return Err(error.context(format!("{cleanup:#}")));
         }
+        finish_improvement(root)?;
         return Err(error);
     }
     Ok(note)
@@ -977,6 +1025,7 @@ fn rollback_unscored(root: &Path, binary: &Path, note: &Path) -> Result<()> {
 }
 
 pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
+    require_no_pending_improvement(root)?;
     let run_args = &args.run;
     if run_args.slice == "holdout" && !args.no_improve {
         bail!("the holdout slice is for evaluation only: pass --no-improve");
@@ -1028,6 +1077,9 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
                     && let Err(cleanup) = rollback_unscored(root, &run_args.binary, note)
                 {
                     return Err(error.context(format!("{cleanup:#}")));
+                }
+                if note_this_generation.is_some() {
+                    finish_improvement(root)?;
                 }
                 return Err(error);
             }
@@ -1106,6 +1158,9 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
             best = (summary.score, summary.ci_low);
         }
         ledger::append(root, &e)?;
+        if note_this_generation.is_some() {
+            finish_improvement(root)?;
+        }
         // Persist the decision and rejected note before a fallible rebuild.
         if rebuild_rejected {
             build_linux(root, &run_args.binary)?;
