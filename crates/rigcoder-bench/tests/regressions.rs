@@ -1129,3 +1129,96 @@ fn interruption_marker_is_local_to_the_linked_worktree() {
     );
     success(&f.run(&["run", "--no-build"], &[]));
 }
+
+#[test]
+fn output_line_trials_use_host_scoring_and_keep_capture_evidence() {
+    for present in [false, true] {
+        let f = Fixture::new();
+        for task in ["a", "b"] {
+            f.write(
+                &format!("harness/tasks/{task}/tests/output-line.json"),
+                r#"{"artifact":"/app/answer.txt","expected":"SYNTHETIC"}"#,
+            );
+        }
+        let response = f.root.join("response.http");
+        let generated = Command::new("python3").args(["-I", "-c", r#"
+import io, sys, tarfile
+if sys.argv[2] == 'true':
+    target = io.BytesIO()
+    with tarfile.open(fileobj=target, mode='w', format=tarfile.USTAR_FORMAT) as tar:
+        info = tarfile.TarInfo('answer.txt'); info.size = 10
+        tar.addfile(info, io.BytesIO(b'SYNTHETIC\n'))
+    body = target.getvalue(); status = '200 OK'
+else:
+    body = b''; status = '404 Not Found'
+with open(sys.argv[1], 'wb') as output:
+    output.write(('HTTP/1.1 ' + status + '\r\nContent-Length: ' + str(len(body)) + '\r\n\r\n').encode() + body)
+"#]).arg(&response).arg(present.to_string()).output().unwrap();
+        success(&generated);
+        let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+        f.script("fakebin/docker", &docker.replace("case \"$1\" in\nversion)",
+            "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) cat \"$MOCK_RESPONSE\" ;;\nversion)"));
+        success(&f.run(
+            &["run", "--no-build"],
+            &[("MOCK_RESPONSE", response.to_str().unwrap())],
+        ));
+        assert_eq!(f.ledger()[0]["score"], if present { 1.0 } else { 0.0 });
+        let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+        assert!(!log.contains("bash /tests/test.sh"));
+        assert!(!log.contains("/tests/output-line.json"));
+        let job = fs::read_dir(f.root.join("harness/runs"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let evidence = job.join("a__1/verifier");
+        let record: Value =
+            serde_json::from_slice(&fs::read(evidence.join("output-line-result.json")).unwrap())
+                .unwrap();
+        assert_eq!(record["artifact_missing"], !present);
+        assert_eq!(evidence.join("artifact.tar").exists(), present);
+    }
+}
+
+#[test]
+fn malformed_output_capture_cannot_record_an_acceptance_decision() {
+    let f = Fixture::new();
+    for task in ["a", "b"] {
+        f.write(
+            &format!("harness/tasks/{task}/tests/output-line.json"),
+            r#"{"artifact":"/app/answer.txt","expected":"SYNTHETIC"}"#,
+        );
+    }
+    let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+    f.script("fakebin/docker", &docker.replace("case \"$1\" in\nversion)",
+        "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 7\\r\\n\\r\\ninvalid' ;;\nversion)"));
+    let output = f.run(
+        &[
+            "iterate",
+            "--no-improve",
+            "--no-build",
+            "--generations",
+            "1",
+            "--holdout",
+            "false",
+        ],
+        &[],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("output-line scorer failed"));
+    assert!(f.ledger().is_empty());
+    let job = fs::read_dir(f.root.join("harness/runs"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert!(job.join("error.txt").is_file());
+    assert!(!job.join("summary.json").exists());
+    assert_eq!(
+        fs::read(job.join("a__1/verifier/artifact.tar")).unwrap(),
+        b"invalid"
+    );
+    assert!(!job.join("a__1/verifier/output-line-result.json").exists());
+}

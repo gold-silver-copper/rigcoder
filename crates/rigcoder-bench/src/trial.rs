@@ -202,10 +202,67 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
     verify(task, container, dir)
 }
 
+fn verify_output_line(
+    task: &Task,
+    oracle: &crate::task::OutputLine,
+    container: &str,
+    dir: &Path,
+) -> Result<f64> {
+    use std::{
+        io::Write,
+        process::{Command, Stdio},
+    };
+    // Embed the host scorer: candidate files cannot replace imported modules.
+    // Python isolated mode also ignores user site packages and PYTHONPATH.
+    let modules = [
+        (
+            "artifact_score",
+            include_str!("../../../harness/artifact_score.py"),
+        ),
+        (
+            "artifact_capture",
+            include_str!("../../../harness/artifact_capture.py"),
+        ),
+    ];
+    let mut script = String::from("import sys, types\n");
+    for (name, source) in modules {
+        script.push_str(&format!(
+            "m = types.ModuleType({name:?}); sys.modules[{name:?}] = m\nexec({}, m.__dict__)\n",
+            serde_json::to_string(source)?
+        ));
+    }
+    script.push_str(include_str!("../../../harness/artifact_evaluate.py"));
+    let mut child = Command::new("python3")
+        .args(["-I", "-c", &script])
+        .arg(container)
+        .arg(dir.join("verifier"))
+        .arg(task.verifier_timeout_secs.to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("starting output-line scorer")?;
+    child
+        .stdin
+        .take()
+        .context("scorer stdin")?
+        .write_all(&serde_json::to_vec(oracle)?)?;
+    let output = child.wait_with_output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "output-line scorer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_reward(std::str::from_utf8(&output.stdout)?)
+}
+
 /// Install the verifier after the agent stops, discard agent-written reward
 /// files, and require a successful verifier invocation with a valid reward.
 /// The container is a benchmark environment, not a security sandbox for root.
 pub(crate) fn verify(task: &Task, container: &str, dir: &Path) -> Result<f64> {
+    if let Some(oracle) = &task.output_line {
+        return verify_output_line(task, oracle, container, dir);
+    }
     let setup = docker::exec(
         container,
         "/",

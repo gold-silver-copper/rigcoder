@@ -267,3 +267,27 @@ evaluation state have been reconciled. Merely deleting it bypasses detection.
 
 The marker provides interruption detection, not process cleanup, automatic
 recovery, concurrent-run exclusion or isolation from candidate access to Git.
+
+### Output-line verification (experimental)
+
+Tasks whose existing scoring contract is membership of an exact line in a text
+artifact can provide `tests/output-line.json`:
+
+```json
+{"artifact":"/app/answer.txt","expected":"SYNTHETIC_EXPECTED_LINE"}
+```
+
+For these tasks the bench runner uses an embedded host-side scorer instead of
+copying tests into the candidate container. It stops the container, confirms that
+it is stopped, requests one bounded archive through the Docker Engine API, and
+checks the UTF-8 contents as data. The transformation matches
+`read_text().strip().split("\n")` with universal newline handling. Confirmed
+missing output scores zero; transport, framing and unsupported-archive errors
+invalidate the trial. Captured archives and scoring receipts remain under the
+trial's `verifier/` directory. The oracle is part of the existing task snapshot
+and its recorded identity; it must remain inaccessible to the improver.
+
+This option supports only that declared output contract. It is not a safe
+replacement for arbitrary verifiers that execute submitted programs. Tests cover
+real host subprocess limits and the bench CLI with a substituted Docker command;
+real Docker compatibility and isolation verification remain pending.

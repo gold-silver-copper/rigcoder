@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -21,6 +21,14 @@ pub struct Task {
     pub cpus: f64,
     pub memory: String,
     pub difficulty: String,
+    pub output_line: Option<OutputLine>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OutputLine {
+    pub artifact: String,
+    pub expected: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -106,6 +114,28 @@ impl Task {
             .map(|rest| rest.trim().to_owned())
             .next_back()
             .unwrap_or_else(|| "/app".to_owned());
+        let oracle_path = dir.join("tests/output-line.json");
+        let output_line = match std::fs::symlink_metadata(&oracle_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+            Ok(meta) => {
+                anyhow::ensure!(
+                    meta.is_file() && meta.len() <= 70_000,
+                    "invalid output-line oracle file"
+                );
+                let oracle: OutputLine = serde_json::from_slice(&std::fs::read(&oracle_path)?)?;
+                anyhow::ensure!(
+                    oracle.artifact.starts_with('/')
+                        && oracle.artifact.len() <= 4096
+                        && !oracle.artifact.contains('\0')
+                        && !oracle.expected.is_empty()
+                        && oracle.expected.len() <= 65_536
+                        && !oracle.expected.contains(['\n', '\r']),
+                    "invalid output-line oracle"
+                );
+                Some(oracle)
+            }
+        };
         Ok(Self {
             name: name.to_owned(),
             dir,
@@ -123,6 +153,7 @@ impl Task {
             cpus: parsed.environment.cpus,
             memory: parsed.environment.memory,
             difficulty: parsed.metadata.difficulty,
+            output_line,
         })
     }
 
