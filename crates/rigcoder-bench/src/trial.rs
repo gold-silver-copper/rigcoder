@@ -37,6 +37,8 @@ pub struct TrialSpec<'a> {
     pub provider: &'a str,
     pub model: &'a str,
     pub api_key: Option<(&'a str, &'a str)>,
+    pub budget: Option<&'a Path>,
+    pub budget_phase: &'a str,
     pub max_turns: usize,
     pub checkpoint: bool,
 }
@@ -117,7 +119,12 @@ pub fn run(spec: &TrialSpec) -> TrialRecord {
 
 fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
     let task = spec.task;
-    docker::start(
+    let start = if spec.budget.is_some() {
+        docker::start_isolated
+    } else {
+        docker::start
+    };
+    start(
         container,
         spec.image,
         &task.workdir,
@@ -128,9 +135,13 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
         container,
         "/",
         &[],
-        "mkdir -p /logs/agent /logs/verifier /tests && \
+        if spec.budget.is_some() {
+            "mkdir -p /logs/agent /logs/verifier /tests && command -v bash && command -v python3"
+        } else {
+            "mkdir -p /logs/agent /logs/verifier /tests && \
          ((command -v bash >/dev/null && [ -s /etc/ssl/certs/ca-certificates.crt ]) \
-          || (apt-get update -qq && apt-get install -y -qq bash ca-certificates) || true)",
+          || (apt-get update -qq && apt-get install -y -qq bash ca-certificates) || true)"
+        },
         Duration::from_secs(300),
     )?;
     if setup.code != 0 {
@@ -164,7 +175,10 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
         ("RIGCODER_MODEL", spec.model),
         ("RUST_LOG", "warn"),
     ];
-    if let Some((key, value)) = spec.api_key {
+    if spec.budget.is_some() {
+        env.push(("RIGCODER_GEMINI_GATEWAY", "http://127.0.0.1:18080"));
+        env.push(("RIGCODER_GATEWAY_TOKEN", "task-relay"));
+    } else if let Some((key, value)) = spec.api_key {
         env.push((key, value));
     }
     let checkpoint = if spec.checkpoint {
@@ -172,6 +186,18 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
     } else {
         ""
     };
+    let mut relay = spec
+        .budget
+        .map(|budget| {
+            crate::trial_relay::Relay::start(
+                container,
+                budget,
+                spec.budget_phase,
+                spec.api_key.context("Gemini key is required")?.1,
+                task.agent_timeout_secs,
+            )
+        })
+        .transpose()?;
     let agent = docker::exec(
         container,
         &task.workdir,
@@ -183,8 +209,13 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
             shell_quote(&task.workdir)
         ),
         Duration::from_secs(task.agent_timeout_secs),
-    )?;
-    docker::copy_out(container, "/logs/agent/.", &dir.join("agent"))?;
+    );
+    let relay_result = relay.as_mut().map_or(Ok(()), |relay| relay.stop());
+    // Retain available diagnostics even when transport shutdown invalidates scoring.
+    let copied = docker::copy_out(container, "/logs/agent/.", &dir.join("agent"));
+    relay_result?;
+    copied?;
+    let agent = agent?;
     if agent.code == 137 {
         eprintln!(
             "[{}#{}] agent hit the hard timeout",

@@ -157,13 +157,17 @@ git add crates/rigcoder/src/prompt.md README.md staged-new.txt harness/ledger.js
     }
 
     fn run(&self, args: &[&str], env: &[(&str, &str)]) -> Output {
+        let model = env
+            .iter()
+            .find(|(key, _)| *key == "RIGCODER_TEST_MODEL")
+            .map_or("mock/model", |(_, value)| *value);
         Command::new(env!("CARGO_BIN_EXE_rigcoder-bench"))
             .arg("--root")
             .arg(&self.root)
             .args(args)
             .args([
                 "-m",
-                "mock/model",
+                model,
                 "-k",
                 "1",
                 "-n",
@@ -1355,6 +1359,86 @@ printf '%s\n' '{"prompt":"candidate\n","note":"synthetic hypothesis\n"}'
                         .contains("repository changed during isolated proposal")
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn budgeted_trials_keep_keys_on_host_and_require_successful_relay_shutdown() {
+    let python = Command::new("python3")
+        .args(["-c", "import sys; print(sys.executable)"])
+        .output()
+        .unwrap();
+    success(&python);
+    let python = String::from_utf8(python.stdout).unwrap();
+    for fail in [false, true] {
+        let f = Fixture::new();
+        f.write("budget.sqlite", "synthetic controller fixture");
+        for task in ["a", "b", "heldout"] {
+            f.write(
+                &format!("harness/tasks/{task}/tests/output-line.json"),
+                r#"{"artifact":"/app/answer.txt","expected":"SYNTHETIC"}"#,
+            );
+        }
+        // Substitute only the supervisor process; real Python still runs the
+        // embedded scorer. Supervisor lifecycle has separate subprocess tests.
+        f.script(
+            "fakebin/python3",
+            r#"#!/bin/sh
+case "$3" in
+*gemini_trial_relay*)
+    printf 'relay-phase:%s\n' "$6" >> "$MOCK_LOG"
+    printf 'relay-ready\n' >> "$MOCK_LOG"
+    printf 'ready\n'
+    cat >/dev/null
+    printf 'relay-stopped\n' >> "$MOCK_LOG"
+    exit "$MOCK_RELAY_EXIT" ;;
+esac
+exec "$MOCK_REAL_PYTHON" "$@"
+"#,
+        );
+        let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+        f.script("fakebin/docker", &docker.replace("case \"$1\" in\nversion)",
+            "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) cat >/dev/null; printf 'HTTP/1.1 404 Not Found\\r\\nContent-Length: 0\\r\\n\\r\\n' ;;\nversion)"));
+        let output = f.run(
+            &[
+                "iterate",
+                "--no-improve",
+                "--generations",
+                "1",
+                "--no-build",
+                "--gemini-budget",
+                "budget.sqlite",
+            ],
+            &[
+                ("RIGCODER_TEST_MODEL", "gemini/gemini-3.8-flash"),
+                ("GEMINI_API_KEY", "HOST_ONLY_SYNTHETIC_KEY"),
+                ("MOCK_REAL_PYTHON", python.trim()),
+                ("MOCK_RELAY_EXIT", if fail { "1" } else { "0" }),
+            ],
+        );
+        let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+        assert!(log.contains("--network none --cap-drop ALL"));
+        assert!(log.contains("RIGCODER_GEMINI_GATEWAY=http://127.0.0.1:18080"));
+        assert!(!log.contains("HOST_ONLY_SYNTHETIC_KEY"));
+        assert!(!log.contains("GEMINI_API_KEY="));
+        assert!(log.contains("relay-stopped"));
+        if fail {
+            assert!(!output.status.success());
+            assert!(f.ledger().is_empty());
+            assert!(!log.contains("system dial-stdio"));
+            assert!(String::from_utf8_lossy(&output.stderr).contains("trial relay failed"));
+        } else {
+            success(&output);
+            assert_eq!(f.ledger().len(), 2);
+            assert!(log.contains("relay-phase:holdout"));
+            let job = f.ledger()[1]["job_dir"].as_str().unwrap().to_owned();
+            let manifest: Value = serde_json::from_slice(
+                &fs::read(PathBuf::from(job).join("manifest.json")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(manifest["budget_phase"], "holdout");
+            assert!(log.find("relay-stopped").unwrap() < log.find("system dial-stdio").unwrap());
         }
     }
 }

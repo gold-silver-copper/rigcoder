@@ -354,6 +354,21 @@ upstream URL or bypass dispatcher validation and reservation.
 `python3 -B harness/check_gemini_relay_docker.py` checks the transport with an
 actual network-disabled container and mocked provider. Local tests also exercise
 HTTP requests, host-side settlement, framing and blocked-pipe deadlines. The
-relay is not yet integrated into benchmark trials. The trial controller must
-own readiness, container/process cleanup and the overall execution deadline;
-pipe deadlines alone do not interrupt an in-progress upstream HTTPS call.
+budgeted trial path is selected by `--gemini-budget /absolute/path/budget.sqlite`.
+The ledger must already exist; this option never initializes or resets it.
+It requires Gemini `gemini-3.8-flash`, output-line host scoring, no checkpoints,
+and task timeouts of at most 7200 seconds. Images must already provide Bash and
+Python 3 because the isolated setup cannot install packages over the network.
+
+The benchmark embeds the trusted supervisor and relay sources. A dedicated
+host process owns the API key, waits for relay readiness and watches parent EOF
+and the task deadline. Shutdown closes reservation admission before stopping
+the container. Previously admitted requests may settle; unknown usage remains
+charged. Rust independently bounds readiness and shutdown. Relay failure
+invalidates scoring while available agent logs are still captured. Development
+and final holdout evaluations explicitly select their respective ledger phases.
+Budgeted checkpoint branching is unsupported; use fresh trials.
+
+The real Docker relay preflight and mocked benchmark integration checks cover
+different boundaries. A complete real-Docker benchmark exercise and the live
+baseline/candidate experiment remain separate verification requirements.

@@ -192,6 +192,9 @@ pub struct RunArgs {
     /// provider/model the benchmarked agent uses.
     #[arg(short = 'm', long, default_value = "gemini/gemini-3.8-flash")]
     pub model: String,
+    /// Existing trusted Gemini ledger; isolates task networking and uses host scoring.
+    #[arg(long)]
+    pub gemini_budget: Option<PathBuf>,
     /// Model calls per run inside the container.
     #[arg(long, default_value_t = 200)]
     pub max_turns: usize,
@@ -320,6 +323,15 @@ fn remove_build_output(path: &Path) -> Result<()> {
 }
 
 fn validate_run(args: &RunArgs, tasks: &[String]) -> Result<()> {
+    if args.gemini_budget.is_some() {
+        anyhow::ensure!(
+            matches!(
+                args.model.as_str(),
+                "gemini/gemini-3.8-flash" | "gemini-3.8-flash"
+            ) && !args.checkpoint,
+            "--gemini-budget requires Gemini gemini-3.8-flash without checkpoints"
+        );
+    }
     if tasks.is_empty() || args.attempts == 0 || args.concurrency == 0 {
         bail!("evaluation needs at least one task, attempt, and worker");
     }
@@ -431,6 +443,7 @@ pub fn evaluate(
     args: &RunArgs,
     label: &str,
     tasks: &[String],
+    budget_phase: &str,
 ) -> Result<(Vec<TrialRecord>, PathBuf)> {
     validate_run(args, tasks)?;
     docker::available()?;
@@ -465,6 +478,19 @@ pub fn evaluate(
         .iter()
         .map(|name| Task::load(&snapshot_dir, name))
         .collect::<Result<_>>()?;
+    let budget = args
+        .gemini_budget
+        .as_ref()
+        .map(|path| root.join(path).canonicalize())
+        .transpose()?;
+    if budget.is_some() {
+        anyhow::ensure!(
+            loaded
+                .iter()
+                .all(|task| task.output_line.is_some() && task.agent_timeout_secs <= 7200),
+            "budgeted trials require host output-line scoring and timeouts at most 7200 seconds"
+        );
+    }
     // A build or external replacement between trials must not mix executable
     // versions within one score. Every upload uses this job-owned snapshot.
     let original_binary = binary;
@@ -527,6 +553,9 @@ pub fn evaluate(
         },
         "provider": provider,
         "model": model,
+        "provider_transport": if budget.is_some() { "host_budgeted_pipe_relay" } else { "direct" },
+        "budget_ledger": budget,
+        "budget_phase": budget_phase,
         "tasks": tasks,
         "task_files": input_identity(root, &snapshot_dir)?,
         "attempts": args.attempts,
@@ -612,6 +641,8 @@ pub fn evaluate(
                         provider,
                         model,
                         api_key: key_name.zip(key_value.as_deref()),
+                        budget: budget.as_deref(),
+                        budget_phase,
                         max_turns: args.max_turns,
                         checkpoint: args.checkpoint,
                     };
@@ -692,7 +723,17 @@ pub fn run(root: &Path, args: RunArgs) -> Result<()> {
     if !args.no_build {
         build_linux(root, &args.binary)?;
     }
-    let (records, job_dir) = evaluate(root, &args, &format!("run-{}", slice_name(&args)), &tasks)?;
+    let (records, job_dir) = evaluate(
+        root,
+        &args,
+        &format!("run-{}", slice_name(&args)),
+        &tasks,
+        if args.slice == "holdout" {
+            "holdout"
+        } else {
+            "development"
+        },
+    )?;
     let summary = stats::summarize(&records);
     ledger::append(
         root,
@@ -1168,7 +1209,17 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
             if !run_args.no_build {
                 build_linux(root, &run_args.binary)?;
             }
-            evaluate(root, run_args, &format!("gen-{generation:03}"), &tasks)
+            evaluate(
+                root,
+                run_args,
+                &format!("gen-{generation:03}"),
+                &tasks,
+                if run_args.slice == "holdout" {
+                    "holdout"
+                } else {
+                    "development"
+                },
+            )
         })();
         let (records, job_dir) = match evaluated {
             Ok(result) => result,
@@ -1287,7 +1338,7 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         if !run_args.no_build {
             build_linux(root, &run_args.binary)?;
         }
-        let (records, job_dir) = evaluate(root, run_args, "holdout", &holdout)?;
+        let (records, job_dir) = evaluate(root, run_args, "holdout", &holdout, "holdout")?;
         let summary = stats::summarize(&records);
         ledger::append(
             root,
@@ -1367,6 +1418,10 @@ pub fn branch_from(
     times: usize,
     args: &RunArgs,
 ) -> Result<()> {
+    anyhow::ensure!(
+        args.gemini_budget.is_none(),
+        "budgeted branching is not supported; use fresh trials"
+    );
     anyhow::ensure!(times > 0, "branch-from requires at least one attempt");
     docker::available()?;
     if !args.no_build {

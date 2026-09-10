@@ -87,6 +87,27 @@ pub fn build(context: &Path, tag: &str, receipt: &Path, timeout: Duration) -> Re
 
 /// Start a container that idles until removed.
 pub fn start(name: &str, image: &str, workdir: &str, cpus: f64, memory: &str) -> Result<()> {
+    start_with_network(name, image, workdir, cpus, memory, false)
+}
+
+pub fn start_isolated(
+    name: &str,
+    image: &str,
+    workdir: &str,
+    cpus: f64,
+    memory: &str,
+) -> Result<()> {
+    start_with_network(name, image, workdir, cpus, memory, true)
+}
+
+fn start_with_network(
+    name: &str,
+    image: &str,
+    workdir: &str,
+    cpus: f64,
+    memory: &str,
+    isolated: bool,
+) -> Result<()> {
     let mut cmd = docker();
     cmd.args([
         "run",
@@ -99,8 +120,20 @@ pub fn start(name: &str, image: &str, workdir: &str, cpus: f64, memory: &str) ->
         memory,
         "-w",
         workdir,
-    ])
-    .args([
+    ]);
+    if isolated {
+        cmd.args([
+            "--network",
+            "none",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            "512",
+        ]);
+    }
+    cmd.args([
         "--entrypoint",
         "sh",
         image,

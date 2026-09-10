@@ -17,6 +17,7 @@ mod slices;
 mod stats;
 mod task;
 mod trial;
+mod trial_relay;
 
 use std::path::PathBuf;
 
