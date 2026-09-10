@@ -152,20 +152,6 @@
               "status": 429,
               "retryable": true
             }
-          },
-          "analysis": {
-            "response_id": null,
-            "headers": null,
-            "timing": {
-              "request_duration": {
-                "secs": 0,
-                "nanos": 5000000
-              },
-              "time_to_first_byte": {
-                "secs": 0,
-                "nanos": 2000000
-              }
-            }
           }
         }
       },
@@ -202,14 +188,6 @@
       "at": {
         "secs": 0,
         "nanos": 11000000
-      },
-      "handler_timing": {
-        "interval": "execution",
-        "duration": {
-          "secs": 0,
-          "nanos": 9000000
-        },
-        "complete": true
       }
     },
     {
@@ -232,13 +210,6 @@
       "at": {
         "secs": 0,
         "nanos": 13000000
-      },
-      "run_timing": {
-        "duration": {
-          "secs": 0,
-          "nanos": 12000000
-        },
-        "complete": true
       }
     },
     {
@@ -511,20 +482,6 @@
             "ending": {
               "ending": "decoded"
             }
-          },
-          "analysis": {
-            "response_id": null,
-            "headers": null,
-            "timing": {
-              "request_duration": {
-                "secs": 0,
-                "nanos": 6000000
-              },
-              "time_to_first_byte": {
-                "secs": 0,
-                "nanos": 2000000
-              }
-            }
           }
         }
       },
@@ -557,14 +514,6 @@
       "at": {
         "secs": 0,
         "nanos": 28000000
-      },
-      "handler_timing": {
-        "interval": "execution",
-        "duration": {
-          "secs": 0,
-          "nanos": 10000000
-        },
-        "complete": true
       }
     },
     {
@@ -586,13 +535,6 @@
       "at": {
         "secs": 0,
         "nanos": 30000000
-      },
-      "run_timing": {
-        "duration": {
-          "secs": 0,
-          "nanos": 13000000
-        },
-        "complete": true
       }
     }
   ],

@@ -119,11 +119,6 @@ fn the_cli_writes_the_trace_of_a_replayed_run() {
     );
     let trace = artifact.trace;
     assert!(trace.observations.iter().all(|fact| fact.at.is_some()));
-    assert!(trace.observations.iter().any(|fact| {
-        fact.run_timing
-            .as_ref()
-            .is_some_and(|timing| timing.complete && timing.duration.is_some())
-    }));
     assert!(trace.finalized, "the CLI finalizes at exit");
     assert!(trace.is_complete());
     let facts = facts(&trace);

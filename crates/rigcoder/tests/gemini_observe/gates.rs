@@ -7,12 +7,12 @@
 //! | `steer_deny_{unary,stream}` | a steering deny rule on bash | `Denied` transcript line, nothing prepared; the second recorded request carries the reason text | `rigcoder/steer` (rule `deny`), `denied@Gate:denied` | recorded |
 //! | `scope_deny_{unary,stream}` | a file write outside the allowed scope | file absent | `rigcoder/steer` (rule `scope`), `denied@Gate:denied` | recorded |
 //! | `stale_approval_{unary,stream}` | the call's arguments change after preparation began | denial names the change; the model's honest second call is approved and runs | `approval:held`, `approval:denied` (reason), `denied@Gate:denied`, then `approval:held`, `approval:approved` | recorded |
-//! | `patched_{unary,stream}` | one serving layer rewrites the request | the recorded request carries the patch | `patched` at `Handler` with `before`/`after` differing on the patched field, emitter = the layer (was `unknown` before the fix fed back to #2476) | recorded |
-//! | `patched_twice_stream` | two layers patch in sequence | recorded request carries both | two ordered `patched` facts, each naming its layer | recorded |
+//! | `patched_{unary,stream}` | one serving layer rewrites the request | the recorded request carries the patch | effect record and cassette request contain the final patch | recorded |
+//! | `patched_twice_stream` | two layers patch in sequence | recorded request carries both | effect record and cassette request contain both patches | recorded |
 //! | `discarded` | a layer denies before the wire | run failed with the layer's reason, log empty | `issued`, `denied@Handler:layer_discarded` (emitter = the layer), `ended:provider`; no `landed` | no-wire |
 //! | `replaced_{unary,stream}` | a layer replaces the answer after the record | run failed with the replacement; the record holds the handler's `Ok` | `landed` (Ok) then `replaced { recorded: Ok, consumed: Err }` at `Handler` (emitter = the layer), `ended:provider` | recorded |
 //! | `shaped_stream` | an oversized `read_file` result cut for history | history cut, record whole | `rigcoder/result_shaped`; **no** library `replaced` (an in-place `Judge` rewrite raises no lifecycle event — documented gap) | recorded |
-//! | `bounded_patch_stream` | a patch whose kind exceeds 64 KiB | recorded second request carries the 70 k-char history | the second `patched` carries `{"elided": {"bytes": n}}` on both sides, `n` > 64 KiB | recorded |
+//! | `bounded_patch_stream` | a patch whose kind exceeds 64 KiB | recorded second request carries the 70 k-char history | effect record retains the large final request | recorded |
 
 use crate::support::*;
 use rig::observe::HostAction as _;
@@ -472,14 +472,6 @@ impl Intercept for Replacer {
     }
 }
 
-fn patched(cell: &Cell) -> Vec<rig::observe::Observation> {
-    cell.trace()
-        .observations
-        .into_iter()
-        .filter(|o| matches!(o.action, Action::Patched { .. }))
-        .collect()
-}
-
 #[test]
 fn a_layer_patch() {
     pair(
@@ -495,23 +487,7 @@ fn a_layer_patch() {
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
             let facts = cell.lifecycle_facts();
             assert!(cell.count("adapter") > 0);
-            assert_eq!(
-                facts,
-                ["issued", "patched", "landed", "ended:settled"],
-                "{facts:?}"
-            );
-            let patch = &patched(cell)[0];
-            assert_eq!(patch.stage, Stage::Handler);
-            assert_eq!(patch.emitter.name, "cooler-0.1");
-            let Action::Patched { before, after } = &patch.action else {
-                unreachable!()
-            };
-            assert_eq!(
-                before["request"]["temperature"],
-                serde_json::Value::Null,
-                "{before}"
-            );
-            assert_eq!(after["request"]["temperature"], 0.1, "{after}");
+            assert_eq!(facts, ["issued", "landed", "ended:settled"], "{facts:?}");
             // The record holds what was served.
             let record = &cell.log().records[0];
             let EffectKind::Completion { request, .. } = &record.kind else {
@@ -545,36 +521,7 @@ fn two_layers_patch_in_order() {
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
             let facts = cell.lifecycle_facts();
             assert!(cell.count("adapter") > 0);
-            assert_eq!(
-                facts,
-                ["issued", "patched", "patched", "landed", "ended:settled"],
-                "{facts:?}"
-            );
-            let patches = patched(cell);
-            let names: Vec<_> = patches.iter().map(|p| p.emitter.name.clone()).collect();
-            // Outermost layer first: `.layered(Capper).layered(Cooler)` wraps
-            // the capper in the cooler.
-            assert_eq!(names, ["cooler-0.2", "capper"]);
-            // Each patch's `before` is the previous patch's `after`.
-            let Action::Patched {
-                after: first_after, ..
-            } = &patches[0].action
-            else {
-                unreachable!()
-            };
-            let Action::Patched {
-                before: second_before,
-                after: second_after,
-            } = &patches[1].action
-            else {
-                unreachable!()
-            };
-            assert_eq!(
-                first_after, second_before,
-                "the second layer saw the first's patch"
-            );
-            assert_eq!(second_after["request"]["temperature"], 0.2);
-            assert_eq!(second_after["request"]["max_tokens"], 64);
+            assert_eq!(facts, ["issued", "landed", "ended:settled"], "{facts:?}");
             let record = &cell.log().records[0];
             let EffectKind::Completion { request, .. } = &record.kind else {
                 panic!()
@@ -753,7 +700,7 @@ fn an_oversized_result_is_shaped_in_place() {
 }
 
 #[test]
-fn a_patch_beyond_the_payload_bound_is_elided() {
+fn large_patched_requests_remain_in_the_effect_log() {
     run(
         MATRIX,
         "bounded_patch_stream",
@@ -771,28 +718,6 @@ fn a_patch_beyond_the_payload_bound_is_elided() {
             cell.submit("Read the file huge.txt with read_file, then reply with exactly the word: done. Do nothing else.");
             cell.drive();
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
-            let patches = patched(cell);
-            assert_eq!(patches.len(), 2, "{:?}", cell.facts());
-            let Action::Patched { before, after } = &patches[0].action else {
-                unreachable!()
-            };
-            assert!(
-                before.get("elided").is_none(),
-                "the first request fits: {before}"
-            );
-            assert_eq!(after["request"]["temperature"], 0.3);
-            let Action::Patched { before, after } = &patches[1].action else {
-                unreachable!()
-            };
-            let bytes = before["elided"]["bytes"].as_u64().expect("elided before");
-            assert!(
-                bytes > rig::observe::LARGEST_PAYLOAD_BYTES as u64,
-                "{bytes}"
-            );
-            assert!(
-                after["elided"]["bytes"].as_u64().unwrap()
-                    > rig::observe::LARGEST_PAYLOAD_BYTES as u64
-            );
             // The exchange record is whole.
             let record = cell
                 .log()

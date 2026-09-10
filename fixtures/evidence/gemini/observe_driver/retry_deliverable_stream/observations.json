@@ -291,20 +291,6 @@
     {
       "seq": 10,
       "subject": {
-        "scope": "rigcoder/run/1"
-      },
-      "stage": "runtime",
-      "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "retry",
-        "feedback": "Not finished: these required files do not exist yet: /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt. Create them with the tools, verify they exist, then give the final summary."
-      }
-    },
-    {
-      "seq": 11,
-      "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
@@ -321,7 +307,7 @@
       }
     },
     {
-      "seq": 12,
+      "seq": 11,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -347,7 +333,7 @@
       }
     },
     {
-      "seq": 13,
+      "seq": 12,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -376,7 +362,7 @@
       }
     },
     {
-      "seq": 14,
+      "seq": 13,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -408,7 +394,7 @@
       }
     },
     {
-      "seq": 15,
+      "seq": 14,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -442,7 +428,7 @@
       }
     },
     {
-      "seq": 16,
+      "seq": 15,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -474,7 +460,7 @@
       }
     },
     {
-      "seq": 17,
+      "seq": 16,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -508,7 +494,7 @@
       }
     },
     {
-      "seq": 18,
+      "seq": 17,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -534,7 +520,7 @@
       }
     },
     {
-      "seq": 19,
+      "seq": 18,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -561,7 +547,7 @@
       }
     },
     {
-      "seq": 20,
+      "seq": 19,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -583,7 +569,7 @@
       }
     },
     {
-      "seq": 21,
+      "seq": 20,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -603,7 +589,7 @@
       }
     },
     {
-      "seq": 22,
+      "seq": 21,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -627,7 +613,7 @@
       }
     },
     {
-      "seq": 23,
+      "seq": 22,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -651,7 +637,7 @@
       }
     },
     {
-      "seq": 24,
+      "seq": 23,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -668,7 +654,7 @@
       }
     },
     {
-      "seq": 25,
+      "seq": 24,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -686,7 +672,7 @@
       }
     },
     {
-      "seq": 26,
+      "seq": 25,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -708,7 +694,7 @@
       }
     },
     {
-      "seq": 27,
+      "seq": 26,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -726,7 +712,7 @@
       }
     },
     {
-      "seq": 28,
+      "seq": 27,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -752,7 +738,7 @@
       }
     },
     {
-      "seq": 29,
+      "seq": 28,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -781,7 +767,7 @@
       }
     },
     {
-      "seq": 30,
+      "seq": 29,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -813,7 +799,7 @@
       }
     },
     {
-      "seq": 31,
+      "seq": 30,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -847,7 +833,7 @@
       }
     },
     {
-      "seq": 32,
+      "seq": 31,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -879,7 +865,7 @@
       }
     },
     {
-      "seq": 33,
+      "seq": 32,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -913,7 +899,7 @@
       }
     },
     {
-      "seq": 34,
+      "seq": 33,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -939,7 +925,7 @@
       }
     },
     {
-      "seq": 35,
+      "seq": 34,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -966,7 +952,7 @@
       }
     },
     {
-      "seq": 36,
+      "seq": 35,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -988,7 +974,7 @@
       }
     },
     {
-      "seq": 37,
+      "seq": 36,
       "subject": {
         "scope": "rigcoder/run/1"
       },

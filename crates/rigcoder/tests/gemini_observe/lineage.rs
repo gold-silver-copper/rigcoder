@@ -12,13 +12,14 @@
 //! | `compare_diverged` | the same program under concurrency 1 instead of 4 | four results either way | `compare` → `Diverged { index }` at a `Gate`-stage fact, before any provider exchange differs | replay of `calls4_c4_stream` |
 //! | `compare_incomparable` | a sink of capacity 2 | run unaffected: settled, same answer | `dropped > 0`, `!is_complete()`, `compare` → `Incomparable { incomplete_actual }` | replay of `text_stream` |
 //! | `expected_traces` | committed expected traces for three cells | — | `compare(expected, replayed) == Equal` against `fixtures/observe/<cell>.expected.json` (written in record mode) | replay of `text_stream`, `one_tool_stream`, `invalid_tool_stream` |
-//! | `clock` | a counting host clock | settled | every `at` is `Some` and strictly increasing; run/adapter/handler intervals and semantic parity with the clockless trace | replay of `text_stream` |
+//! | `clock` | a counting host clock | settled | every `at` is `Some` and strictly increasing; fixture parity with the clockless trace | replay of `text_stream` |
 //! | `session` | `with_session("rigcoder/run/1")` configured by the cell | settled | the trace carries the configured session; `compare` ignores it (a renamed copy is `Equal`) | replay of `text_stream` |
 //! | `correlation` | subjects on a four-call batch | four results | every tool `landed` effect id is a log record and every record landed; keys `tool:bash`, family Tool; four contiguous dispatch orders; completions' `order` increases; runtime-made tool effects carry no `parent` | replay of `calls4_c4_stream` |
 //! | `two_runs` | two runs in one session (the product's retry budget on, so a transient failure during recording would be part of the record; this recording holds two clean exchanges) | second request carries the first's history; both settled | scopes `rigcoder/run/1` then `rigcoder/run/2`, each ending `settled` | recorded |
 
+use super::comparison::{Comparison, compare};
 use crate::support::*;
-use rig::observe::{Action, Comparison, ObservationTrace, Stage, compare};
+use rig::observe::{Action, ObservationTrace, Stage};
 
 const MATRIX: &str = "observe_lineage";
 
@@ -352,55 +353,6 @@ fn a_host_clock_stamps_every_fact_and_changes_nothing_else() {
             );
             assert_eq!(compare(&clockless, &trace), Comparison::Equal);
             assert_eq!(facts(&clockless), facts(&trace));
-            let run = trace
-                .observations
-                .iter()
-                .find(|fact| matches!(fact.action, Action::Ended { .. }))
-                .unwrap();
-            assert_eq!(
-                run.run_timing,
-                Some(rig::observe::RunTiming {
-                    duration: Some(std::time::Duration::from_millis(16)),
-                    complete: true,
-                })
-            );
-            let timings: Vec<_> = trace
-                .observations
-                .iter()
-                .filter_map(|fact| {
-                    let Action::Adapter { observation } = &fact.action else {
-                        return None;
-                    };
-                    observation.analysis.as_ref()?.timing.as_ref()
-                })
-                .collect();
-            assert_eq!(timings.len(), 1);
-            // The transport can sample bytes before the SSE layer publishes
-            // its response-header fact. Both orders add one counting-clock
-            // sample; controlled byte-boundary tests pin exact deltas in Rig.
-            let first_byte = timings[0].time_to_first_byte.unwrap();
-            assert!(
-                (std::time::Duration::from_millis(2)..=std::time::Duration::from_millis(3))
-                    .contains(&first_byte)
-            );
-            // Collection may sample first-item time while the provider is still
-            // streaming. That extra counting-clock sample can fall inside or
-            // after the request interval; exact boundary deltas use controlled
-            // clocks in Rig's tests, not assumptions about task interleaving.
-            assert!(timings[0].request_duration >= timings[0].time_to_first_byte);
-            assert!(timings[0].request_duration <= run.run_timing.as_ref().unwrap().duration);
-            let handler = trace
-                .observations
-                .iter()
-                .find_map(|fact| fact.handler_timing.as_ref())
-                .unwrap();
-            assert_eq!(
-                handler.interval,
-                rig::observe::HandlerInterval::TimeToFirstItem
-            );
-            assert!(handler.complete);
-            assert!(handler.duration.is_some());
-            assert!(handler.duration <= run.run_timing.as_ref().unwrap().duration);
         },
     );
 }

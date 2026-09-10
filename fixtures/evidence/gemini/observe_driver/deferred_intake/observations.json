@@ -855,27 +855,6 @@
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "dispatch",
-      "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
-      },
-      "action": {
-        "action": "deferred",
-        "reason": {
-          "code": "intake_bound",
-          "detail": "3 of 4 intents wait for the next tick (intake 1)"
-        }
-      }
-    },
-    {
-      "seq": 34,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 2,
         "effect": 2,
         "key": "tool:bash",
         "family": "tool"
@@ -890,28 +869,7 @@
       }
     },
     {
-      "seq": 35,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "dispatch",
-      "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
-      },
-      "action": {
-        "action": "deferred",
-        "reason": {
-          "code": "intake_bound",
-          "detail": "2 of 3 intents wait for the next tick (intake 1)"
-        }
-      }
-    },
-    {
-      "seq": 36,
+      "seq": 34,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -929,28 +887,7 @@
       }
     },
     {
-      "seq": 37,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 4,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "dispatch",
-      "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
-      },
-      "action": {
-        "action": "deferred",
-        "reason": {
-          "code": "intake_bound",
-          "detail": "1 of 2 intents wait for the next tick (intake 1)"
-        }
-      }
-    },
-    {
-      "seq": 38,
+      "seq": 35,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -968,7 +905,7 @@
       }
     },
     {
-      "seq": 39,
+      "seq": 36,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -990,7 +927,7 @@
       }
     },
     {
-      "seq": 40,
+      "seq": 37,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -1012,7 +949,7 @@
       }
     },
     {
-      "seq": 41,
+      "seq": 38,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -1034,7 +971,7 @@
       }
     },
     {
-      "seq": 42,
+      "seq": 39,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -1056,7 +993,7 @@
       }
     },
     {
-      "seq": 43,
+      "seq": 40,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1074,7 +1011,7 @@
       }
     },
     {
-      "seq": 44,
+      "seq": 41,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1100,7 +1037,7 @@
       }
     },
     {
-      "seq": 45,
+      "seq": 42,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1129,7 +1066,7 @@
       }
     },
     {
-      "seq": 46,
+      "seq": 43,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1161,7 +1098,7 @@
       }
     },
     {
-      "seq": 47,
+      "seq": 44,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1195,7 +1132,7 @@
       }
     },
     {
-      "seq": 48,
+      "seq": 45,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1227,7 +1164,7 @@
       }
     },
     {
-      "seq": 49,
+      "seq": 46,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1261,7 +1198,7 @@
       }
     },
     {
-      "seq": 50,
+      "seq": 47,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1293,7 +1230,7 @@
       }
     },
     {
-      "seq": 51,
+      "seq": 48,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1327,7 +1264,7 @@
       }
     },
     {
-      "seq": 52,
+      "seq": 49,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1353,7 +1290,7 @@
       }
     },
     {
-      "seq": 53,
+      "seq": 50,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1380,7 +1317,7 @@
       }
     },
     {
-      "seq": 54,
+      "seq": 51,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 5,
@@ -1402,7 +1339,7 @@
       }
     },
     {
-      "seq": 55,
+      "seq": 52,
       "subject": {
         "scope": "rigcoder/run/1"
       },

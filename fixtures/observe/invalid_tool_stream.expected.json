@@ -295,23 +295,6 @@
       },
       "stage": "runtime",
       "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "invalid_call",
-        "name": "teleport",
-        "resolution": {
-          "code": "fail"
-        }
-      }
-    },
-    {
-      "seq": 11,
-      "subject": {
-        "scope": "rigcoder/run/1"
-      },
-      "stage": "runtime",
-      "emitter": {
         "name": "rig-ecs/agent",
         "version": "0.42.0"
       },
@@ -324,7 +307,7 @@
       }
     },
     {
-      "seq": 12,
+      "seq": 11,
       "subject": {
         "scope": "rigcoder/run/1"
       },

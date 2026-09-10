@@ -52,11 +52,13 @@ Model selection: `RIGCODER_PROVIDER` (`anthropic` default, or `openai`) and
 execution mode and clock source. The CLI installs a host monotonic clock before
 startup; `--replay` labels measurements `effect_log_replay`. HTTP cassette and
 paced replay tests label their own execution modes separately. The existing
-digest retains these labels alongside per-attempt, handler and run durations.
+digest retains these labels alongside provider-attempt facts and run endings.
+Individual observation timestamps are retained in the trace; Rig no longer
+calculates provider, handler or run durations.
 The separate `recording_provenance` field identifies live or derived provider
 content, or `not_applicable` when no HTTP recording is used. Artificial pacing
 does not change the origin of unchanged recorded frames.
-Unlabelled older artifacts remain unknown. Replay timings describe the replay
+Unlabelled older artifacts remain unknown. Replay timestamps describe the replay
 environment and cannot establish live provider performance or task success.
 
 `rigcoder-bench digest <job>` retains recorded task/attempt identity from
@@ -123,9 +125,10 @@ approval, persistence and process-isolation contracts.
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
 `rig-ecs`, `rig-effect-log` and `rig-cassette`) to
-`1c0593a6a2b32557e0f3dd77c85b24b1d7dc6750`, the head of
-[Rig PR #2476](https://github.com/0xPlaygrounds/rig/pull/2476) (the observation
-witness), stacked on #2443. The consumer ownership transfer landed at the
+`e5002f86d0755ae720de254cbbc968fd57890fca`, the head of
+[Rig PR #2482](https://github.com/0xPlaygrounds/rig/pull/2482), which supersedes
+#2476 with optional provider diagnostics and correct batch restoration, stacked
+on #2443. The consumer ownership transfer landed at the
 earlier pin `de83e9f` ([Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474)).
 To move the pin, update every Rig revision and `Cargo.lock`, then run the
 workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.

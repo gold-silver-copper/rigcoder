@@ -294,20 +294,6 @@
             "ending": {
               "ending": "terminal"
             }
-          },
-          "analysis": {
-            "response_id": null,
-            "headers": null,
-            "timing": {
-              "request_duration": {
-                "secs": 0,
-                "nanos": 9000000
-              },
-              "time_to_first_byte": {
-                "secs": 0,
-                "nanos": 2000000
-              }
-            }
           }
         }
       },
@@ -340,14 +326,6 @@
       "at": {
         "secs": 0,
         "nanos": 15000000
-      },
-      "handler_timing": {
-        "interval": "time_to_first_item",
-        "duration": {
-          "secs": 0,
-          "nanos": 13000000
-        },
-        "complete": true
       }
     },
     {
@@ -369,13 +347,6 @@
       "at": {
         "secs": 0,
         "nanos": 17000000
-      },
-      "run_timing": {
-        "duration": {
-          "secs": 0,
-          "nanos": 16000000
-        },
-        "complete": true
       }
     }
   ],

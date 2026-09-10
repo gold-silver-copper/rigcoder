@@ -99,17 +99,9 @@ pub(crate) fn observations(trace: &mut ObservationTrace, secrets: &[String]) {
         match &mut observation.action {
             Action::Held { reason: detail }
             | Action::Denied { reason: detail }
-            | Action::Deferred { reason: detail }
             | Action::Refused { reason: detail }
             | Action::Cancelled { reason: detail }
-            | Action::CancelRequested { reason: detail }
-            | Action::InvalidCall {
-                resolution: detail, ..
-            }
             | Action::Ended { ending: detail } => reason(detail, secrets),
-            Action::Approved {
-                reason: Some(detail),
-            } => reason(detail, secrets),
             Action::Landed { outcome: value } => outcome(value, secrets),
             Action::Replaced { recorded, consumed } => {
                 outcome(recorded, secrets);
@@ -121,7 +113,7 @@ pub(crate) fn observations(trace: &mut ObservationTrace, secrets: &[String]) {
                 }
             }
             // Adapter and typed product failure payloads are scrubbed at emission.
-            // Request patches, feedback and streamed content are program data.
+            // Streamed content is program data.
             _ => {}
         }
     }

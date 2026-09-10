@@ -4,12 +4,11 @@
 //!
 //! | cell | dimension pinned | oracle | facts asserted | status |
 //! |---|---|---|---|---|
-//! | `deferred_intake` | `ServingPolicy { command_capacity: 1 }` over a four-call batch | four results | `deferred:intake_bound` at `Dispatch` (emitter `rig-ecs/bus`), once per intent left behind, before its `issued` | replay of `observe_turns/calls4_c4_stream` |
-//! | `deferred_serial` | `serial_per_handler: true` over the same batch | four results, served one at a time | `deferred:serial_key_busy` for calls behind the one in flight, each before its `issued` | replay of `observe_turns/calls4_c4_stream` |
+//! | `deferred_intake` | `ServingPolicy { command_capacity: 1 }` over a four-call batch | four results | four issued calls and four completed tool records | replay of `observe_turns/calls4_c4_stream` |
+//! | `deferred_serial` | `serial_per_handler: true` over the same batch | four results, served one at a time | four issued calls and four completed tool records | replay of `observe_turns/calls4_c4_stream` |
 //! | `refused_handler` | the bash handler despawned while its call waits for approval | no file written; the model is told the tool is unavailable; the run ends on the replay miss that follows (no recording holds the refusal's read-back) | `approval:approved` then `refused:handler_unavailable` at `Dispatch` keyed `tool:bash`, never issued, no record | derived from `observe_gates/ask_approve_stream` (first exchange only) |
-//! | `retry_deliverable_stream` | a required file missing after a text-only answer | the file exists at the end; two exchanges | `retry` at `Runtime` with the feedback the model reads, then `issued`… `ended:settled` | recorded |
-//! | `approved` | `Action::Approved` | — | no producer in this product: the library reserves it for a host policy that approves through `Witnessing::emit`; rigcoder names its approvals as `rigcoder/approval` host facts (matrix B) | none (documented) |
-//! | `refused_reentrant`, `refused_ids_exhausted` | `Refused { reentrant \| ids_exhausted }` | — | unreachable from the product's configuration (no handler dispatches to its own key; ids are 64-bit); proven by Rig's `driver_refusals_and_deferrals_are_witnessed` | none (documented) |
+//! | `retry_deliverable_stream` | a required file missing after a text-only answer | the file exists at the end; two exchanges | feedback in the second recorded request, followed by `ended:settled` | recorded |
+//! | `refused_reentrant`, `refused_ids_exhausted` | `Refused { reentrant \| ids_exhausted }` | — | unreachable from the product's configuration (no handler dispatches to its own key; ids are 64-bit); proven by Rig's `driver_refusals_are_witnessed_under_intake_limits` | none (documented) |
 
 use crate::support::*;
 use rig::observe::{Action, Stage};
@@ -17,14 +16,6 @@ use rig::observe::{Action, Stage};
 const MATRIX: &str = "observe_driver";
 
 const BATCH: &str = "Run these four commands, each as its own bash call, all in this one reply: echo 1 ; echo 2 ; echo 3 ; echo 4 (four separate calls, one command each)";
-
-fn deferrals(cell: &Cell, code: &str) -> Vec<rig::observe::Observation> {
-    cell.trace()
-        .observations
-        .into_iter()
-        .filter(|o| matches!(&o.action, Action::Deferred { reason } if reason.code == code))
-        .collect()
-}
 
 #[test]
 fn an_intake_bound_defers() {
@@ -49,25 +40,15 @@ fn an_intake_bound_defers() {
             assert_eq!(cell.tool_results(), 4);
             let facts = cell.facts();
             eprintln!("[{MATRIX}/deferred_intake] facts: {facts:?}");
-            let deferred = deferrals(cell, "intake_bound");
-            assert!(!deferred.is_empty(), "{facts:?}");
-            for d in &deferred {
-                assert_eq!(d.stage, Stage::Dispatch);
-                assert_eq!(d.emitter.name, "rig-ecs/bus");
-                assert!(d.subject.effect.is_none(), "not yet issued: {d:?}");
-                assert!(d.subject.order.is_some(), "correlated by order: {d:?}");
-                // Each deferred intent is issued later, under the same order.
-                let issued_later = cell.trace().observations.iter().any(|o| {
-                    matches!(o.action, Action::Issued)
-                        && o.seq > d.seq
-                        && o.subject.order == d.subject.order
-                });
-                assert!(issued_later, "{d:?}");
-            }
-            // Once per intent left behind, not once per pass.
-            let orders: std::collections::BTreeSet<_> =
-                deferred.iter().map(|d| d.subject.order).collect();
-            assert_eq!(orders.len(), deferred.len(), "{deferred:?}");
+            assert_eq!(cell.count("refused:reentrant"), 0);
+            assert_eq!(
+                cell.log()
+                    .records
+                    .iter()
+                    .filter(|r| r.key.as_str() == "tool:bash")
+                    .count(),
+                4
+            );
         },
     );
 }
@@ -95,27 +76,14 @@ fn a_serial_key_defers() {
             assert_eq!(cell.tool_results(), 4);
             let facts = cell.facts();
             eprintln!("[{MATRIX}/deferred_serial] facts: {facts:?}");
-            let deferred = deferrals(cell, "serial_key_busy");
-            assert!(!deferred.is_empty(), "{facts:?}");
-            assert!(
-                deferred.iter().all(|d| d
-                    .subject
-                    .key
-                    .as_ref()
-                    .is_some_and(|k| k.as_str() == "tool:bash")),
-                "{deferred:?}"
-            );
-            let Action::Deferred { reason } = &deferred[0].action else {
-                unreachable!()
-            };
-            assert!(
-                reason.detail.as_deref().unwrap_or("").contains("tool:bash"),
-                "{reason:?}"
-            );
+            assert_eq!(cell.count("refused:reentrant"), 0);
             assert_eq!(
-                cell.count("refused:reentrant"),
-                0,
-                "the runtime is not a handler: {facts:?}"
+                cell.log()
+                    .records
+                    .iter()
+                    .filter(|r| r.key.as_str() == "tool:bash")
+                    .count(),
+                4
             );
         },
     );
@@ -257,32 +225,6 @@ fn a_missing_deliverable_retries_the_turn() {
             assert!(cell.dir.join("report.txt").exists(), "{:?}", cell.events());
             let facts = cell.facts();
             eprintln!("[{MATRIX}/retry_deliverable_stream] facts: {facts:?}");
-            let retry = cell
-                .find(|a| matches!(a, Action::Retry { .. }))
-                .expect("the turn was retried");
-            assert_eq!(retry.stage, Stage::Runtime);
-            assert_eq!(retry.subject.scope.as_deref(), Some("rigcoder/run/1"));
-            let Action::Retry { feedback } = retry.action else {
-                unreachable!()
-            };
-            assert!(
-                feedback.as_deref().unwrap_or("").contains("report.txt"),
-                "{feedback:?}"
-            );
-            // The retry sits between the first landing and the next request.
-            let first_landed = facts.iter().position(|f| f == "landed").unwrap();
-            let retry_at = facts.iter().position(|f| f == "retry").unwrap();
-            let second_issued = facts
-                .iter()
-                .enumerate()
-                .filter(|(_, f)| f.as_str() == "issued")
-                .nth(1)
-                .map(|(i, _)| i)
-                .unwrap();
-            assert!(
-                first_landed < retry_at && retry_at < second_issued,
-                "{facts:?}"
-            );
             // The model read the feedback: the second request carries it.
             let log = cell.log();
             let rig::effect::EffectKind::Completion { request, .. } = &log.records[1].kind else {

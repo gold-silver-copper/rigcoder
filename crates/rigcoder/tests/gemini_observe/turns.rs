@@ -10,7 +10,7 @@
 //! | `one_tool_{unary,stream}` | one bash call, auto approval, then text | file written, two requests | `held`, approval `prepared`/`approved`, `released`, then the tool `issued`: the hold is the gate's decision, no churn; tool subject keyed `tool:bash`, family Tool, effect id in the log | recorded |
 //! | `calls4_c1_{unary,stream}`, `calls4_c4_{unary,stream}` | four calls, concurrency 1 / 4 | four ok results, two requests | four approval owners; three batch owners under 1, none under 4; every release matches its owner by scope/order and no tool issues while held | recorded; evidence packet remains volatile under the existing comparison policy |
 //! | `two_tools_{unary,stream}` | bash, then read_file, then text | three requests, file content in answer | `Issued` subjects for the completions carry increasing `order`; tools carry their key | recorded |
-//! | `invalid_tool_{unary,stream}` | a call to a function the agent was never given | run failed `UnknownToolCall` | `invalid_call` (name, resolution `fail`), `ended:unknown_tool_call` last | recorded |
+//! | `invalid_tool_{unary,stream}` | a call to a function the agent was never given | run failed `UnknownToolCall` | `ended:unknown_tool_call` and structured failure identifying the invalid tool | recorded |
 //! | `thinking_{unary,stream}` | `includeThoughts` on (`gemini-2.5-flash`, which returns thought parts) | settled; the recorded request asks for thoughts and the recorded response carries ≥ 1 thought part; the record's outcome holds the reasoning | the trace carries no thought or reasoning text (payload policy); facts unchanged | recorded |
 //! | `max_tokens_{unary,stream}` | `finishReason: MAX_TOKENS` under a six-token cap | both fixed recordings settle with a nonempty short answer; no retry | emitted adapter verdict is MAX_TOKENS; lifecycle ends settled | recorded |
 //! | `empty_candidate_unary` | `content: {}` (no parts), `MAX_TOKENS` | run failed on the empty response | adapter HTTP 200, usage 802 input/2 output/804 total preserved before response-error closure; `landed` Err, no retry | derived from `max_tokens_unary` (content emptied) |
@@ -337,19 +337,11 @@ fn an_invalid_tool_call() {
                 cell.events()
             );
             let facts = cell.facts();
-            assert!(facts.contains(&"invalid_call".to_owned()), "{facts:?}");
             assert_eq!(
                 &facts[facts.len() - 2..],
                 ["ended:unknown_tool_call", "rigcoder/failure"]
             );
-            let invalid = cell
-                .find(|a| matches!(a, Action::InvalidCall { .. }))
-                .unwrap();
-            let Action::InvalidCall { name, resolution } = invalid.action else {
-                unreachable!()
-            };
-            assert_eq!(name, "teleport");
-            assert_eq!(resolution.code, "fail");
+            assert!(cell.failure().message.contains("teleport"));
         },
     );
 }

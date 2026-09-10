@@ -163,9 +163,6 @@ pub struct Observed {
     /// Provider content origin, independent of measurement execution mode.
     #[serde(default)]
     pub recording_provenance: Option<rigcoder::observe::RecordingProvenance>,
-    /// Handler intervals attached to their landing/cancellation facts.
-    #[serde(default)]
-    pub handler_timings: Vec<ObservedHandlerTiming>,
     /// Typed provider boundary facts; no reconstruction from cassette bodies.
     #[serde(default)]
     pub adapter: Vec<ObservedAdapter>,
@@ -202,28 +199,18 @@ pub struct Observed {
     /// Dispatches cancelled while a handler served them (a tool still
     /// running when the run was cancelled).
     pub cancelled_in_flight: u64,
-    /// Every run ending the witness saw, in order, with its scope and optional
-    /// interval (`settled`, `provider`, `cancelled`, `max_turns`, …).
+    /// Every run ending the witness saw, in order, with its scope (`settled`, `provider`, `cancelled`, `max_turns`, …).
     pub endings: Vec<ObservedRunEnding>,
     /// Latest structured failure, retained even when a later retry settles.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_failure: Option<rigcoder::failure::FailureDetail>,
 }
 
-/// A run ending and its optional injected-clock interval, joined by scope.
+/// A run ending joined to its scope.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObservedRunEnding {
     pub subject: rig::observe::Subject,
     pub ending: String,
-    pub timing: Option<rig::observe::RunTiming>,
-}
-
-/// One measured handler boundary with its execution-local subject and outcome.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ObservedHandlerTiming {
-    pub subject: rig::observe::Subject,
-    pub timing: rig::observe::HandlerTiming,
-    pub ending: rig::observe::Action,
 }
 
 /// Count what an observation trace says. A missing or unparsable trace is
@@ -244,13 +231,6 @@ pub fn observed(trace: &str) -> Observed {
     };
     let mut attempts = BTreeMap::new();
     for observation in &trace.observations {
-        if let Some(timing) = &observation.handler_timing {
-            o.handler_timings.push(ObservedHandlerTiming {
-                subject: observation.subject.clone(),
-                timing: timing.clone(),
-                ending: observation.action.clone(),
-            });
-        }
         match &observation.action {
             rig::observe::Action::Held { .. } | rig::observe::Action::Released => {
                 o.hold_transitions.push(ObservedHold {
@@ -298,9 +278,6 @@ pub fn observed(trace: &str) -> Observed {
                         }
                         if analysis.headers.is_some() {
                             summary.analysis.headers.clone_from(&analysis.headers);
-                        }
-                        if analysis.timing.is_some() {
-                            summary.analysis.timing.clone_from(&analysis.timing);
                         }
                     }
                     match &fact.event {
@@ -362,7 +339,6 @@ pub fn observed(trace: &str) -> Observed {
                 o.endings.push(ObservedRunEnding {
                     subject: observation.subject.clone(),
                     ending: ending.code.clone(),
-                    timing: observation.run_timing.clone(),
                 });
             }
             rig::observe::Action::Host { kind, payload } => match kind.as_str() {

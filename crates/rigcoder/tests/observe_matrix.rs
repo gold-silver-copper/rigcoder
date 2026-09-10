@@ -251,12 +251,6 @@ impl Cell {
                 Action::StreamTruncated { .. } => "stream_truncated".into(),
                 Action::Replaced { .. } => "replaced".into(),
                 Action::Cancelled { .. } => "cancelled".into(),
-                Action::CancelRequested { .. } => "cancel_requested".into(),
-                Action::Retry { .. } => "retry".into(),
-                Action::InvalidCall { .. } => "invalid_call".into(),
-                Action::Approved { .. } => "approved".into(),
-                Action::Patched { .. } => "patched".into(),
-                Action::Deferred { .. } => "deferred".into(),
             })
             .collect()
     }
@@ -424,7 +418,9 @@ fn an_invalid_tool_call_fails_the_run_with_its_resolution() {
     cell.drive();
     assert!(cell.ending() == "unknown_tool_call", "{}", cell.ending());
     let facts = cell.facts();
-    assert!(facts.contains(&"invalid_call".to_owned()), "{facts:?}");
+    assert!(cell.app.world().resource::<Transcript>().events.iter().any(
+        |event| matches!(event, Event::Failed { reason } if reason.message.contains("teleport"))
+    ));
     assert_eq!(
         &facts[facts.len() - 2..],
         ["ended:unknown_tool_call", "rigcoder/failure"]
@@ -524,7 +520,7 @@ fn an_approval_asked_and_refused_is_held_then_denied() {
 }
 
 #[test]
-fn cancelling_with_bash_in_flight_is_requested_then_ends_cancelled() {
+fn cancelling_with_bash_in_flight_preserves_the_reason_and_ends_cancelled() {
     let mut cell = cell(
         "cancel",
         vec![Answer::Calls(vec![bash(
@@ -547,15 +543,10 @@ fn cancelling_with_bash_in_flight_is_requested_then_ends_cancelled() {
     cell.drive();
     assert_eq!(cell.ending(), "cancelled");
     let facts = cell.facts();
-    let ending = facts
-        .iter()
-        .position(|f| f == "ended:cancelled")
-        .expect("ended cancelled");
-    let requested = facts
-        .iter()
-        .position(|f| f == "cancel_requested")
-        .expect("requested");
-    assert!(requested < ending, "{facts:?}");
+    assert!(facts.iter().any(|fact| fact == "ended:cancelled"));
+    assert!(cell.app.world().resource::<Transcript>().events.iter().any(
+        |event| matches!(event, Event::Failed { reason } if reason.message == "operator stop")
+    ));
     // The bash handler is left to its own cancellation flag and deadline
     // (`tools::rewrite_tests` prove the kill); the run's ending does not
     // wait for it.
@@ -746,7 +737,6 @@ fn failed_run_with_a_gated_producer_cannot_finalize_its_trace() {
     cell.drive();
     assert_eq!(cell.ending(), "unknown_tool_call");
     let before = cell.facts();
-    assert!(before.contains(&"invalid_call".into()));
     assert!(before.contains(&"ended:unknown_tool_call".into()));
     assert!(
         !before.contains(&"landed".into()),

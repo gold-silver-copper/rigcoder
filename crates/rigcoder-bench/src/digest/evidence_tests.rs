@@ -252,7 +252,7 @@ fn digest_preserves_execution_and_clock_labels_without_changing_task_facts() {
 }
 
 #[test]
-fn digest_retains_injected_adapter_intervals_and_missing_clock() {
+fn digest_retains_recording_context_and_provider_endings() {
     let timed = observed(include_str!(
         "../../../../fixtures/evidence/gemini/observe_lineage/clock/observations.json"
     ));
@@ -270,48 +270,13 @@ fn digest_retains_injected_adapter_intervals_and_missing_clock() {
         Some("rigcoder/run/1")
     );
     assert_eq!(timed.endings[0].ending, "settled");
-    assert_eq!(
-        timed.endings[0].timing,
-        Some(rig::observe::RunTiming {
-            duration: Some(std::time::Duration::from_millis(16)),
-            complete: true,
-        })
-    );
-    let timing = timed.attempts[0].analysis.timing.as_ref().unwrap();
-    assert_eq!(
-        timing.request_duration,
-        Some(std::time::Duration::from_millis(9))
-    );
-    assert_eq!(
-        timing.time_to_first_byte,
-        Some(std::time::Duration::from_millis(2))
-    );
     let untimed = observed(include_str!(
         "../../../../fixtures/evidence/gemini/observe_lineage/clockless/observations.json"
     ));
-    assert!(
-        untimed
-            .attempts
-            .iter()
-            .all(|attempt| attempt.analysis.timing.is_none())
-    );
     assert_eq!(untimed.attempts[0].ending, timed.attempts[0].ending);
-    assert!(untimed.endings.iter().all(|run| run.timing.is_none()));
     assert_eq!(
         untimed.measurement_context.as_ref().unwrap().clock_source,
         rigcoder::observe::ClockSource::Absent
-    );
-    assert!(untimed.handler_timings.is_empty());
-    assert_eq!(timed.handler_timings.len(), 1);
-    let handler = &timed.handler_timings[0];
-    assert_eq!(handler.subject, timed.attempts[0].subject);
-    assert_eq!(
-        handler.timing,
-        rig::observe::HandlerTiming {
-            interval: rig::observe::HandlerInterval::TimeToFirstItem,
-            duration: Some(std::time::Duration::from_millis(13)),
-            complete: true,
-        }
     );
     let cancelled = observed(include_str!(
         "../../../../fixtures/evidence/gemini/observe_interruptions/cancel_before_dispatch/observations.json"
@@ -326,66 +291,27 @@ fn digest_retains_injected_adapter_intervals_and_missing_clock() {
         rigcoder::observe::ExecutionMode::LocalOnly
     );
     assert_eq!(cancelled.endings[0].ending, "cancelled");
-    assert_eq!(
-        cancelled.endings[0].timing,
-        Some(rig::observe::RunTiming {
-            duration: Some(std::time::Duration::from_millis(2)),
-            complete: true,
-        })
-    );
     assert!(cancelled.attempts.is_empty());
     let unary = observed(include_str!(
         "../../../../fixtures/evidence/gemini/observe_wire/unary_http_boundary/observations.json"
     ));
     assert_eq!(unary.attempts.len(), 1);
-    assert_eq!(unary.handler_timings.len(), 1);
-    assert_eq!(unary.handler_timings[0].subject, unary.attempts[0].subject);
-    assert_eq!(
-        unary.handler_timings[0].timing,
-        rig::observe::HandlerTiming {
-            interval: rig::observe::HandlerInterval::Execution,
-            duration: Some(std::time::Duration::from_millis(10)),
-            complete: true,
-        }
-    );
-    let timing = unary.attempts[0].analysis.timing.as_ref().unwrap();
-    assert_eq!(
-        timing.request_duration,
-        Some(std::time::Duration::from_millis(6))
-    );
-    assert_eq!(
-        timing.time_to_first_byte,
-        Some(std::time::Duration::from_millis(2))
-    );
 }
 
 #[test]
-fn digest_retains_handler_outcomes_across_retry() {
+fn digest_retains_provider_outcomes_across_retry() {
     let digest = observed(include_str!(
         "../../../../fixtures/evidence/gemini/observe_wire/retry_headers_unary/observations.json"
     ));
-    assert_eq!(digest.handler_timings.len(), 2);
     assert_eq!(digest.attempts.len(), 2);
-    for (handler, attempt) in digest.handler_timings.iter().zip(&digest.attempts) {
-        assert_eq!(handler.subject, attempt.subject);
-        assert_eq!(
-            handler.timing.interval,
-            rig::observe::HandlerInterval::Execution
-        );
-        assert!(handler.timing.complete && handler.timing.duration.is_some());
-    }
     assert!(matches!(
-        digest.handler_timings[0].ending,
-        rig::observe::Action::Landed {
-            outcome: rig::observe::OutcomeSummary::Err { .. }
-        }
+        digest.attempts[0].ending,
+        Some(rig::observe::AdapterEnding::Error { .. })
     ));
-    assert!(matches!(
-        digest.handler_timings[1].ending,
-        rig::observe::Action::Landed {
-            outcome: rig::observe::OutcomeSummary::Ok { .. }
-        }
-    ));
+    assert_eq!(
+        digest.attempts[1].ending,
+        Some(rig::observe::AdapterEnding::Decoded)
+    );
 }
 
 #[test]
@@ -549,12 +475,6 @@ fn exhausted_retries_keep_one_operation_and_separate_failed_usage() {
         );
         let first = &digest.attempts[0];
         let second = &digest.attempts[1];
-        for attempt in &digest.attempts {
-            let timing = attempt.analysis.timing.as_ref().unwrap();
-            assert!(timing.request_duration.is_some());
-            assert!(timing.time_to_first_byte.is_some());
-            assert!(timing.request_duration >= timing.time_to_first_byte);
-        }
         assert_eq!(first.operation, second.operation);
         assert_ne!(first.subject.scope, second.subject.scope);
         assert_ne!(first.subject.effect, second.subject.effect);

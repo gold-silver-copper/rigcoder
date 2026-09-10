@@ -339,23 +339,6 @@
       },
       "stage": "runtime",
       "emitter": {
-        "name": "unknown"
-      },
-      "action": {
-        "action": "cancel_requested",
-        "reason": {
-          "code": "cancelled",
-          "detail": "operator stop at hold"
-        }
-      }
-    },
-    {
-      "seq": 13,
-      "subject": {
-        "scope": "rigcoder/run/1"
-      },
-      "stage": "runtime",
-      "emitter": {
         "name": "rig-ecs/agent",
         "version": "0.42.0"
       },
@@ -368,7 +351,7 @@
       }
     },
     {
-      "seq": 14,
+      "seq": 13,
       "subject": {
         "scope": "rigcoder/run/1"
       },
@@ -392,7 +375,7 @@
       }
     },
     {
-      "seq": 15,
+      "seq": 14,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,

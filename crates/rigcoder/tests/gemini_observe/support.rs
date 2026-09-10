@@ -869,7 +869,6 @@ pub fn fact(action: &Action, stage: Stage) -> String {
         Action::Ended { ending } => format!("ended:{}", ending.code),
         Action::Denied { reason } => format!("denied@{stage:?}:{}", reason.code),
         Action::Refused { reason } => format!("refused:{}", reason.code),
-        Action::Deferred { reason } => format!("deferred:{}", reason.code),
         Action::Cancelled { .. } => format!("cancelled@{stage:?}"),
         Action::Held { .. } => "held".into(),
         Action::Released => "released".into(),
@@ -877,11 +876,6 @@ pub fn fact(action: &Action, stage: Stage) -> String {
         Action::Landed { .. } => "landed".into(),
         Action::StreamTruncated { .. } => "stream_truncated".into(),
         Action::Replaced { .. } => "replaced".into(),
-        Action::CancelRequested { .. } => "cancel_requested".into(),
-        Action::Retry { .. } => "retry".into(),
-        Action::InvalidCall { .. } => "invalid_call".into(),
-        Action::Approved { .. } => "approved".into(),
-        Action::Patched { .. } => "patched".into(),
     }
 }
 
@@ -1095,7 +1089,7 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "a1473e55cba7271b74f36740195e9c3b9fb1e0b0";
+pub const RIG_REV: &str = "e5002f86d0755ae720de254cbbc968fd57890fca";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"
@@ -1190,8 +1184,6 @@ pub(super) fn normalized(name: &str, content: &str) -> String {
             {
                 for o in observations {
                     o.as_object_mut().map(|o| o.remove("at"));
-                    o.as_object_mut().map(|o| o.remove("run_timing"));
-                    o.as_object_mut().map(|o| o.remove("handler_timing"));
                     if let Some(adapter) = o
                         .pointer_mut("/action/observation")
                         .and_then(serde_json::Value::as_object_mut)

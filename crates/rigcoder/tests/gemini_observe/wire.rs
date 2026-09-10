@@ -2,7 +2,7 @@
 //!
 //! | cell | oracle | adapter contract | provenance |
 //! | --- | --- | --- | --- |
-//! | `unary_http_boundary` | settled, pong, one effect | one send/status/closure, joined to the bus effect and scope; injected-clock request and body-byte intervals | replay of `observe_turns/text_unary` |
+//! | `unary_http_boundary` | settled, pong, one effect | one send/status/closure, joined to the bus effect and scope | replay of `observe_turns/text_unary` |
 //! | `stream_http_boundary` | settled, pong, one effect | HTTP 200 and terminal closure | replay of `observe_turns/text_stream` |
 //! | `partial_frame_boundary` | failed, one effect | partial byte count and complete-frame count, distinct from clean EOF | replay of `observe_failures/transport_cut_stream`, derived by cutting the final frame of `observe_turns/text_stream` halfway through its JSON |
 //! | `terminal_then_partial_frame` | settled, pong, one effect | terminal closure does not hide seven trailing bytes at transport EOF | derived from `observe_turns/text_stream` by appending `data: {` after its terminal frame |
@@ -270,10 +270,6 @@ fn retry_exhaustion_keeps_operation_and_failed_attempt_usage() {
                         })
                         .collect();
                     assert_eq!(facts.len(), 5);
-                    let timing = facts[4].analysis.as_ref().unwrap().timing.as_ref().unwrap();
-                    assert!(timing.request_duration.is_some());
-                    assert!(timing.time_to_first_byte.is_some());
-                    assert!(timing.request_duration >= timing.time_to_first_byte);
                     assert_eq!(facts[1].event, AdapterEvent::Response { status });
                     assert_eq!(
                         facts[2].event,
@@ -405,8 +401,8 @@ fn optional_response_id_stream() {
         );
     }
     assert_eq!(
-        rig::observe::compare(&traces[0], &traces[1]),
-        rig::observe::Comparison::Equal
+        super::comparison::compare(&traces[0], &traces[1]),
+        super::comparison::Comparison::Equal
     );
     assert_eq!(
         normalized(
@@ -482,8 +478,8 @@ fn optional_response_id_unary() {
         );
     }
     assert_eq!(
-        rig::observe::compare(&traces[0], &traces[1]),
-        rig::observe::Comparison::Equal
+        super::comparison::compare(&traces[0], &traces[1]),
+        super::comparison::Comparison::Equal
     );
     assert_eq!(
         normalized(
@@ -520,19 +516,6 @@ fn unary_http_boundary() {
             // This single dispatch has landed; finish capture as the CLI does.
             rigcoder::observe::finalize(cell.app.world());
             let trace = cell.trace();
-            let handler = trace
-                .observations
-                .iter()
-                .find_map(|o| o.handler_timing.as_ref())
-                .unwrap();
-            assert_eq!(
-                *handler,
-                rig::observe::HandlerTiming {
-                    interval: rig::observe::HandlerInterval::Execution,
-                    duration: Some(std::time::Duration::from_millis(10)),
-                    complete: true,
-                }
-            );
             let observations: Vec<_> = trace
                 .observations
                 .iter()
@@ -544,24 +527,6 @@ fn unary_http_boundary() {
                 })
                 .collect();
             assert_eq!(observations.len(), 5);
-            let timing = observations
-                .last()
-                .unwrap()
-                .1
-                .analysis
-                .as_ref()
-                .unwrap()
-                .timing
-                .as_ref()
-                .unwrap();
-            assert_eq!(
-                timing.time_to_first_byte,
-                Some(std::time::Duration::from_millis(2))
-            );
-            assert_eq!(
-                timing.request_duration,
-                Some(std::time::Duration::from_millis(6))
-            );
             for (o, fact) in &observations {
                 assert_eq!(o.subject.effect, Some(log.records[0].id));
                 assert_eq!(o.subject.scope.as_deref(), Some("rigcoder/run/1"));
@@ -883,14 +848,11 @@ fn retry_headers_unary() {
             let handlers: Vec<_> = trace
                 .observations
                 .iter()
-                .filter(|o| o.handler_timing.is_some())
+                .filter(|o| matches!(o.action, Action::Landed { .. }))
                 .collect();
             assert_eq!(handlers.len(), 2);
             for (handler, record) in handlers.iter().zip(&log.records) {
                 assert_eq!(handler.subject.effect, Some(record.id));
-                let timing = handler.handler_timing.as_ref().unwrap();
-                assert_eq!(timing.interval, rig::observe::HandlerInterval::Execution);
-                assert!(timing.complete && timing.duration.is_some());
                 assert!(
                     matches!(&handler.action, Action::Landed { outcome } if *outcome == rig::observe::OutcomeSummary::of(&record.outcome))
                 );

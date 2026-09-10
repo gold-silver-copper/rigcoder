@@ -29,7 +29,7 @@ fn endpoint_component_echoes_are_scrubbed_by_product_failure_and_trace_exports()
             rig::observe::Subject::default(),
             rig::observe::Stage::Host,
             crate::observe::emitter("test"),
-            Action::CancelRequested {
+            Action::Cancelled {
                 reason: Reason::with_detail("operator", echo),
             },
         );
@@ -84,7 +84,7 @@ fn startup_credentials_still_scrub_exports_after_connection_replacement_or_remov
             rig::observe::Subject::default(),
             rig::observe::Stage::Host,
             crate::observe::emitter("test"),
-            Action::CancelRequested {
+            Action::Cancelled {
                 reason: Reason::with_detail("operator", SECRET),
             },
         );
@@ -189,6 +189,7 @@ fn checkpoint_diagnostics_are_scrubbed_at_each_saved_error_location() {
         parent_ref: None,
         scope: Some("run".into()),
         held: false,
+        hold_owners: None,
         tool_inputs: None,
         tool_outputs: None,
     });
