@@ -305,10 +305,21 @@ outside that workspace, and copy back only validated lane files.
 ```sh
 python3 -B -m unittest discover -s harness -p 'test_improver_sandbox.py'
 python3 -B harness/check_gemini_gateway_cli.py target/debug/rigcoder --sandbox
+python3 -B harness/check_prompt_improver.py target/debug/rigcoder
 ```
 
 These tests exercise actual macOS enforcement. The CLI check sends a synthetic
 hidden-file read through the real `read_file` tool and verifies that only the
 permission error reaches the next mocked model request. It performs no paid API
-calls. This component is not yet integrated into `iterate`; it does not yet
-provide the source-copying, copy-back, resource limits or recovery controller.
+calls. `prompt_improve.launch` copies the binary outside a fresh workspace,
+copies only the supplied prompt and development report into it, clears the
+child environment, and enforces wall, CPU, descriptor and individual file-size
+limits. After terminating the child process group it collects bounded regular
+UTF-8 prompt/note files; links and special files are rejected. A host manifest
+records input/binary hashes and whether execution failed or a proposal was
+collected. This does not impose aggregate memory or disk quotas.
+
+The launcher is not yet integrated into `iterate`. Repository baseline checks,
+validated application, compilation isolation and recovery after controller
+termination remain the controller's responsibility. A collected proposal is
+not an accepted improvement.

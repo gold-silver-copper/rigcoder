@@ -13,11 +13,11 @@ import time
 from artifact_score import MAX_ARCHIVE
 
 
-def bounded_command(arguments, stdout_limit, timeout, request=b""):
+def bounded_command(arguments, stdout_limit, timeout, request=b"", *, cwd=None, env=None):
     """Capture a trusted CLI under a wall deadline and two bounded pipes."""
     process = subprocess.Popen(arguments, stdin=subprocess.PIPE if request else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               start_new_session=True, bufsize=0)
+                               start_new_session=True, bufsize=0, cwd=cwd, env=env)
     output = bytearray()
     errors = bytearray()
     deadline = time.monotonic() + timeout

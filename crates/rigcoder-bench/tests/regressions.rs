@@ -1157,7 +1157,7 @@ with open(sys.argv[1], 'wb') as output:
         success(&generated);
         let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
         f.script("fakebin/docker", &docker.replace("case \"$1\" in\nversion)",
-            "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) cat \"$MOCK_RESPONSE\" ;;\nversion)"));
+            "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) cat >/dev/null; cat \"$MOCK_RESPONSE\" ;;\nversion)"));
         success(&f.run(
             &["run", "--no-build"],
             &[("MOCK_RESPONSE", response.to_str().unwrap())],
@@ -1192,7 +1192,7 @@ fn malformed_output_capture_cannot_record_an_acceptance_decision() {
     }
     let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
     f.script("fakebin/docker", &docker.replace("case \"$1\" in\nversion)",
-        "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 7\\r\\n\\r\\ninvalid' ;;\nversion)"));
+        "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) cat >/dev/null; printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 7\\r\\n\\r\\ninvalid' ;;\nversion)"));
     let output = f.run(
         &[
             "iterate",

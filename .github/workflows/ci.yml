@@ -78,6 +78,7 @@ jobs:
           python3 -B -m unittest discover -s harness -p 'test_improver_sandbox.py'
           cargo build --locked -p rigcoder-cli
           python3 -B harness/check_gemini_gateway_cli.py target/debug/rigcoder --sandbox
+          python3 -B harness/check_prompt_improver.py target/debug/rigcoder
       - name: Retain verification report
         if: always()
         uses: actions/upload-artifact@v4
