@@ -1,13 +1,14 @@
 """Fixed-endpoint Gemini dispatcher for the trusted experiment host.
 
 Not yet exposed to candidate processes. Every HTTP attempt reserves the model's
-full input/output allowance. Responses do not release reservations yet, avoiding
-claims about incomplete streaming usage. No retries or redirect following.
+full input/output allowance. Only complete terminal usage can release unused
+reservations; unknown or incomplete usage stays reserved. No retries or redirect following.
 """
 import http.client
 import json
 
 from gemini_budget import MAX_INPUT, MAX_OUTPUT
+from gemini_usage import complete_usage
 
 HOST = "generativelanguage.googleapis.com"
 MODEL = "gemini-3.8-flash"
@@ -75,7 +76,7 @@ def send(budget, phase, body, api_key, stream=False):
     prevent all alternate egress. Failure leaves the reservation charged.
     """
     body = validate(body)
-    budget.reserve(phase, MAX_INPUT, MAX_OUTPUT)
+    reservation = budget.reserve(phase, MAX_INPUT, MAX_OUTPUT)
     action = "streamGenerateContent?alt=sse" if stream else "generateContent"
     connection = http.client.HTTPSConnection(HOST, timeout=30)
     try:
@@ -85,6 +86,15 @@ def send(budget, phase, body, api_key, stream=False):
         result = response.read(32_000_001)
         if len(result) > 32_000_000:
             raise ValueError("provider response exceeded capture limit")
+        # Sized HTTP reads can return truncated Content-Length bodies without
+        # raising. Only a closed, fully framed response may release funds.
+        framed = response.isclosed() is True and (
+            response.length == 0 or (response.length is None and response.chunked is True)
+        )
+        if response.status == 200 and framed:
+            usage = complete_usage(result, stream)
+            if usage is not None:
+                budget.settle(reservation, *usage)
         return response.status, response.getheader("Content-Type"), result
     finally:
         connection.close()

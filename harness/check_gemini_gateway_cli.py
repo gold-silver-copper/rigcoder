@@ -1,5 +1,7 @@
 """Offline actual-binary gateway check: python3 -B harness/check_gemini_gateway_cli.py BINARY."""
 import json
+import io
+import http.client
 from pathlib import Path
 import subprocess
 import sys
@@ -7,7 +9,7 @@ import tempfile
 import threading
 from unittest.mock import MagicMock, patch
 
-from gemini_budget import Budget, MAX_INPUT, MAX_OUTPUT, cost
+from gemini_budget import Budget, cost
 from gemini_gateway import server
 
 
@@ -20,14 +22,18 @@ def check(binary):
         thread = threading.Thread(target=gateway.serve_forever, daemon=True)
         thread.start()
         connection = MagicMock()
-        response = connection.getresponse.return_value
-        response.status = 200
-        response.getheader.return_value = 'text/event-stream'
-        response.read.return_value = ('data: ' + json.dumps({
+        payload = ('data: ' + json.dumps({
             'candidates': [{'content': {'role': 'model', 'parts': [{'text': 'Gateway verified.'}]},
                             'finishReason': 'STOP', 'index': 0}],
             'usageMetadata': {'promptTokenCount': 10, 'candidatesTokenCount': 3, 'totalTokenCount': 13}
         }) + '\n\n').encode()
+        class Socket:
+            def makefile(self, *_args):
+                headers = f"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {len(payload)}\r\n\r\n"
+                return io.BytesIO(headers.encode() + payload)
+        response = http.client.HTTPResponse(Socket())
+        response.begin()
+        connection.getresponse.return_value = response
         try:
             with patch('gemini_dispatch.http.client.HTTPSConnection', return_value=connection) as upstream:
                 result = subprocess.run([
@@ -41,12 +47,12 @@ def check(binary):
                     raise AssertionError(f'CLI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
                 upstream.assert_called_once()
                 assert connection.request.call_args.kwargs['headers']['x-goog-api-key'] == 'fake-upstream'
-                assert budget.committed_microdollars() == cost(MAX_INPUT, MAX_OUTPUT)
+                assert budget.committed_microdollars() == cost(10, 3)
         finally:
             gateway.shutdown()
             gateway.server_close()
             thread.join()
-    print('PASS: actual CLI -> local gateway -> mocked upstream; reservation and credential replacement verified')
+    print('PASS: actual CLI -> local gateway -> mocked upstream; settlement and credential replacement verified')
 
 
 if __name__ == '__main__':

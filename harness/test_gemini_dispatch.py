@@ -1,4 +1,6 @@
 import json
+import io
+import http.client
 from pathlib import Path
 import tempfile
 import unittest
@@ -50,6 +52,26 @@ class DispatchTests(unittest.TestCase):
                 send(self.budget, "development", json.dumps(body).encode(), "fake")
             factory.assert_not_called()
         self.assertEqual(self.budget.committed_microdollars(), 0)
+
+    def test_only_framed_terminal_usage_replaces_the_full_reservation(self):
+        payload = json.dumps({"candidates": [{"finishReason": "STOP"}], "usageMetadata": {
+            "promptTokenCount": 10, "candidatesTokenCount": 3,
+            "thoughtsTokenCount": 7, "totalTokenCount": 20}}).encode()
+        for truncated in (False, True):
+            with self.subTest(truncated=truncated):
+                class Socket:
+                    def makefile(self, *_args):
+                        size = len(payload) + (10 if truncated else 0)
+                        return io.BytesIO(f"HTTP/1.1 200 OK\r\nContent-Length: {size}\r\n\r\n".encode() + payload)
+                response = http.client.HTTPResponse(Socket())
+                response.begin()
+                connection = MagicMock()
+                connection.getresponse.return_value = response
+                before = self.budget.committed_microdollars()
+                with patch("gemini_dispatch.http.client.HTTPSConnection", return_value=connection):
+                    send(self.budget, "development", json.dumps(self.body).encode(), "fake")
+                charged = self.budget.committed_microdollars() - before
+                self.assertEqual(charged, cost(MAX_INPUT, MAX_OUTPUT) if truncated else cost(10, 10))
 
     def test_redirect_is_returned_without_following_or_releasing_reservation(self):
         connection = MagicMock()
