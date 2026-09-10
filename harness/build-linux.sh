@@ -45,10 +45,17 @@ if [ "$BUILD_PLATFORM" != "$PLATFORM" ]; then
   echo "builder image platform mismatch: $BUILD_PLATFORM, expected $PLATFORM" >&2
   exit 1
 fi
+# BuildKit resolves FROM as a registry reference, not a local image ID.
+# Read the immutable repository digest from the image already inspected above.
+BUILD_BASE="$(docker image inspect --format '{{index .RepoDigests 0}}' "$BUILD_IMAGE")"
+if [[ ! "$BUILD_BASE" =~ ^(docker.io/library/)?rust@sha256:[0-9a-f]{64}$ ]]; then
+  echo "invalid builder repository digest" >&2
+  exit 1
+fi
 # Install trusted system dependencies without exposing source or evaluation data.
 # Docker may cache this image layer; no candidate-generated state enters it.
 docker build --platform "$PLATFORM" --iidfile "$BUILD_INPUTS_DIR/builder.id" - <<EOF
-FROM $BUILD_IMAGE
+FROM $BUILD_BASE
 RUN apt-get update -qq && apt-get install -y -qq pkg-config >/dev/null && rm -rf /var/lib/apt/lists/*
 EOF
 BUILD_IMAGE="$(cat "$BUILD_INPUTS_DIR/builder.id")"

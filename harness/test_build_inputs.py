@@ -36,10 +36,13 @@ if sys.argv[1] == "pull":
 if sys.argv[1] == "rm":
     sys.exit(0)
 if sys.argv[1] == "build":
-    sys.stdin.read()
+    assert sys.stdin.read().startswith("FROM rust@sha256:")
     pathlib.Path(sys.argv[sys.argv.index("--iidfile") + 1]).write_text(image)
     sys.exit(0)
 if sys.argv[1] == "image":
+    if any("RepoDigests" in arg for arg in sys.argv):
+        print("rust@" + image)
+        sys.exit(0)
     print(image + " linux/arm64")
     sys.exit(0)
 assert image in sys.argv
