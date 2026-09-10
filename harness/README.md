@@ -213,3 +213,33 @@ Its self-edits fixed a real bug in the bash tool (a timed-out pipeline left
 children holding the pipes; now the process group is killed) and taught
 the agent that a text-only reply ends the run. The earlier four-task
 baselines: gemini-3.1-pro-preview and gemini-3.8-flash both 4/4.
+
+## Bounded Gemini experiment preflight (in progress)
+
+The experimental `gemini_budget.py`, `gemini_dispatch.py`, and
+`gemini_gateway.py` components reserve spending before each upstream request.
+The CLI can use a trusted gateway with `--gemini-gateway` and
+`RIGCODER_GATEWAY_TOKEN`. The gateway launcher owns the real provider key and
+persistent ledger; the token given to the CLI is a separate credential.
+
+Verify routing without provider access after building the CLI:
+
+```sh
+cargo build --locked -p rigcoder-cli
+python3 -B harness/check_gemini_gateway_cli.py target/debug/rigcoder
+python3 -B -m unittest discover -s harness -p 'test_*.py'
+```
+
+The routing check runs the actual binary against localhost with a mocked Google
+connection. It proves request compatibility, credential replacement and budget
+reservation. It does not establish an isolated evaluation environment. These
+components are not yet wired into `rigcoder-bench` trial execution.
+
+The current benchmark scorer runs inside the same container as the candidate.
+Installing tests afterward does not protect scoring from runtime modifications
+or surviving candidate processes. The host improver's read access also does not
+provide holdout secrecy. Do not use these runs as trusted promotion evidence
+until scoring, improver/build access, and alternate network egress have enforced
+boundaries verified with real process/container tests. Trial infrastructure errors
+already invalidate an evaluation before any keep decision; that protection does
+not solve the scoring boundary.

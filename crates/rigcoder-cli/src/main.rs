@@ -29,6 +29,9 @@ struct Args {
     /// Model name (provider default when absent).
     #[arg(long, env = "RIGCODER_MODEL")]
     model: Option<String>,
+    /// Trusted Gemini gateway base URL; requires RIGCODER_GATEWAY_TOKEN.
+    #[arg(long, env = "RIGCODER_GEMINI_GATEWAY")]
+    gemini_gateway: Option<String>,
     /// Model calls per run.
     #[arg(long, default_value_t = 200)]
     max_turns: usize,
@@ -328,6 +331,46 @@ struct Cli {
     verbose: bool,
 }
 
+fn gateway_connection(
+    endpoint: Option<&str>,
+    model: &ModelChoice,
+    replay: bool,
+    token: Option<&str>,
+) -> anyhow::Result<Option<rigcoder::model::ModelConnection>> {
+    use rig::rig_reqwest::reqwest;
+    let Some(endpoint) = endpoint else {
+        return Ok(None);
+    };
+    anyhow::ensure!(
+        model.provider == rigcoder::model::Provider::Gemini && !replay,
+        "--gemini-gateway requires a live Gemini run"
+    );
+    // Do not include endpoint or token values in setup errors.
+    let url =
+        reqwest::Url::parse(endpoint).map_err(|_| anyhow::anyhow!("invalid Gemini gateway URL"))?;
+    anyhow::ensure!(
+        matches!(url.scheme(), "http" | "https")
+            && url.host_str().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        "invalid Gemini gateway URL"
+    );
+    let token = token.filter(|value| !value.is_empty()).ok_or_else(|| {
+        anyhow::anyhow!("RIGCODER_GATEWAY_TOKEN is required for --gemini-gateway")
+    })?;
+    let http = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    Ok(Some(rigcoder::model::ModelConnection::new(
+        endpoint,
+        token,
+        rig::http_client::ReqwestClient::new(http).boxed(),
+    )))
+}
+
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -372,6 +415,12 @@ fn main() -> anyhow::Result<()> {
         workspace.canonicalize()?
     };
     let model = ModelChoice::parse(&args.provider, args.model)?;
+    let gateway = gateway_connection(
+        args.gemini_gateway.as_deref(),
+        &model,
+        args.replay.is_some(),
+        std::env::var("RIGCODER_GATEWAY_TOKEN").ok().as_deref(),
+    )?;
     let transcript = args.transcript.map(std::fs::File::create).transpose()?;
     let deliverables = args
         .deliverables
@@ -436,6 +485,9 @@ fn main() -> anyhow::Result<()> {
         turns_saved: 0,
     };
     let mut app = App::new();
+    if let Some(connection) = gateway {
+        app.insert_resource(connection);
+    }
     app.add_plugins((
         ScheduleRunnerPlugin::run_loop(Duration::from_millis(10)),
         plugin,
@@ -657,6 +709,45 @@ mod tests {
                 ("second".to_owned(), Some(false)),
                 ("third".to_owned(), None)
             ]
+        );
+    }
+
+    #[test]
+    fn gateway_requires_explicit_token_and_never_accepts_credentials_in_url() {
+        let gemini = ModelChoice::parse("gemini", None).unwrap();
+        assert!(
+            gateway_connection(None, &gemini, false, None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            gateway_connection(Some("http://127.0.0.1:9000/v1beta"), &gemini, false, None).is_err()
+        );
+        let connection = gateway_connection(
+            Some("http://127.0.0.1:9000/v1beta"),
+            &gemini,
+            false,
+            Some("gateway-secret"),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!format!("{connection:?}").contains("gateway-secret"));
+        for url in [
+            "http://user:secret@localhost/v1beta",
+            "http://localhost/v1beta?key=secret",
+            "file:///secret",
+            "http://localhost/#secret",
+        ] {
+            let error =
+                gateway_connection(Some(url), &gemini, false, Some("gateway-secret")).unwrap_err();
+            assert!(!error.to_string().contains("secret"));
+        }
+        assert!(
+            gateway_connection(Some("http://localhost"), &gemini, true, Some("token")).is_err()
+        );
+        let other = ModelChoice::parse("anthropic", None).unwrap();
+        assert!(
+            gateway_connection(Some("http://localhost"), &other, false, Some("token")).is_err()
         );
     }
 
