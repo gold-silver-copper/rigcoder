@@ -33,6 +33,12 @@ import os, pathlib, sys
 image = "sha256:" + "a" * 64
 if sys.argv[1] == "pull":
     sys.exit(0)
+if sys.argv[1] == "rm":
+    sys.exit(0)
+if sys.argv[1] == "build":
+    sys.stdin.read()
+    pathlib.Path(sys.argv[sys.argv.index("--iidfile") + 1]).write_text(image)
+    sys.exit(0)
 if sys.argv[1] == "image":
     print(image + " linux/arm64")
     sys.exit(0)
@@ -42,17 +48,50 @@ src_mount = next(m for m in mounts if m.endswith(":/src:ro"))
 src = pathlib.Path(src_mount.removesuffix(":/src:ro"))
 assert not (src / "harness").exists()
 assert not (src / ".git").exists()
+if "fetch" in sys.argv:
+    assert "--locked" in sys.argv
+    sys.exit(0)
 assert "--locked" in sys.argv[-1]
 assert (src / "crates/cli/src/main.rs").read_text() == "captured source\\n"
 pathlib.Path(os.environ["ORIGINAL_SOURCE"]).write_text("changed after capture\\n")
 out = pathlib.Path(next(m for m in mounts if m.endswith(":/output")).removesuffix(":/output"))
 (out / "rigcoder").write_bytes(b"synthetic binary")
+attack = os.environ.get("BUILD_ATTACK")
+canary = pathlib.Path(os.environ["ORIGINAL_SOURCE"]).parents[3] / "harness/holdout-canary"
+if attack == "receipt_link":
+    (out / "receipt.json").symlink_to(canary)
+elif attack:
+    binary = out / "rigcoder"
+    binary.unlink()
+    if attack == "binary_link": binary.symlink_to(canary)
+    elif attack == "hardlink": os.link(canary, binary)
+    elif attack == "fifo": os.mkfifo(binary)
+    elif attack == "oversized":
+        with binary.open("wb") as output: output.truncate(512 * 1024 * 1024 + 1)
 ''')
         docker.chmod(0o755)
 
-    def build(self):
+    def build(self, **extra):
         env = dict(os.environ, PATH=f"{self.root / 'fakebin'}:{os.environ['PATH']}", ARCH="aarch64", ORIGINAL_SOURCE=str(self.source))
+        env.update(extra)
         return subprocess.run(["bash", "harness/build-linux.sh"], cwd=self.root, env=env, capture_output=True, text=True)
+
+    def test_candidate_output_cannot_redirect_host_publication_or_cleanup(self):
+        canary = self.root / "harness/holdout-canary"
+        canary.chmod(0o400)
+        for attack in ("receipt_link", "binary_link", "hardlink", "fifo", "oversized"):
+            with self.subTest(attack=attack):
+                self.source.write_text("captured source\n")
+                result = self.build(BUILD_ATTACK=attack)
+                self.assertEqual(result.returncode == 0, attack == "receipt_link", result.stderr)
+                self.assertEqual(canary.read_text(), "hidden evaluation input")
+                self.assertEqual(canary.stat().st_mode & 0o777, 0o400)
+                binary = self.root / "harness/bin/rigcoder-linux-aarch64"
+                if attack == "receipt_link":
+                    self.assertEqual(binary.read_bytes(), b"synthetic binary")
+                else:
+                    self.assertFalse(binary.exists())
+                    self.assertFalse(binary.with_name(binary.name + ".build.json").exists())
 
     def test_receipt_identifies_captured_source_and_binary_without_hidden_inputs(self):
         result = self.build()

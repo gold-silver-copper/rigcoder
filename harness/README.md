@@ -158,7 +158,12 @@ to the host architecture. Custom binaries require `--no-build`.
 
 The Linux build requires Python 3 and copies Cargo manifests, the lockfile,
 toolchain file and `crates/` into a temporary source tree. Docker mounts that tree
-read-only, with separate output and Cargo caches. The harness, dataset and Git
+read-only, with fresh output, target and dependency directories for every build.
+Dependencies are fetched separately; compilation runs offline with Docker
+networking disabled and the fetched Cargo directory mounted read-only. The
+prepared builder image may be cached, but candidate-written build state is not.
+Both containers run as the invoking user with a read-only root filesystem,
+dropped capabilities and CPU, memory and process limits. The harness, dataset and Git
 history are absent from the build mount; links and special input files are
 rejected. The build uses `--locked` and writes a `.build.json` receipt beside the
 binary with captured input hashes and the output hash. Failed builds remove both
@@ -330,6 +335,9 @@ recovery marker; ordinary launcher failures leave the source unchanged.
 
 The existing generation loop builds and evaluates the proposal and handles
 keep/revert decisions. Its exploratory tie/keep rule is not promotion evidence.
-Compilation isolation, task-provider isolation and recovery of surviving
-processes after controller termination still require work before a trustworthy
-live experiment. A collected proposal is not an accepted improvement.
+The Linux build's isolation canary is exercised by
+`python3 -B harness/check_build_isolation_docker.py`; it requires a real Docker
+daemon. Host-side compilation is not covered by that boundary. Task-provider
+isolation and recovery of surviving processes after controller termination
+still require work before a trustworthy live experiment. A collected proposal
+is not an accepted improvement.

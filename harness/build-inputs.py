@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import stat
@@ -11,6 +12,41 @@ import sys
 
 INPUTS = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates")
 BUILD_COMMAND = ["cargo", "build", "--locked", "--release", "-p", "rigcoder-cli"]
+
+
+def capture_binary(source, destination):
+    """Collect only a bounded regular file after the build container exits."""
+    maximum = 512 * 1024 * 1024
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or not 0 < before.st_size <= maximum:
+            raise ValueError("build output must be a bounded unlinked regular file")
+        with os.fdopen(fd, "rb", closefd=False) as incoming, destination.open("xb") as output:
+            size = 0
+            while chunk := incoming.read(min(1024 * 1024, maximum - size + 1)):
+                size += len(chunk)
+                if size > maximum:
+                    raise ValueError("build output exceeds limit")
+                output.write(chunk)
+            after = os.fstat(fd)
+            if size != before.st_size or after.st_mtime_ns != before.st_mtime_ns:
+                raise ValueError("build output changed during collection")
+            os.fchmod(output.fileno(), 0o755)
+    finally:
+        os.close(fd)
+
+
+def cleanup(directory):
+    # Only directories need write permission for removal. Never chmod through
+    # candidate-created symlinks or hard links to files outside the build tree.
+    os.chmod(directory, 0o700, follow_symlinks=False)
+    for root, directories, _ in os.walk(directory, followlinks=False):
+        for name in directories:
+            path = Path(root) / name
+            if stat.S_ISDIR(path.lstat().st_mode):
+                os.chmod(path, 0o700, follow_symlinks=False)
+    shutil.rmtree(directory)
 
 
 def digest(path):
@@ -84,7 +120,13 @@ def verify(root, binary, receipt, architecture):
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "snapshot":
+    if sys.argv[1] == "capture":
+        capture_binary(Path(sys.argv[2]), Path(sys.argv[3]))
+        sys.exit(0)
+    elif sys.argv[1] == "cleanup":
+        cleanup(Path(sys.argv[2]))
+        sys.exit(0)
+    elif sys.argv[1] == "snapshot":
         result = snapshot(Path(sys.argv[2]), Path(sys.argv[3]))
     elif sys.argv[1] == "receipt":
         result = json.loads(Path(sys.argv[2]).read_text())
