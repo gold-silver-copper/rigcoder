@@ -291,3 +291,24 @@ This option supports only that declared output contract. It is not a safe
 replacement for arbitrary verifiers that execute submitted programs. Tests cover
 real host subprocess limits and the bench CLI with a substituted Docker command;
 real Docker compatibility and isolation verification remain pending.
+
+### Prompt improver sandbox preflight (macOS)
+
+The experimental `improver_sandbox.py` profile allows a disposable workspace,
+required runtime reads and one localhost gateway port. It denies process forks,
+other executables and file contents outside those paths. It is intended for the
+prompt-only lane; Rust edits, formatting and compilation need separate handling.
+The launcher must provide a clean environment and a fresh workspace containing
+only authorized development inputs. Keep the binary, ledger, oracle and gateway
+outside that workspace, and copy back only validated lane files.
+
+```sh
+python3 -B -m unittest discover -s harness -p 'test_improver_sandbox.py'
+python3 -B harness/check_gemini_gateway_cli.py target/debug/rigcoder --sandbox
+```
+
+These tests exercise actual macOS enforcement. The CLI check sends a synthetic
+hidden-file read through the real `read_file` tool and verifies that only the
+permission error reaches the next mocked model request. It performs no paid API
+calls. This component is not yet integrated into `iterate`; it does not yet
+provide the source-copying, copy-back, resource limits or recovery controller.

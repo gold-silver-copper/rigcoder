@@ -13,9 +13,11 @@ from gemini_budget import Budget, cost
 from gemini_gateway import server
 
 
-def check(binary):
+def check(binary, isolated=False):
     binary = str(Path(binary).resolve(strict=True))
     with tempfile.TemporaryDirectory() as directory:
+        workspace = Path(directory) / 'workspace'
+        workspace.mkdir()
         budget = Budget(Path(directory) / 'budget.sqlite')
         budget.initialize()
         gateway = server(('127.0.0.1', 0), budget, 'development', 'local-token', 'fake-upstream')
@@ -27,27 +29,49 @@ def check(binary):
                             'finishReason': 'STOP', 'index': 0}],
             'usageMetadata': {'promptTokenCount': 10, 'candidatesTokenCount': 3, 'totalTokenCount': 13}
         }) + '\n\n').encode()
-        class Socket:
-            def makefile(self, *_args):
-                headers = f"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {len(payload)}\r\n\r\n"
-                return io.BytesIO(headers.encode() + payload)
-        response = http.client.HTTPResponse(Socket())
-        response.begin()
-        connection.getresponse.return_value = response
+        payloads = [payload]
+        hidden = Path(directory) / "hidden-canary"
+        hidden.write_text("SYNTHETIC_SEALED_VALUE")
+        if isolated:
+            tool = {"candidates": [{"content": {"role": "model", "parts": [{"functionCall": {
+                "name": "read_file", "args": {"path": str(hidden)}}}]}, "finishReason": "STOP", "index": 0}],
+                "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 3, "totalTokenCount": 13}}
+            payloads.insert(0, ("data: " + json.dumps(tool) + "\n\n").encode())
+
+        def response_for(body):
+            class Socket:
+                def makefile(self, *_args):
+                    headers = f"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {len(body)}\r\n\r\n"
+                    return io.BytesIO(headers.encode() + body)
+            response = http.client.HTTPResponse(Socket())
+            response.begin()
+            return response
+        connection.getresponse.side_effect = [response_for(body) for body in payloads]
         try:
             with patch('gemini_dispatch.http.client.HTTPSConnection', return_value=connection) as upstream:
-                result = subprocess.run([
-                    binary, '--provider', 'gemini', '--model', 'gemini-3.8-flash',
+                argv = [binary]
+                if isolated:
+                    from improver_sandbox import command
+                    argv = command(binary, workspace, gateway.server_port)
+                result = subprocess.run(argv + [
+                    '--provider', 'gemini', '--model', 'gemini-3.8-flash',
                     '--gemini-gateway', f'http://127.0.0.1:{gateway.server_port}',
-                    '-C', directory, '--max-turns', '1', '--timeout-secs', '10',
+                    '-C', str(workspace), '--max-turns', str(len(payloads)), '--timeout-secs', '10',
                     'Say hello without using tools.'
-                ], env={'PATH': '/usr/bin:/bin', 'RIGCODER_GATEWAY_TOKEN': 'local-token'},
+                ], env={'PATH': '/usr/bin:/bin', 'HOME': str(workspace), 'TMPDIR': str(workspace),
+                           'RIGCODER_GATEWAY_TOKEN': 'local-token'},
                     capture_output=True, text=True, timeout=20)
                 if result.returncode or 'Gateway verified.' not in result.stdout:
                     raise AssertionError(f'CLI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
-                upstream.assert_called_once()
+                assert upstream.call_count == len(payloads)
+                if isolated:
+                    second = connection.request.call_args_list[1].kwargs["body"]
+                    assert b"functionResponse" in second
+                    assert b"SYNTHETIC_SEALED_VALUE" not in second
+                    assert b"Operation not permitted" in second
+                    assert "SYNTHETIC_SEALED_VALUE" not in result.stdout
                 assert connection.request.call_args.kwargs['headers']['x-goog-api-key'] == 'fake-upstream'
-                assert budget.committed_microdollars() == cost(10, 3)
+                assert budget.committed_microdollars() == len(payloads) * cost(10, 3)
         finally:
             gateway.shutdown()
             gateway.server_close()
@@ -56,4 +80,4 @@ def check(binary):
 
 
 if __name__ == '__main__':
-    check(sys.argv[1])
+    check(sys.argv[1], "--sandbox" in sys.argv[2:])

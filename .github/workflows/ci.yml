@@ -72,6 +72,12 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
       - run: cargo test --locked -p rigcoder -p rigcoder-verify
       - run: cargo run --locked -p rigcoder-verify -- verify
+      - name: Check prompt improver sandbox
+        if: runner.os == 'macOS'
+        run: |
+          python3 -B -m unittest discover -s harness -p 'test_improver_sandbox.py'
+          cargo build --locked -p rigcoder-cli
+          python3 -B harness/check_gemini_gateway_cli.py target/debug/rigcoder --sandbox
       - name: Retain verification report
         if: always()
         uses: actions/upload-artifact@v4
