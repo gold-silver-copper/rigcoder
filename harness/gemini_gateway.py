@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from gemini_dispatch import MODEL, send
 
 
-def server(address, budget, phase, token, api_key):
+def server(address, budget, phase, token, api_key, *, dispatch=None):
     if not token or not api_key:
         raise ValueError("gateway credentials are required")
     if phase not in ("proposal", "development", "holdout"):
@@ -72,7 +72,7 @@ def server(address, budget, phase, token, api_key):
                 body = self.rfile.read(int(lengths[0]))
                 if len(body) != int(lengths[0]):
                     raise ValueError("truncated request")
-                status, content_type, result = send(
+                status, content_type, result = (send if dispatch is None else dispatch)(
                     budget, phase, body, api_key, stream=paths[target.path]
                 )
             except Exception:

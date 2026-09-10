@@ -37,6 +37,8 @@ jobs:
         run: python3 -B harness/check_artifact_capture_docker.py alpine:3.22
       - name: Check compilation isolation against real Docker
         run: python3 -B harness/check_build_isolation_docker.py
+      - name: Check Gemini relay through network-disabled Docker
+        run: python3 -B harness/check_gemini_relay_docker.py
       - run: cargo check --locked --workspace
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace --exclude rigcoder --exclude rigcoder-verify

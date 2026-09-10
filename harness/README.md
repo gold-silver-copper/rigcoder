@@ -341,3 +341,19 @@ daemon. Host-side compilation is not covered by that boundary. Task-provider
 isolation and recovery of surviving processes after controller termination
 still require work before a trustworthy live experiment. A collected proposal
 is not an accepted improvement.
+
+### Task provider relay preflight
+
+`gemini_relay.py` carries bounded model requests over input/output pipes. Its
+container endpoint serves the existing Gemini gateway HTTP interface on loopback;
+the host dispatcher owns the provider key, ledger and phase. The intended task
+container uses `--network none`, so no network route to the host is required.
+Frames have size limits and I/O deadlines; malformed requests cannot choose an
+upstream URL or bypass dispatcher validation and reservation.
+
+`python3 -B harness/check_gemini_relay_docker.py` checks the transport with an
+actual network-disabled container and mocked provider. Local tests also exercise
+HTTP requests, host-side settlement, framing and blocked-pipe deadlines. The
+relay is not yet integrated into benchmark trials. The trial controller must
+own readiness, container/process cleanup and the overall execution deadline;
+pipe deadlines alone do not interrupt an in-progress upstream HTTPS call.
