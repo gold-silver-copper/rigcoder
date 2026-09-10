@@ -13,7 +13,7 @@ import time
 from artifact_score import MAX_ARCHIVE
 
 
-def bounded_command(arguments, stdout_limit, timeout, request=b"", *, cwd=None, env=None):
+def bounded_command(arguments, stdout_limit, timeout, request=b"", *, cwd=None, env=None, include_stderr=False):
     """Capture a trusted CLI under a wall deadline and two bounded pipes."""
     process = subprocess.Popen(arguments, stdin=subprocess.PIPE if request else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -59,7 +59,7 @@ def bounded_command(arguments, stdout_limit, timeout, request=b"", *, cwd=None, 
             if code != 0:
                 # Candidate-controlled names or daemon diagnostics are not scores.
                 raise ValueError("artifact capture command failed")
-            return bytes(output)
+            return (bytes(output), bytes(errors)) if include_stderr else bytes(output)
     finally:
         # Also stop descendants retaining pipes after their parent exits.
         try:
@@ -73,7 +73,9 @@ def bounded_command(arguments, stdout_limit, timeout, request=b"", *, cwd=None, 
         process.stderr.close()
 
 
-def capture(container, artifact, timeout=30):
+def capture(container, artifact, timeout=30, *, max_archive=MAX_ARCHIVE):
+    if type(max_archive) is not int or not 1024 <= max_archive <= 64 * 1024 * 1024:
+        raise ValueError("invalid archive capture limit")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", container):
         raise ValueError("invalid container identity")
     path = PurePosixPath(artifact)
@@ -98,7 +100,7 @@ def capture(container, artifact, timeout=30):
     # the container. Never infer absence from CLI stderr wording.
     target = f"/v1.45/containers/{container}/archive?path={quote(artifact, safe='')}"
     request = f"GET {target} HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n".encode("ascii")
-    raw = run(["docker", "system", "dial-stdio"], MAX_ARCHIVE + 65_536, request)
+    raw = run(["docker", "system", "dial-stdio"], max_archive + 65_536, request)
 
     class ResponseSocket:
         def makefile(self, *_args):
@@ -113,7 +115,7 @@ def capture(container, artifact, timeout=30):
             body = response.read()
     except (http.client.HTTPException, OSError) as error:
         raise ValueError("invalid archive response") from error
-    if len(body) > MAX_ARCHIVE:
+    if len(body) > max_archive:
         raise ValueError("artifact archive exceeded limit")
     if status not in (200, 404):
         raise ValueError("artifact archive request failed")

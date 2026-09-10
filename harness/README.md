@@ -362,7 +362,7 @@ an existing experiment ledger to bypass that error. Each trial's `budget-link.js
 records its ledger, phase and context. `Budget(path, context=...).accounting()`
 reports known charges and unresolved reservations separately, including counts.
 The context is supplied by the host and cannot be chosen by the task endpoint.
-It requires Gemini `gemini-3.8-flash`, output-line host scoring, no checkpoints,
+It requires Gemini `gemini-3.8-flash`, trusted output-line or polyglot host scoring, no checkpoints,
 and task timeouts of at most 7200 seconds. Images must already provide Bash and
 Python 3 because the isolated setup cannot install packages over the network.
 
@@ -386,3 +386,32 @@ phases and host scoring of correct and wrong answers despite forged rewards.
 It makes no generation requests and asserts zero budget reservations. The custom
 agent is correctly labeled as an unverified build; this check does not establish
 product-agent performance or trusted compilation provenance.
+
+
+### Polyglot functional scoring
+
+A task implementing the polyglot Fibonacci contract can opt into the trusted
+scorer with `tests/polyglot.json` containing exactly `{"version":1}`. This marker
+cannot coexist with `output-line.json`. It is not a general code-task verifier.
+The scorer requires `/app/polyglot` to contain only regular `main.rs`, compiles
+it with `rustc` and `g++` from the immutable task image, and compares both programs'
+outputs for 0, 1, 2, 10 and 42 with the development verifier's expectations.
+
+Capture occurs after stopping the agent container. No tar entries are extracted.
+The directory archive is bounded to 64 MiB/1024 entries and source to 64 KiB.
+Extra files or links fail the deliverable check; malformed or unsupported archive
+framing invalidates the trial. Compilation and each program invocation use fresh
+containers with no network, read-only roots, no capabilities, user 65534, 512 MiB
+RAM, one CPU and 128 processes. Only sanitized source and private compiler output
+are mounted during compilation; program execution receives only its binary.
+Expected outputs and score decisions remain on the host. The Engine's recorded
+exit state must agree with Docker wait; command/transport or deadline failures
+invalidate the trial. The image must already contain both compilers and their
+runtime libraries. Record actual compiler versions when freezing an experiment.
+
+`polyglot-artifact.tar`, `polyglot-executions.jsonl` (stdout encoded as base64),
+and `polyglot-result.json` retain the capture, completed execution evidence and
+final score. Interrupted functional evaluation can leave partial evidence but
+cannot publish a score. Real Docker coverage is supplied by
+`python3 -B harness/check_polyglot_docker.py`; passing mocked unit tests alone
+is not evidence of container compatibility or isolation.

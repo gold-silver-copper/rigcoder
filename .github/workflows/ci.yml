@@ -46,6 +46,8 @@ jobs:
         run: |
           cargo build --locked -p rigcoder-bench
           python3 -B harness/check_budgeted_trial_docker.py target/debug/rigcoder-bench
+      - name: Check isolated polyglot scoring against real Docker
+        run: python3 -B harness/check_polyglot_docker.py
       - name: Check CLI Gemini gateway without provider access
         run: |
           cargo build --locked -p rigcoder-cli

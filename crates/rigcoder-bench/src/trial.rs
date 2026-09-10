@@ -243,7 +243,7 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
             agent.stderr
         );
     }
-    verify(task, container, dir)
+    verify(task, spec.image, container, dir)
 }
 
 fn verify_output_line(
@@ -300,10 +300,57 @@ fn verify_output_line(
     parse_reward(std::str::from_utf8(&output.stdout)?)
 }
 
+fn verify_polyglot(task: &Task, image: &str, container: &str, dir: &Path) -> Result<f64> {
+    use std::process::Command;
+    let modules = [
+        (
+            "artifact_score",
+            include_str!("../../../harness/artifact_score.py"),
+        ),
+        (
+            "artifact_capture",
+            include_str!("../../../harness/artifact_capture.py"),
+        ),
+        (
+            "polyglot_artifact",
+            include_str!("../../../harness/polyglot_artifact.py"),
+        ),
+        (
+            "polyglot_execute",
+            include_str!("../../../harness/polyglot_execute.py"),
+        ),
+    ];
+    let mut script = String::from("import sys, types\n");
+    for (name, source) in modules {
+        script.push_str(&format!(
+            "m = types.ModuleType({name:?}); sys.modules[{name:?}] = m\nexec({}, m.__dict__)\n",
+            serde_json::to_string(source)?
+        ));
+    }
+    script.push_str(include_str!("../../../harness/polyglot_evaluate.py"));
+    let output = Command::new("python3")
+        .args(["-I", "-c", &script])
+        .arg(container)
+        .arg(image)
+        .arg(dir.join("verifier"))
+        .arg(task.verifier_timeout_secs.to_string())
+        .output()
+        .context("starting polyglot scorer")?;
+    anyhow::ensure!(
+        output.status.success(),
+        "polyglot scorer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_reward(std::str::from_utf8(&output.stdout)?)
+}
+
 /// Install the verifier after the agent stops, discard agent-written reward
 /// files, and require a successful verifier invocation with a valid reward.
 /// The container is a benchmark environment, not a security sandbox for root.
-pub(crate) fn verify(task: &Task, container: &str, dir: &Path) -> Result<f64> {
+pub(crate) fn verify(task: &Task, image: &str, container: &str, dir: &Path) -> Result<f64> {
+    if task.polyglot {
+        return verify_polyglot(task, image, container, dir);
+    }
     if let Some(oracle) = &task.output_line {
         return verify_output_line(task, oracle, container, dir);
     }
@@ -522,7 +569,7 @@ pub fn branch_from(
                     agent.stderr
                 );
             }
-            verify(task, &container, &dir)
+            verify(task, &image, &container, &dir)
         })();
         docker::remove(&container);
         match result {

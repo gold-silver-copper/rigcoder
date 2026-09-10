@@ -20,6 +20,13 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "failed"):
             bounded_command([sys.executable, "-c", "raise SystemExit(2)"], 16, 5)
 
+    def test_stderr_can_be_retained_without_mixing_score_output(self):
+        output, errors = bounded_command([sys.executable, "-c",
+            "import sys; print('stdout'); print('stderr', file=sys.stderr)"],
+            128, 5, include_stderr=True)
+        self.assertEqual(output, b"stdout\n")
+        self.assertEqual(errors, b"stderr\n")
+
     def test_missing_artifact_requires_a_surviving_stopped_container(self):
         missing = b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
         with patch("artifact_capture.bounded_command", side_effect=[b"ok", b"false", missing, b"false"]):

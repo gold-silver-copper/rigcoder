@@ -487,8 +487,9 @@ pub fn evaluate(
         anyhow::ensure!(
             loaded
                 .iter()
-                .all(|task| task.output_line.is_some() && task.agent_timeout_secs <= 7200),
-            "budgeted trials require host output-line scoring and timeouts at most 7200 seconds"
+                .all(|task| (task.output_line.is_some() || task.polyglot)
+                    && task.agent_timeout_secs <= 7200),
+            "budgeted trials require trusted host scoring and timeouts at most 7200 seconds"
         );
     }
     // A build or external replacement between trials must not mix executable

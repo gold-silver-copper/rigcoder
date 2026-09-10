@@ -22,6 +22,7 @@ pub struct Task {
     pub memory: String,
     pub difficulty: String,
     pub output_line: Option<OutputLine>,
+    pub polyglot: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -136,6 +137,24 @@ impl Task {
                 Some(oracle)
             }
         };
+        let polyglot_path = dir.join("tests/polyglot.json");
+        let polyglot = match std::fs::symlink_metadata(&polyglot_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+            Ok(meta) => {
+                anyhow::ensure!(
+                    meta.is_file() && meta.len() <= 128,
+                    "invalid polyglot scorer marker"
+                );
+                let marker: serde_json::Value =
+                    serde_json::from_slice(&std::fs::read(&polyglot_path)?)?;
+                anyhow::ensure!(
+                    marker == serde_json::json!({"version": 1}) && output_line.is_none(),
+                    "invalid or conflicting polyglot scorer marker"
+                );
+                true
+            }
+        };
         Ok(Self {
             name: name.to_owned(),
             dir,
@@ -154,6 +173,7 @@ impl Task {
             memory: parsed.environment.memory,
             difficulty: parsed.metadata.difficulty,
             output_line,
+            polyglot,
         })
     }
 

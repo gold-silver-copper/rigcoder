@@ -1448,3 +1448,44 @@ exec "$MOCK_REAL_PYTHON" "$@"
         }
     }
 }
+
+#[test]
+fn polyglot_scoring_uses_host_capture_and_rejects_conflicting_oracles() {
+    for conflict in [false, true] {
+        let f = Fixture::new();
+        for task in ["a", "b"] {
+            f.write(
+                &format!("harness/tasks/{task}/tests/polyglot.json"),
+                r#"{"version":1}"#,
+            );
+            if conflict {
+                f.write(
+                    &format!("harness/tasks/{task}/tests/output-line.json"),
+                    r#"{"artifact":"/app/answer.txt","expected":"SYNTHETIC"}"#,
+                );
+            }
+        }
+        let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+        f.script("fakebin/docker", &docker.replace("case \"$1\" in\nversion)",
+            "case \"$1\" in\nstop) ;;\ninspect) echo false ;;\nsystem) cat >/dev/null; printf 'HTTP/1.1 404 Not Found\\r\\nContent-Length: 0\\r\\n\\r\\n' ;;\nversion)"));
+        let output = f.run(&["run", "--no-build"], &[]);
+        if conflict {
+            assert!(!output.status.success());
+            assert!(f.ledger().is_empty());
+            assert!(String::from_utf8_lossy(&output.stderr).contains("conflicting polyglot"));
+        } else {
+            success(&output);
+            assert_eq!(f.ledger()[0]["score"], 0.0);
+            let job = PathBuf::from(f.ledger()[0]["job_dir"].as_str().unwrap());
+            let record: Value = serde_json::from_slice(
+                &fs::read(job.join("a__1/verifier/polyglot-result.json")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(record["scorer"], "polyglot_v1");
+            assert_eq!(record["artifact_missing"], true);
+            let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+            assert!(!log.contains("bash /tests/test.sh"));
+            assert!(!log.contains("/tests/polyglot.json"));
+        }
+    }
+}
