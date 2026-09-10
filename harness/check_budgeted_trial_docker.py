@@ -75,6 +75,9 @@ def check(binary):
                     results = list(job.glob("*/verifier/output-line-result.json"))
                     assert len(results) == 1
                     assert json.loads(results[0].read_text())["reward"] == expected
+                    trial = results[0].parent.parent
+                    link = json.loads((trial / "budget-link.json").read_text())
+                    assert link == {"ledger": str(budget.path), "context": str(trial), "phase": phase}
                 assert budget.committed_microdollars() == 0
         finally:
             already_failed = sys.exc_info()[0] is not None

@@ -41,9 +41,9 @@ class Admission:
 def entry(sources):
     """Dedicated process entry point; failures never print secrets or payloads."""
     try:
-        if len(sys.argv) != 5:
+        if len(sys.argv) != 6:
             raise ValueError("invalid task relay arguments")
-        control(sys.argv[1], Budget(sys.argv[2]), sys.argv[3], os.environ["GEMINI_API_KEY"],
+        control(sys.argv[1], Budget(sys.argv[2], context=sys.argv[5]), sys.argv[3], os.environ["GEMINI_API_KEY"],
                 sources, int(sys.argv[4]))
     except BaseException:
         sys.stderr.write("task relay failed; retained budget reservations remain charged\n")

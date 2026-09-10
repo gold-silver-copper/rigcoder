@@ -61,7 +61,7 @@ sources = {{name: (Path({str(harness)!r}) / (name + '.py')).read_text() for name
 raise SystemExit(entry(sources))
 """
                 process = subprocess.Popen([sys.executable, "-I", "-c", script,
-                    "synthetic-container", str(budget.path), "development", "1" if mode == "deadline" else "20"],
+                    "synthetic-container", str(budget.path), "development", "1" if mode == "deadline" else "20", "synthetic-trial"],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                          "RELAY_TEST_ROOT": str(root), "RELAY_TEST_MODE": mode,

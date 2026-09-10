@@ -65,6 +65,35 @@ class BudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stopped"):
             Budget(self.path).reserve("development", 1, 1)
 
+    def test_concurrent_contexts_keep_costs_and_unknown_usage_separate(self):
+        def request(index):
+            bound = Budget(self.path, context=f"trial-{index}")
+            reservation = bound.reserve("development", 10, 10)
+            if index % 2 == 0:
+                bound.settle(reservation, 2, 3)
+            return reservation
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            reservations = list(pool.map(request, range(8)))
+        for index in range(8):
+            record = Budget(self.path, context=f"trial-{index}").accounting()
+            self.assertEqual(record, {"requests": 1, "unsettled_requests": index % 2,
+                "known_cost_microdollars": 0 if index % 2 else cost(2, 3),
+                "held_microdollars": cost(10, 10) if index % 2 else 0})
+        with self.assertRaises(ValueError):
+            Budget(self.path, context="trial-0").settle(reservations[1], 2, 3)
+        self.assertEqual(self.budget.committed_microdollars(), 4 * (cost(2, 3) + cost(10, 10)))
+
+    def test_older_schema_is_refused_without_resetting_spend(self):
+        self.budget.reserve("development", 10, 10)
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute("PRAGMA user_version = 1")
+        with self.assertRaisesRegex(ValueError, "schema"):
+            Budget(self.path, context="new-trial").reserve("development", 1, 1)
+        with closing(sqlite3.connect(self.path)) as db:
+            self.assertEqual(db.execute("SELECT SUM(reserved) FROM reservations").fetchone()[0], cost(10, 10))
+        with self.assertRaises(FileExistsError):
+            self.budget.initialize()
+
 
 if __name__ == "__main__":
     unittest.main()

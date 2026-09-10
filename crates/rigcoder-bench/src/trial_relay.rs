@@ -33,6 +33,7 @@ impl Relay {
         phase: &str,
         key: &str,
         timeout: u64,
+        context: &Path,
     ) -> Result<Self> {
         ensure!(
             (1..=7200).contains(&timeout),
@@ -83,6 +84,7 @@ impl Relay {
             .arg(budget)
             .arg(phase)
             .arg(timeout.to_string())
+            .arg(context)
             .env("GEMINI_API_KEY", key)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

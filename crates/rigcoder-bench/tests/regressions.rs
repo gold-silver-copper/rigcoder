@@ -1388,6 +1388,7 @@ fn budgeted_trials_keep_keys_on_host_and_require_successful_relay_shutdown() {
 case "$3" in
 *gemini_trial_relay*)
     printf 'relay-phase:%s\n' "$6" >> "$MOCK_LOG"
+    printf 'relay-context:%s\n' "$8" >> "$MOCK_LOG"
     printf 'relay-ready\n' >> "$MOCK_LOG"
     printf 'ready\n'
     cat >/dev/null
@@ -1434,10 +1435,15 @@ exec "$MOCK_REAL_PYTHON" "$@"
             assert!(log.contains("relay-phase:holdout"));
             let job = f.ledger()[1]["job_dir"].as_str().unwrap().to_owned();
             let manifest: Value = serde_json::from_slice(
-                &fs::read(PathBuf::from(job).join("manifest.json")).unwrap(),
+                &fs::read(PathBuf::from(&job).join("manifest.json")).unwrap(),
             )
             .unwrap();
             assert_eq!(manifest["budget_phase"], "holdout");
+            let trial = PathBuf::from(&job).join("heldout__1");
+            let link: Value =
+                serde_json::from_slice(&fs::read(trial.join("budget-link.json")).unwrap()).unwrap();
+            assert_eq!(link["context"], trial.to_str().unwrap());
+            assert!(log.contains(&format!("relay-context:{}", trial.display())));
             assert!(log.find("relay-stopped").unwrap() < log.find("system dial-stdio").unwrap());
         }
     }

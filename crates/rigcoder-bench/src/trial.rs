@@ -96,6 +96,14 @@ pub fn run(spec: &TrialSpec) -> TrialRecord {
     let outcome = (|| {
         std::fs::create_dir_all(dir.join("agent"))?;
         std::fs::create_dir_all(dir.join("verifier"))?;
+        if let Some(budget) = spec.budget {
+            std::fs::write(
+                dir.join("budget-link.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "ledger": budget, "context": dir, "phase": spec.budget_phase,
+                }))?,
+            )?;
+        }
         execute(spec, &container, &dir)
     })();
     docker::remove(&container);
@@ -195,6 +203,7 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
                 spec.budget_phase,
                 spec.api_key.context("Gemini key is required")?.1,
                 task.agent_timeout_secs,
+                dir,
             )
         })
         .transpose()?;

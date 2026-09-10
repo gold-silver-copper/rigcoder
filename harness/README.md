@@ -356,6 +356,12 @@ actual network-disabled container and mocked provider. Local tests also exercise
 HTTP requests, host-side settlement, framing and blocked-pipe deadlines. The
 budgeted trial path is selected by `--gemini-budget /absolute/path/budget.sqlite`.
 The ledger must already exist; this option never initializes or resets it.
+Ledger schema 2 stores each reservation's host-selected context atomically with
+its charge. Older schemas are refused without changing their spend; never reset
+an existing experiment ledger to bypass that error. Each trial's `budget-link.json`
+records its ledger, phase and context. `Budget(path, context=...).accounting()`
+reports known charges and unresolved reservations separately, including counts.
+The context is supplied by the host and cannot be chosen by the task endpoint.
 It requires Gemini `gemini-3.8-flash`, output-line host scoring, no checkpoints,
 and task timeouts of at most 7200 seconds. Images must already provide Bash and
 Python 3 because the isolated setup cannot install packages over the network.
