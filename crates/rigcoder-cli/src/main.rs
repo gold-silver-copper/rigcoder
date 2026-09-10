@@ -781,6 +781,53 @@ mod tests {
     }
 
     #[test]
+    fn failed_session_with_unsettled_effect_exports_partial_evidence() {
+        for publishing in [false, true] {
+            let dir = scratch(if publishing {
+                "publishing-exit"
+            } else {
+                "inflight-exit"
+            });
+            let mut app = App::new();
+            app.add_plugins(RigcoderPlugin {
+                workspace: dir.clone(),
+                model: ModelChoice::parse("gemini", None).unwrap(),
+                max_turns: 4,
+                mode: rigcoder::Mode::Replay(rigcoder::EffectLog::default().into()),
+                prompt_override: None,
+                keep_stream_events: false,
+            });
+            app.world_mut()
+                .resource_mut::<rigcoder::Conversation>()
+                .runs = 1;
+            let mut effect = app.world_mut().spawn(rig_ecs::bus::EffectOutcome(Err(
+                rig::error::ErrorReport::new(rig::error::ErrorKind::Provider, "failed"),
+            )));
+            if publishing {
+                effect.insert(rig_ecs::bus::Publishing(
+                    rig::core::tool::PublishedContext::new(),
+                ));
+            } else {
+                effect.insert(rig_ecs::bus::InFlight {
+                    key: "pending".into(),
+                });
+            }
+            let path = dir.join("observations.json");
+            app.insert_resource(ObservationsOut {
+                path: Some(path.clone()),
+                written: false,
+            });
+            write_observations(app.world_mut());
+            let trace: rig::observe::ObservationTrace =
+                serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+            assert!(
+                !trace.finalized,
+                "an outcome is not proof of completed settlement"
+            );
+        }
+    }
+
+    #[test]
     fn exit_during_an_active_run_exports_unfinalized_evidence() {
         let dir = scratch("active-exit");
         let mut app = App::new();

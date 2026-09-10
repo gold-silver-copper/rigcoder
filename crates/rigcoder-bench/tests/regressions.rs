@@ -35,6 +35,9 @@ impl Fixture {
             "crates/rigcoder/src/session.rs",
             "crates/rigcoder-cli/src/main.rs",
             "README.md",
+            "Cargo.toml",
+            "Cargo.lock",
+            "rust-toolchain.toml",
         ] {
             fixture.write(file, "baseline\n");
         }
@@ -45,9 +48,20 @@ impl Fixture {
         fixture.write("harness/slices/dev.txt", "a\nb\n");
         fixture.write("harness/slices/holdout.txt", "heldout\n");
         fixture.write("harness/ledger.jsonl", "");
+        fixture.write(
+            "harness/build-inputs.py",
+            include_str!("../../../harness/build-inputs.py"),
+        );
+        fixture.script("harness/write-receipt.sh", r#"#!/bin/sh
+set -eu
+receipt_tmp=$(mktemp -d)
+trap 'rm -rf "$receipt_tmp"' EXIT
+python3 harness/build-inputs.py snapshot "$PWD" "$receipt_tmp/src" > "$receipt_tmp/source.json"
+python3 harness/build-inputs.py receipt "$receipt_tmp/source.json" "$PWD/harness/bin/rigcoder-linux-$ARCH" "$ARCH" sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "harness/bin/rigcoder-linux-$ARCH.build.json"
+"#);
         fixture.script(
             "harness/build-linux.sh",
-            "#!/bin/sh\nmkdir -p harness/bin\ncp crates/rigcoder/src/prompt.md harness/bin/rigcoder-linux-$ARCH\n",
+            "#!/bin/sh\nmkdir -p harness/bin\ncp crates/rigcoder/src/prompt.md harness/bin/rigcoder-linux-$ARCH\nbash harness/write-receipt.sh\n",
         );
         for task in ["a", "b", "heldout"] {
             fixture.write(&format!("harness/tasks/{task}/task.toml"), "");
@@ -71,13 +85,21 @@ version) echo 25 ;;
 build)
     case "$*" in
     *rigcoder-bench/b:*) if [ "$MOCK_FAIL_BUILD" = 1 ]; then echo 'forced build failure' >&2; exit 1; fi ;;
-    esac ;;
+    esac
+    while [ "$#" -gt 0 ]; do
+        if [ "$1" = --iidfile ]; then
+            printf '%s\n' "${MOCK_IMAGE_ID:-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}" > "$2"
+            break
+        fi
+        shift
+    done ;;
 cp)
     case "$3" in
     *:/usr/local/bin/rigcoder) cat "$2" > "$MOCK_STATE"; printf 'upload:%s\n' "$(cat "$2")" >> "$MOCK_LOG" ;;
     esac ;;
 exec)
     case "$*" in
+    *--task-file*) exit "${MOCK_AGENT_EXIT:-0}" ;;
     *'tar -xf /restore/workspace.tar'*) exit "${MOCK_RESTORE_EXIT:-0}" ;;
     *'cat /logs/verifier/reward.txt')
         if [ -n "$MOCK_REWARD" ]; then echo "$MOCK_REWARD"
@@ -190,6 +212,255 @@ fn success(output: &Output) {
 }
 
 #[test]
+fn self_improvement_cannot_select_holdout_tasks_through_dev_or_include() {
+    for included in [false, true] {
+        let f = Fixture::new();
+        if !included {
+            f.write("harness/slices/dev.txt", "a\nheldout\n");
+            f.git(&["add", "harness/slices/dev.txt"]);
+            f.git(&["commit", "-qm", "overlapping fixture slices"]);
+        }
+        let before = f.git(&["rev-parse", "HEAD"]);
+        let mut args = vec!["iterate", "--generations", "1", "--holdout", "false"];
+        if included {
+            args.extend(["--include", "heldout"]);
+        }
+        let output = f.run(&args, &[]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("overlap the holdout"));
+        assert_eq!(f.git(&["rev-parse", "HEAD"]), before);
+        assert_eq!(f.git(&["branch", "--show-current"]), "main");
+        assert!(!f.root.join("mock.log").exists());
+        assert!(f.ledger().is_empty());
+    }
+}
+
+#[test]
+fn invalid_task_limits_never_start_builds_or_trials() {
+    for section in ["agent", "verifier", "environment"] {
+        for value in ["0.0", "-1.0", "0.5", "nan", "inf"] {
+            let f = Fixture::new();
+            let key = if section == "environment" {
+                "build_timeout_sec"
+            } else {
+                "timeout_sec"
+            };
+            f.write(
+                "harness/tasks/a/task.toml",
+                &format!("[{section}]\n{key} = {value}\n"),
+            );
+            let output = f.run(&["run", "--no-build"], &[]);
+            assert!(!output.status.success(), "accepted {section}/{value}");
+            assert!(f.ledger().is_empty());
+            let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+            assert!(
+                !log.lines()
+                    .any(|line| line.starts_with("build ") || line.starts_with("run "))
+            );
+        }
+    }
+}
+
+#[test]
+fn invalid_receipt_paths_cannot_be_treated_as_missing() {
+    for link in [false, true] {
+        let f = Fixture::new();
+        let receipt = f.root.join(format!(
+            "harness/bin/rigcoder-linux-{}.build.json",
+            std::env::consts::ARCH
+        ));
+        if link {
+            std::os::unix::fs::symlink("missing-receipt", &receipt).unwrap();
+        } else {
+            fs::create_dir(&receipt).unwrap();
+        }
+        let result = f.run(&["run", "--no-build"], &[]);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("receipt must be a regular file"));
+        assert!(f.ledger().is_empty());
+    }
+}
+
+#[test]
+fn evaluation_validates_receipts_before_trials_and_rejects_stale_inputs() {
+    let f = Fixture::new();
+    success(&f.run(&["run"], &[]));
+    let ledger = f.ledger();
+    let job = PathBuf::from(ledger[0]["job_dir"].as_str().unwrap());
+    let manifest: Value =
+        serde_json::from_str(&fs::read_to_string(job.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["binary"]["source_binding"], "matched_receipt");
+    let before = fs::read_to_string(f.root.join("mock.log")).unwrap();
+    f.write(PROMPT, "changed source\n");
+    let stale = f.run(&["run", "--no-build"], &[]);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("source inputs mismatch"));
+    f.write(PROMPT, "baseline\n");
+    f.write(
+        &format!("harness/bin/rigcoder-linux-{}", std::env::consts::ARCH),
+        "different binary",
+    );
+    let stale = f.run(&["run", "--no-build"], &[]);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("binary mismatch"));
+    assert_eq!(f.ledger().len(), 1);
+    let after = fs::read_to_string(f.root.join("mock.log")).unwrap();
+    assert_eq!(
+        before
+            .lines()
+            .filter(|line| line.starts_with("run "))
+            .count(),
+        after
+            .lines()
+            .filter(|line| line.starts_with("run "))
+            .count()
+    );
+}
+
+#[test]
+fn trials_launch_the_recorded_image_id_and_reject_invalid_receipts() {
+    let f = Fixture::new();
+    success(&f.run(&["run", "--no-build"], &[]));
+    let ledger = f.ledger();
+    let job = PathBuf::from(ledger[0]["job_dir"].as_str().unwrap());
+    let manifest: Value =
+        serde_json::from_str(&fs::read_to_string(job.join("manifest.json")).unwrap()).unwrap();
+    let image = manifest["images"]["a"].as_str().unwrap();
+    assert!(image.starts_with("sha256:"));
+    let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+    let launches: Vec<_> = log
+        .lines()
+        .filter(|line| line.starts_with("run "))
+        .collect();
+    assert_eq!(launches.len(), 2);
+    assert!(
+        launches
+            .iter()
+            .all(|line| line.contains(image) && !line.contains("rigcoder-bench/"))
+    );
+    let invalid = Fixture::new();
+    assert!(
+        !invalid
+            .run(&["run", "--no-build"], &[("MOCK_IMAGE_ID", "latest")])
+            .status
+            .success()
+    );
+    assert!(invalid.ledger().is_empty());
+    assert!(
+        !fs::read_to_string(invalid.root.join("mock.log"))
+            .unwrap()
+            .lines()
+            .any(|line| line.starts_with("run "))
+    );
+}
+
+#[test]
+fn evaluation_uses_frozen_task_inputs_when_the_original_changes() {
+    let f = Fixture::new();
+    let empty = f.root.join("harness/tasks/a/environment/empty");
+    fs::create_dir(&empty).unwrap();
+    fs::set_permissions(&empty, fs::Permissions::from_mode(0o750)).unwrap();
+    let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+    f.script(
+        "fakebin/docker",
+        &docker.replace(
+            "cat \"$2\" > \"$MOCK_STATE\";",
+            "cat \"$2\" > \"$MOCK_STATE\"; printf 'different task\\n' > \"$MUTATE_TASK\";",
+        ),
+    );
+    let instruction = f.root.join("harness/tasks/a/instruction.md");
+    let output = f.run(
+        &["run", "--no-build"],
+        &[("MUTATE_TASK", instruction.to_str().unwrap())],
+    );
+    success(&output);
+    let ledger = f.ledger();
+    let job = PathBuf::from(ledger[0]["job_dir"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(job.join("tasks/a/instruction.md")).unwrap(),
+        "solve it"
+    );
+    assert_eq!(fs::read_to_string(instruction).unwrap(), "different task\n");
+    let manifest: Value =
+        serde_json::from_str(&fs::read_to_string(job.join("manifest.json")).unwrap()).unwrap();
+    assert!(manifest["task_files"]["a/tests/test.sh"]["git_blob_oid"].is_string());
+    let copied = job.join("tasks/a/environment/empty");
+    assert!(copied.is_dir());
+    assert_eq!(
+        fs::metadata(&copied).unwrap().permissions().mode() & 0o777,
+        0o750
+    );
+    let entry = &manifest["task_files"]["a/environment/empty"];
+    assert_eq!(entry["kind"], "directory");
+    assert_eq!(entry["mode"].as_u64().unwrap() & 0o777, 0o750);
+}
+
+#[test]
+fn iteration_cannot_publish_a_development_candidate() {
+    let f = Fixture::new();
+    let before = f.git(&["rev-parse", "HEAD"]);
+    let output = f.run(&["iterate", "--pr"], &[]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unexpected argument '--pr'"));
+    assert_eq!(f.git(&["rev-parse", "HEAD"]), before);
+    assert_eq!(f.git(&["branch", "--show-current"]), "main");
+    assert!(!f.root.join("mock.log").exists());
+    assert!(f.ledger().is_empty());
+}
+
+#[test]
+fn missing_usage_is_unknown_in_trial_and_summary_artifacts() {
+    let f = Fixture::new();
+    success(&f.run(&["run", "--no-build"], &[]));
+    let ledger = f.ledger();
+    let job = PathBuf::from(ledger[0]["job_dir"].as_str().unwrap());
+    let trial: Value =
+        serde_json::from_str(&fs::read_to_string(job.join("a__1/result.json")).unwrap()).unwrap();
+    for field in ["input_tokens", "output_tokens", "cache_tokens"] {
+        assert!(trial[field].is_null(), "missing trial {field} is unknown");
+        assert!(
+            ledger[0]["cost"][field].is_null(),
+            "missing total {field} is unknown"
+        );
+    }
+}
+
+#[test]
+fn evaluation_uses_one_recorded_binary_even_if_the_original_changes() {
+    let f = Fixture::new();
+    let binary = format!("harness/bin/rigcoder-linux-{}", std::env::consts::ARCH);
+    let expected = f.git(&["hash-object", "--no-filters", "--", &binary]);
+    let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+    f.script(
+        "fakebin/docker",
+        &docker.replace(
+            "cat \"$2\" > \"$MOCK_STATE\";",
+            "cat \"$2\" > \"$MOCK_STATE\"; printf 'candidate\\n' > \"$MUTATE_BINARY\";",
+        ),
+    );
+    let original = f.root.join(&binary);
+    success(&f.run(
+        &["run", "--no-build"],
+        &[("MUTATE_BINARY", original.to_str().unwrap())],
+    ));
+    let ledger = f.ledger();
+    assert_eq!(
+        ledger[0]["score"], 1.0,
+        "all tasks must execute the same bytes"
+    );
+    let job = PathBuf::from(ledger[0]["job_dir"].as_str().unwrap());
+    let manifest: Value =
+        serde_json::from_str(&fs::read_to_string(job.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["binary"]["git_blob_oid"], expected);
+    assert_eq!(manifest["binary"]["source_binding"], "unverified");
+    assert_eq!(
+        fs::read_to_string(job.join("rigcoder.bin")).unwrap(),
+        "baseline\n"
+    );
+    assert_eq!(fs::read_to_string(original).unwrap(), "candidate\n");
+}
+
+#[test]
 fn evaluation_only_preserves_worktree_index_branch_and_history() {
     for reward in ["0", "1"] {
         let f = Fixture::new();
@@ -276,6 +547,78 @@ fn incomplete_builds_and_invalid_verifiers_never_publish_scores() {
 }
 
 #[test]
+fn rejection_restores_the_binary_without_a_holdout_run() {
+    let f = Fixture::new();
+    success(&f.run(
+        &["iterate", "--generations", "2", "--holdout", "false"],
+        &[],
+    ));
+    assert_eq!(f.ledger()[1]["decision"], "reverted");
+    let binary = f.root.join(format!(
+        "harness/bin/rigcoder-linux-{}",
+        std::env::consts::ARCH
+    ));
+    assert_eq!(fs::read_to_string(binary).unwrap(), "baseline\n");
+    // A subsequent evaluation-only invocation must execute the kept behavior.
+    success(&f.run(&["run", "--no-build"], &[]));
+    assert_eq!(f.ledger().last().unwrap()["score"], 1.0);
+}
+
+#[test]
+fn failed_rebuild_cannot_leave_a_rejected_binary_available() {
+    let f = Fixture::new();
+    f.script(
+        "fakebin/agent",
+        r#"#!/bin/sh
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = --allow ]; then
+        case "$2" in */harness/notes/*) note=$2 ;; esac
+        shift
+    fi
+    shift
+done
+printf 'candidate\n' > crates/rigcoder/src/prompt.md
+printf 'candidate rationale\n' > "$note"
+git add crates/rigcoder/src/prompt.md "$note"
+"#,
+    );
+    f.script(
+        "harness/build-linux.sh",
+        "#!/bin/sh\nif [ -f harness/bin/build-count ]; then count=$(cat harness/bin/build-count); else count=0; fi\ncount=$((count + 1))\necho $count > harness/bin/build-count\ncp crates/rigcoder/src/prompt.md harness/bin/rigcoder-linux-$ARCH\nbash harness/write-receipt.sh\n[ $count -lt 3 ]\n",
+    );
+    f.git(&["add", "harness/build-linux.sh"]);
+    f.git(&["commit", "-qm", "fail rollback build"]);
+    let output = f.run(
+        &["iterate", "--generations", "2", "--holdout", "false"],
+        &[],
+    );
+    assert!(!output.status.success());
+    assert_eq!(
+        fs::read_to_string(f.root.join(PROMPT)).unwrap(),
+        "baseline\n"
+    );
+    let binary = f.root.join(format!(
+        "harness/bin/rigcoder-linux-{}",
+        std::env::consts::ARCH
+    ));
+    assert!(!binary.exists(), "a failed build must not look usable");
+    assert_eq!(f.ledger()[1]["decision"], "reverted");
+    let ledger = f.ledger();
+    let rejected = PathBuf::from(ledger[1]["job_dir"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(rejected.join("improvement.md")).unwrap(),
+        "candidate rationale\n"
+    );
+    assert_eq!(f.git(&["diff", "--name-only"]), "harness/ledger.jsonl");
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    assert!(
+        f.git(&["ls-files", "--others", "--exclude-standard"])
+            .is_empty()
+    );
+    assert!(!f.run(&["run", "--no-build"], &[]).status.success());
+}
+
+#[test]
 fn rejected_candidate_restores_staged_changes_and_rebuilds_holdout() {
     let f = Fixture::new();
     let before = f.git(&["rev-parse", "HEAD"]);
@@ -322,7 +665,12 @@ fn rejected_candidate_restores_staged_changes_and_rebuilds_holdout() {
         ]
     );
     let agent = log.find("--task-file").unwrap();
-    let tests = log.find("harness/tasks/a/tests ").unwrap();
+    let tests = log
+        .find(&format!(
+            "{}/tasks/a/tests ",
+            ledger[0]["job_dir"].as_str().unwrap()
+        ))
+        .unwrap();
     assert!(agent < tests, "verifier was exposed before the agent ran");
 }
 
@@ -389,6 +737,186 @@ fn a_meta_agent_switching_branch_at_the_same_commit_stops_the_loop() {
     assert_eq!(f.git(&["rev-parse", "main"]), before);
     assert_eq!(f.git(&["rev-parse", "evolve"]), before);
     assert_eq!(f.ledger().len(), 1);
+}
+
+#[test]
+fn failed_improvement_steps_restore_source_and_archive_notes() {
+    for failed_agent in [true, false] {
+        let f = Fixture::new();
+        f.script(
+            "fakebin/agent",
+            r#"#!/bin/sh
+printf 'candidate\n' > crates/rigcoder/src/prompt.md
+git add crates/rigcoder/src/prompt.md
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = --allow ]; then
+        case "$2" in */harness/notes/*)
+            printf 'failed improvement\n' > "$2"
+            git add "$2"
+            ;;
+        esac
+    fi
+    shift
+done
+exit "${MOCK_META_EXIT:-0}"
+"#,
+        );
+        if !failed_agent {
+            f.script("fakebin/cargo", "#!/bin/sh\nexit 1\n");
+        }
+        let output = f.run(
+            &["iterate", "--generations", "2", "--holdout", "false"],
+            &[("MOCK_META_EXIT", if failed_agent { "2" } else { "0" })],
+        );
+        assert!(!output.status.success());
+        assert_eq!(
+            fs::read_to_string(f.root.join(PROMPT)).unwrap(),
+            "baseline\n"
+        );
+        assert!(f.git(&["diff", "--cached"]).is_empty());
+        assert_eq!(f.ledger().len(), 1);
+        let archived: Vec<_> = fs::read_dir(f.root.join("harness/runs"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("improvement.md"))
+            .filter(|path| path.is_file())
+            .collect();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(fs::read(&archived[0]).unwrap(), b"failed improvement\n");
+    }
+}
+
+#[test]
+fn unscored_candidate_failures_restore_source_and_preserve_staged_notes() {
+    for build_failure in [true, false] {
+        let f = Fixture::new();
+        let agent = fs::read_to_string(f.root.join("fakebin/agent")).unwrap();
+        f.script(
+            "fakebin/agent",
+            &(agent
+                + r#"
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = --allow ]; then
+        case "$2" in */harness/notes/*)
+            printf 'unscored note\n' > "$2"
+            git add "$2"
+            rm "$2"
+            ;;
+        esac
+    fi
+    shift
+done
+"#),
+        );
+        if build_failure {
+            f.script(
+                "harness/build-linux.sh",
+                r#"#!/bin/sh
+mkdir -p harness/bin
+cp crates/rigcoder/src/prompt.md harness/bin/rigcoder-linux-$ARCH
+if grep -q candidate crates/rigcoder/src/prompt.md; then exit 1; fi
+bash harness/write-receipt.sh
+"#,
+            );
+        } else {
+            let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+            f.script("fakebin/docker", &docker.replace(
+            "*'bash /tests/test.sh'*)",
+            "*'bash /tests/test.sh'*) if [ \"$(cat \"$MOCK_STATE\")\" = candidate ]; then exit 2; fi;",
+        ));
+        }
+        f.git(&["add", "harness/build-linux.sh"]);
+        f.git(&[
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "candidate build failure fixture",
+        ]);
+        let output = f.run(
+            &["iterate", "--generations", "2", "--holdout", "false"],
+            &[],
+        );
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(if build_failure {
+                "build-linux.sh failed"
+            } else {
+                "verifier failed"
+            })
+        );
+        assert_eq!(
+            fs::read_to_string(f.root.join(PROMPT)).unwrap(),
+            "baseline\n"
+        );
+        assert!(f.git(&["diff", "--cached"]).is_empty());
+        assert!(
+            !f.root
+                .join(format!(
+                    "harness/bin/rigcoder-linux-{}",
+                    std::env::consts::ARCH
+                ))
+                .exists()
+        );
+        assert_eq!(f.ledger().len(), 1);
+        let archived: Vec<_> = fs::read_dir(f.root.join("harness/runs"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("improvement-index.md"))
+            .filter(|path| path.is_file())
+            .collect();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(fs::read(&archived[0]).unwrap(), b"unscored note\n");
+    }
+}
+
+#[test]
+fn a_reported_inner_timeout_still_allows_verification() {
+    let f = Fixture::new();
+    success(&f.run(&["run", "--no-build"], &[("MOCK_AGENT_EXIT", "137")]));
+    let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+    assert!(log.contains("bash /tests/test.sh"));
+    assert!(log.contains("cat /logs/verifier/reward.txt"));
+    assert_eq!(f.ledger().len(), 1);
+}
+
+#[test]
+fn host_deadline_stops_execution_that_ignores_the_container_timeout() {
+    let f = Fixture::new();
+    // Use actual GNU timeout, not the fixture's pass-through substitute.
+    let timeout = Command::new("sh")
+        .args(["-c", "for name in timeout gtimeout; do if \"$name\" --version 2>/dev/null | grep -q 'GNU coreutils'; then command -v \"$name\"; exit 0; fi; done; exit 1"])
+        .output()
+        .unwrap();
+    assert!(
+        timeout.status.success(),
+        "GNU timeout is required for this test"
+    );
+    fs::remove_file(f.root.join("fakebin/timeout")).unwrap();
+    std::os::unix::fs::symlink(
+        String::from_utf8(timeout.stdout).unwrap().trim(),
+        f.root.join("fakebin/timeout"),
+    )
+    .unwrap();
+    f.write("harness/slices/dev.txt", "a\n");
+    f.write("harness/tasks/a/task.toml", "[agent]\ntimeout_sec = 1\n");
+    let docker = fs::read_to_string(f.root.join("fakebin/docker")).unwrap();
+    f.script(
+        "fakebin/docker",
+        &docker.replace(
+            "exec)\n",
+            "exec)\n    case \"$*\" in *--task-file*) sleep 3; echo escaped-deadline >> \"$MOCK_LOG\"; exit 0 ;; esac\n",
+        ),
+    );
+    let output = f.run(&["run", "--no-build"], &[]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("docker client terminated by signal"));
+    assert!(f.ledger().is_empty());
+    let log = fs::read_to_string(f.root.join("mock.log")).unwrap();
+    assert!(
+        !log.contains("escaped-deadline"),
+        "execution escaped its deadline: {log}"
+    );
+    assert!(!log.contains("bash /tests/test.sh"));
+    assert!(!log.contains("cat /logs/verifier/reward.txt"));
+    assert!(log.lines().any(|line| line.starts_with("rm -f ")));
 }
 
 #[test]

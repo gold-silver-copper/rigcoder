@@ -140,20 +140,46 @@ Kept generations commit actual changed lane files and the current note, without
 requiring optional directories to exist. Committed notes remain in
 `harness/notes/`; rejected notes remain with their job artifacts. The host binary
 is rebuilt after accepted edits, and `meta_commit` identifies the improver.
-`--pr` opens a pull request for a kept generation when explicitly requested.
+Publication is separate from iteration: after a frozen baseline/candidate
+holdout comparison and repository verification/review, publish through the
+normal repository workflow. The loop does not push branches or open PRs.
+Development keep/tie decisions are exploratory ranking, not promotion evidence.
 The improve step records its own effect log and scene checkpoints.
+
+Task timeouts must be finite, representable durations of at least one second.
+Execution uses whole seconds, rounding fractional values down. Zero, negative,
+subsecond and nonfinite values are rejected before task builds or trials so
+they cannot become GNU timeout's zero-duration “disable deadline” setting.
 
 `--no-improve` preserves branch, commits, index and user edits. `--no-build` is
 for evaluation only: self-edits and the final holdout rebuild the current source.
 Built binaries use `harness/bin/rigcoder-linux-aarch64` or `-x86_64`, defaulting
 to the host architecture. Custom binaries require `--no-build`.
 
+The Linux build requires Python 3 and copies Cargo manifests, the lockfile,
+toolchain file and `crates/` into a temporary source tree. Docker mounts that tree
+read-only, with separate output and Cargo caches. The harness, dataset and Git
+history are absent from the build mount; links and special input files are
+rejected. The build uses `--locked` and writes a `.build.json` receipt beside the
+binary with captured input hashes and the output hash. Failed builds remove both
+outputs. Normal evaluation requires a receipt matching its binary snapshot,
+current source inputs, build command and architecture. The manifest retains the
+receipt as `matched_receipt`; it is trusted build bookkeeping, not a signed
+attestation. The wrapper pulls the requested platform, resolves its builder image ID and
+uses that immutable ID for both execution and the receipt.
+Explicit `--no-build` evaluation without a receipt remains `unverified`; a
+present but mismatched receipt is rejected. Run the wrapper's tests with
+`python3 -B -m unittest discover -s harness -p test_build_inputs.py`.
+
 ## Running on macOS with colima
 
-Install GNU coreutils (`brew install coreutils`) for the host image-build
-timeout. The runner accepts GNU `timeout` or Homebrew's `gtimeout` on `PATH`
+Install GNU coreutils (`brew install coreutils`) for host image-build and
+execution deadlines. The runner accepts GNU `timeout` or Homebrew's `gtimeout` on `PATH`
 and checks this dependency before starting. Containers need their own GNU
-`timeout` command as well.
+`timeout` command as well. The host deadline bounds the Docker execution client
+even if the agent replaces the container's timeout. It does not terminate remote
+processes by itself; trial cleanup removes the container. This is not a trusted
+scoring boundary, and other Docker operations still depend on daemon responsiveness.
 
 If the docker CLI config points at Docker Desktop's credential helper, give
 the runner an empty config plus the colima socket:

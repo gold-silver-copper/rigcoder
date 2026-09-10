@@ -65,8 +65,8 @@ pub struct TrialFacts {
     pub observed: Observed,
     /// The last tool called before the end.
     pub last_tool: Option<String>,
-    pub input_tokens: u64,
-    pub output_tokens: u64,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
     pub final_text_chars: u64,
 }
 
@@ -90,7 +90,7 @@ pub struct Aggregate {
     pub ended_deliberating: f64,
     pub no_settle: f64,
     pub calls_before_first_edit: f64,
-    pub input_tokens: f64,
+    pub input_tokens: Option<f64>,
     pub by_tool: BTreeMap<String, f64>,
     pub last_tool: BTreeMap<String, u64>,
 }
@@ -414,9 +414,9 @@ struct Event {
     #[serde(default)]
     text: String,
     #[serde(default)]
-    input_tokens: u64,
+    input_tokens: Option<u64>,
     #[serde(default)]
-    output_tokens: u64,
+    output_tokens: Option<u64>,
     #[serde(default)]
     reason: serde_json::Value,
 }
@@ -450,9 +450,14 @@ pub fn facts(transcript: &str) -> TrialFacts {
     let mut last_kind = String::new();
     let mut final_text = String::new();
     let mut seen_edit = false;
+    let mut saw_usage = false;
+    f.input_tokens = Some(0);
+    f.output_tokens = Some(0);
     f.calls_before_first_edit = u64::MAX;
     for line in transcript.lines() {
         let Ok(e) = serde_json::from_str::<Event>(line) else {
+            f.input_tokens = None;
+            f.output_tokens = None;
             continue;
         };
         match e.kind.as_str() {
@@ -506,14 +511,25 @@ pub fn facts(transcript: &str) -> TrialFacts {
             }
             "settled" => f.ending = "settled".into(),
             "usage" => {
-                f.input_tokens += e.input_tokens;
-                f.output_tokens += e.output_tokens;
+                saw_usage = true;
+                f.input_tokens = f
+                    .input_tokens
+                    .zip(e.input_tokens)
+                    .and_then(|(a, b)| a.checked_add(b));
+                f.output_tokens = f
+                    .output_tokens
+                    .zip(e.output_tokens)
+                    .and_then(|(a, b)| a.checked_add(b));
             }
             _ => {}
         }
         last_kind = e.kind;
     }
     f.no_settle = last_kind != "settled";
+    if !saw_usage {
+        f.input_tokens = None;
+        f.output_tokens = None;
+    }
     if f.ending.is_empty() {
         f.ending = "unknown".into();
     }
@@ -617,7 +633,14 @@ pub fn aggregate(trials: &[&TrialFacts]) -> Aggregate {
                 .filter(|t| t.calls_before_first_edit != u64::MAX)
                 .count(),
         ),
-        input_tokens: mean(trials.iter().map(|t| t.input_tokens as f64), n),
+        input_tokens: if n == 0 {
+            None
+        } else {
+            trials
+                .iter()
+                .try_fold(0u64, |total, trial| total.checked_add(trial.input_tokens?))
+                .map(|total| total as f64 / n as f64)
+        },
         by_tool,
         last_tool,
     }
@@ -693,7 +716,7 @@ pub fn render(d: &Digest) -> String {
         out.push_str("The failed bucket includes unscored trials under the existing selection policy. A null reward means unavailable evidence, not a recorded task failure.\n\n");
     }
     out.push_str("### What failed trials did more of\n\n| fact (mean per trial) | failed | passed |\n|---|---|---|\n");
-    let rows: [(&str, f64, f64); 9] = [
+    let mut rows = vec![
         ("tool calls", d.failed.tool_calls, d.passed.tool_calls),
         ("bash timeouts", d.failed.timeouts, d.passed.timeouts),
         (
@@ -726,8 +749,10 @@ pub fn render(d: &Digest) -> String {
             d.failed.calls_before_first_edit,
             d.passed.calls_before_first_edit,
         ),
-        ("input tokens", d.failed.input_tokens, d.passed.input_tokens),
     ];
+    if let (Some(failed), Some(passed)) = (d.failed.input_tokens, d.passed.input_tokens) {
+        rows.push(("input tokens", failed, passed));
+    }
     let mut sorted: Vec<&(&str, f64, f64)> = rows.iter().collect();
     sorted.sort_by(|a, b| {
         let ra = if a.2 > 0.0 {
@@ -748,6 +773,17 @@ pub fn render(d: &Digest) -> String {
     });
     for (name, failed, passed) in sorted {
         out.push_str(&format!("| {name} | {failed:.2} | {passed:.2} |\n"));
+    }
+    if d.failed.input_tokens.is_none() || d.passed.input_tokens.is_none() {
+        out.push_str(&format!(
+            "| input tokens | {} | {} |\n",
+            d.failed
+                .input_tokens
+                .map_or_else(|| "unknown".to_owned(), |n| format!("{n:.2}")),
+            d.passed
+                .input_tokens
+                .map_or_else(|| "unknown".to_owned(), |n| format!("{n:.2}"))
+        ));
     }
     out.push_str(
         "\n### Calls per tool (mean per trial)\n\n| tool | failed | passed |\n|---|---|---|\n",
@@ -807,6 +843,27 @@ mod metadata_tests;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn missing_usage_is_not_a_zero_cost_diagnostic() {
+        let value = serde_json::to_value(super::facts("{\"kind\":\"settled\"}\n")).unwrap();
+        assert!(value["input_tokens"].is_null());
+        assert!(value["output_tokens"].is_null());
+        let zero = super::facts("{\"kind\":\"usage\",\"input_tokens\":0,\"output_tokens\":0}\n");
+        let missing = super::facts("{\"kind\":\"settled\"}\n");
+        assert_eq!(zero.input_tokens, Some(0));
+        let digest = super::Digest {
+            failed: super::aggregate(&[&zero, &missing]),
+            passed: super::aggregate(&[&zero]),
+            ..Default::default()
+        };
+        assert_eq!(digest.failed.input_tokens, None);
+        assert_eq!(digest.passed.input_tokens, Some(0.0));
+        assert!(super::render(&digest).contains("| input tokens | unknown | 0.00 |"));
+        let malformed =
+            super::facts("broken\n{\"kind\":\"usage\",\"input_tokens\":1,\"output_tokens\":1}\n");
+        assert_eq!(malformed.input_tokens, None);
+    }
+
     use super::*;
 
     fn line(kind: &str, fields: &[(&str, serde_json::Value)]) -> String {
@@ -877,7 +934,7 @@ mod tests {
         assert!(f.ended_deliberating);
         assert!(!f.no_settle);
         assert_eq!(f.by_tool["bash"], (2, 0));
-        assert_eq!(f.input_tokens, 100);
+        assert_eq!(f.input_tokens, Some(100));
         assert_eq!(f.last_tool.as_deref(), Some("edit_file"));
     }
 

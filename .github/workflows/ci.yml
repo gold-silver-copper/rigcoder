@@ -32,6 +32,7 @@ jobs:
           key: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && 'full' || 'routine' }}
           save-if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
       - run: cargo fmt --all -- --check
+      - run: python3 -B -m unittest discover -s harness -p test_build_inputs.py
       - run: cargo check --locked --workspace
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace --exclude rigcoder --exclude rigcoder-verify

@@ -1,6 +1,9 @@
 //! A Terminal-Bench task directory.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -108,9 +111,15 @@ impl Task {
             dir,
             instruction,
             workdir,
-            agent_timeout_secs: parsed.agent.timeout_sec as u64,
-            verifier_timeout_secs: parsed.verifier.timeout_sec as u64,
-            build_timeout_secs: parsed.environment.build_timeout_sec as u64,
+            agent_timeout_secs: timeout_seconds(parsed.agent.timeout_sec, "agent.timeout_sec")?,
+            verifier_timeout_secs: timeout_seconds(
+                parsed.verifier.timeout_sec,
+                "verifier.timeout_sec",
+            )?,
+            build_timeout_secs: timeout_seconds(
+                parsed.environment.build_timeout_sec,
+                "environment.build_timeout_sec",
+            )?,
             cpus: parsed.environment.cpus,
             memory: parsed.environment.memory,
             difficulty: parsed.metadata.difficulty,
@@ -120,4 +129,14 @@ impl Task {
     pub fn image_tag(&self) -> String {
         format!("rigcoder-bench/{}:local", self.name)
     }
+}
+
+// Execution uses whole-second GNU timeout arguments; zero disables the
+// deadline. Reject values that cannot produce a positive bounded duration.
+fn timeout_seconds(value: f64, field: &str) -> Result<u64> {
+    let duration = Duration::try_from_secs_f64(value)
+        .with_context(|| format!("{field} must be a finite positive timeout"))?;
+    let seconds = duration.as_secs();
+    anyhow::ensure!(seconds > 0, "{field} must be at least one second");
+    Ok(seconds)
 }

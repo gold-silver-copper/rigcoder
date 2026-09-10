@@ -47,6 +47,8 @@ enum Answer {
     Err(ErrorReport),
     /// A stream that writes this text and ends without its terminal record.
     Truncated(String),
+    /// Expose an invalid name while withholding the terminal response.
+    GatedInvalid(futures::channel::oneshot::Receiver<()>),
 }
 
 struct Scripted(Mutex<VecDeque<Answer>>);
@@ -74,6 +76,29 @@ impl Serve for Scripted {
             .pop_front()
             .unwrap_or_else(|| Answer::Text("done".into()));
         match answer {
+            Answer::GatedInvalid(gate) => Reply::written(|mut out| async move {
+                use rig::streaming::{BlockId, BlockKind, Delta, StreamEvent};
+                let id = BlockId::Wire("invalid-boundary".into());
+                out.event(StreamEvent::BlockStart {
+                    id: id.clone(),
+                    kind: BlockKind::ToolCall,
+                })
+                .await
+                .unwrap();
+                out.event(StreamEvent::BlockDelta {
+                    id,
+                    delta: Delta::ToolName {
+                        name: "teleport".into(),
+                    },
+                })
+                .await
+                .unwrap();
+                gate.await.unwrap();
+                // An error closes the producer after the policy already failed.
+                out.error(ErrorReport::new(ErrorKind::Provider, "producer closed"))
+                    .await
+                    .unwrap();
+            }),
             Answer::Truncated(text) => Reply::written(|mut out| async move {
                 let _ = out.text(text).await;
             }),
@@ -706,4 +731,51 @@ fn a_witness_trace_written_by_the_cli_shape_is_readable_by_the_digest() {
     std::fs::write(dir.join("observations.json"), &json).unwrap();
     assert!(Path::new(&dir).join("observations.json").is_file());
     assert!(json.contains("\"kind\":\"rigcoder/provider_retry\""));
+}
+
+#[test]
+fn failed_run_with_a_gated_producer_cannot_finalize_its_trace() {
+    let (release, gate) = futures::channel::oneshot::channel();
+    let mut cell = cell(
+        "early-invalid-finalization",
+        vec![Answer::GatedInvalid(gate)],
+        2,
+    );
+    cell.settings(true, 0);
+    cell.start("Call teleport");
+    cell.drive();
+    assert_eq!(cell.ending(), "unknown_tool_call");
+    let before = cell.facts();
+    assert!(before.contains(&"invalid_call".into()));
+    assert!(before.contains(&"ended:unknown_tool_call".into()));
+    assert!(
+        !before.contains(&"landed".into()),
+        "the producer gate is still closed"
+    );
+    rigcoder::observe::finalize(cell.app.world());
+    assert!(
+        !cell.trace().finalized,
+        "runtime failure is not producer completion"
+    );
+    release.send(()).unwrap();
+    cell.drive_until("the producer lands", |world| {
+        rigcoder::observations(world)
+            .unwrap()
+            .observations
+            .iter()
+            .any(|fact| matches!(fact.action, Action::Landed { .. }))
+    });
+    let after = cell.facts();
+    let ended = after
+        .iter()
+        .position(|fact| fact == "ended:unknown_tool_call")
+        .unwrap();
+    let landed = after.iter().position(|fact| fact == "landed").unwrap();
+    assert!(
+        ended < landed,
+        "early failure legitimately precedes producer completion"
+    );
+    assert_eq!(after.iter().filter(|fact| *fact == "landed").count(), 1);
+    rigcoder::observe::finalize(cell.app.world());
+    assert!(cell.trace().finalized);
 }

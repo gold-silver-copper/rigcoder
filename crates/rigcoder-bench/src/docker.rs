@@ -24,8 +24,16 @@ fn run(cmd: &mut Command, what: &str) -> Result<Output> {
         .stdin(Stdio::null())
         .output()
         .with_context(|| format!("running docker for {what}"))?;
+    // GNU timeout --signal=KILL kills its own process group on expiry.
+    // A signalled host process must not look like an inner command's exit 137:
+    // the remote command may still be alive, so callers must skip scoring.
+    let code = out.status.code().with_context(|| {
+        format!(
+            "docker client terminated by signal during {what}; remote execution may still be active"
+        )
+    })?;
     Ok(Output {
-        code: out.status.code().unwrap_or(-1),
+        code,
         stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
     })
@@ -63,12 +71,14 @@ fn host_timeout() -> Result<&'static str> {
 }
 
 /// Build the task image from `environment/`, natively for this daemon.
-pub fn build(context: &Path, tag: &str, timeout: Duration) -> Result<Output> {
+pub fn build(context: &Path, tag: &str, receipt: &Path, timeout: Duration) -> Result<Output> {
     let mut cmd = Command::new(host_timeout()?);
     cmd.arg("--signal=KILL")
         .arg(timeout.as_secs().to_string())
         .arg("docker")
         .arg("build")
+        .arg("--iidfile")
+        .arg(receipt)
         .arg("-t")
         .arg(tag)
         .arg(context);
@@ -139,8 +149,10 @@ pub fn copy_out(name: &str, from: &str, to: &Path) -> Result<()> {
 }
 
 /// Run a shell command in the container as root, with a hard timeout
-/// enforced inside the container (coreutils `timeout`, present in every
-/// base image the dataset uses), and `env` exported to it.
+/// enforced both on the host and inside the container, with `env` exported
+/// to it. The host deadline survives replacement of the container's timeout.
+/// Killing the Docker client does not stop remote processes: the caller must
+/// still remove the container when the trial finishes.
 pub fn exec(
     name: &str,
     workdir: &str,
@@ -148,7 +160,10 @@ pub fn exec(
     script: &str,
     timeout: Duration,
 ) -> Result<Output> {
-    let mut cmd = docker();
+    let mut cmd = Command::new(host_timeout()?);
+    cmd.arg("--signal=KILL")
+        .arg(timeout.as_secs().to_string())
+        .arg("docker");
     cmd.args(["exec", "-w", workdir]);
     for (key, value) in env {
         cmd.arg("-e").arg(format!("{key}={value}"));

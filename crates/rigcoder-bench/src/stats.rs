@@ -28,9 +28,9 @@ pub enum Decision {
     Reverted,
 }
 
-/// Kept when the lower bound is at least the best kept lower bound and the
-/// point estimate has not dropped. A tie keeps: an edit that costs nothing
-/// is not punished, and the ledger says it was a tie.
+/// Exploratory development ranking: retain a nondecreasing point estimate
+/// and lower bound, recording exact ties. This rule ignores cost and repeated
+/// selection; it is not statistical evidence for promotion.
 pub fn keep_decision(score: f64, ci_low: f64, best_score: f64, best_low: f64) -> Decision {
     if ci_low < best_low || score < best_score {
         Decision::Reverted
@@ -43,9 +43,10 @@ pub fn keep_decision(score: f64, ci_low: f64, best_score: f64, best_low: f64) ->
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cost {
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub cache_tokens: u64,
+    /// Reported token totals; unknown if any contributing trial is unknown.
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cache_tokens: Option<u64>,
     pub tool_calls: u64,
     pub wall_seconds: f64,
 }
@@ -100,9 +101,9 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
     };
     let (ci_low, ci_high) = wilson(passed, n);
     let cost = Cost {
-        input_tokens: trials.iter().map(|t| t.input_tokens).sum(),
-        output_tokens: trials.iter().map(|t| t.output_tokens).sum(),
-        cache_tokens: trials.iter().map(|t| t.cache_tokens).sum(),
+        input_tokens: token_total(trials.iter().map(|t| t.input_tokens)),
+        output_tokens: token_total(trials.iter().map(|t| t.output_tokens)),
+        cache_tokens: token_total(trials.iter().map(|t| t.cache_tokens)),
         tool_calls: trials.iter().map(|t| t.tool_calls).sum(),
         wall_seconds: trials.iter().map(|t| t.wall_seconds).sum(),
     };
@@ -119,6 +120,10 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
     }
 }
 
+fn token_total(mut values: impl Iterator<Item = Option<u64>>) -> Option<u64> {
+    values.try_fold(0u64, |total, value| total.checked_add(value?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,9 +136,9 @@ mod tests {
                     task: (*task).to_owned(),
                     attempt: i + 1,
                     reward: *r,
-                    input_tokens: 10,
-                    output_tokens: 5,
-                    cache_tokens: 0,
+                    input_tokens: Some(10),
+                    output_tokens: Some(5),
+                    cache_tokens: Some(0),
                     tool_calls: 3,
                     wall_seconds: 1.0,
                     settled: true,
@@ -181,6 +186,19 @@ mod tests {
             keep_decision(1.0, low, 50.0 / 60.0, best_low),
             Decision::Reverted
         );
+    }
+
+    #[test]
+    fn one_unknown_or_overflowing_trial_invalidates_only_its_token_total() {
+        let mut records = trials(&[("a", &[1.0, 0.0])]);
+        records[1].input_tokens = None;
+        records[0].output_tokens = Some(u64::MAX);
+        let summary = summarize(&records);
+        assert_eq!(summary.cost.input_tokens, None);
+        assert_eq!(summary.cost.output_tokens, None);
+        assert_eq!(summary.cost.cache_tokens, Some(0));
+        assert_eq!(summary.score, 0.5);
+        assert_eq!(summary.trials, 2);
     }
 
     #[test]

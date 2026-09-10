@@ -101,16 +101,48 @@ pub fn trace(world: &World) -> Option<ObservationTrace> {
     let secrets = crate::model::world_diagnostic_secrets(world);
     world.get_resource::<Observations>().map(|observations| {
         let mut trace = observations.0.trace();
+        trace.finalized &= session_drained(world);
         crate::artifacts::observations(&mut trace, &secrets);
         trace
     })
 }
 
-/// The session finished normally.
+/// Mark a finished, drained session as finalized.
+///
+/// An invalid streamed tool name can fail the run before its producer ends.
+/// Such an export remains partial while effects are pending or in flight; a
+/// host may call this again after draining them. This never waits for a producer.
 pub fn finalize(world: &World) {
-    if let Some(observations) = world.get_resource::<Observations>() {
+    if session_drained(world)
+        && let Some(observations) = world.get_resource::<Observations>()
+    {
         observations.0.finalize();
     }
+}
+
+fn session_drained(world: &World) -> bool {
+    !world
+        .get_resource::<crate::Conversation>()
+        .is_some_and(|session| session.is_busy())
+        && !has_unanswered_effect(world)
+        && !has_component::<rig_ecs::bus::InFlight>(world)
+        && !has_component::<rig_ecs::bus::Publishing>(world)
+}
+
+fn has_unanswered_effect(world: &World) -> bool {
+    world
+        .try_query_filtered::<Entity, With<rig_ecs::bus::PendingEffect>>()
+        .is_some_and(|mut query| {
+            query
+                .iter(world)
+                .any(|entity| world.get::<rig_ecs::bus::EffectOutcome>(entity).is_none())
+        })
+}
+
+fn has_component<C: Component>(world: &World) -> bool {
+    world
+        .try_query_filtered::<Entity, With<C>>()
+        .is_some_and(|mut query| query.iter(world).next().is_some())
 }
 
 /// rigcoder as an emitter: the policy module and the crate version.

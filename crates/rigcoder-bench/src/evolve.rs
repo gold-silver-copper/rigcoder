@@ -1,7 +1,7 @@
 //! `run`: evaluate a slice. `iterate`: the self-improvement loop over it.
 
 use std::{
-    collections::{BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::{Path, PathBuf},
     process::Command,
     sync::Mutex,
@@ -127,7 +127,10 @@ impl Lane {
             {
                 return Lane::Prompt;
             }
-            if f.input_tokens > p.input_tokens * 1.5 && p.input_tokens > 0.0 {
+            if let (Some(failed), Some(passed)) = (f.input_tokens, p.input_tokens)
+                && failed > passed * 1.5
+                && passed > 0.0
+            {
                 return Lane::Shaping;
             }
             if f.no_settle > p.no_settle + 0.25 {
@@ -230,9 +233,6 @@ pub struct IterateArgs {
     /// Force one lane for every generation instead of choosing from the digest.
     #[arg(long, value_enum)]
     pub lane: Option<Lane>,
-    /// Open a pull request on the rigcoder repository for every kept generation.
-    #[arg(long)]
-    pub pr: bool,
 }
 
 pub fn provider_key(provider: &str) -> Option<&'static str> {
@@ -285,6 +285,8 @@ fn build_linux(root: &Path, binary: &Path) -> Result<()> {
             binary.display()
         );
     }
+    let output = root.join(binary);
+    remove_build_output(&output)?;
     println!("$ bash harness/build-linux.sh");
     let status = Command::new("bash")
         .arg("harness/build-linux.sh")
@@ -292,9 +294,25 @@ fn build_linux(root: &Path, binary: &Path) -> Result<()> {
         .current_dir(root)
         .status()?;
     if !status.success() {
+        remove_build_output(&output)?;
         bail!("harness/build-linux.sh failed");
     }
+    anyhow::ensure!(
+        output.is_file(),
+        "build succeeded without producing {}",
+        output.display()
+    );
     Ok(())
+}
+
+// A failed build must not leave an earlier or partially produced executable
+// available to a subsequent evaluation-only run.
+fn remove_build_output(path: &Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("removing {}", path.display())),
+    }
 }
 
 fn validate_run(args: &RunArgs, tasks: &[String]) -> Result<()> {
@@ -338,7 +356,72 @@ fn new_job_dir(root: &Path, prefix: Option<&str>, label: &str) -> Result<PathBuf
     Ok(dir)
 }
 
-/// Evaluate `tasks` with `attempts` each, `concurrency` at a time.
+// Keep mutable dataset paths out of trial execution. Refuse links and special
+// files rather than accidentally including inputs outside the declared task.
+fn snapshot_inputs(source: &Path, target: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(source)?;
+    if metadata.is_dir() {
+        std::fs::create_dir_all(target)?;
+        for entry in std::fs::read_dir(source)? {
+            let entry = entry?;
+            snapshot_inputs(&entry.path(), &target.join(entry.file_name()))?;
+        }
+        std::fs::set_permissions(target, metadata.permissions())?;
+    } else if metadata.is_file() {
+        std::fs::copy(source, target)?;
+    } else {
+        bail!(
+            "task snapshot requires regular files and directories: {}",
+            source.display()
+        );
+    }
+    Ok(())
+}
+
+fn input_identity(root: &Path, directory: &Path) -> Result<BTreeMap<String, serde_json::Value>> {
+    fn visit(
+        root: &Path,
+        base: &Path,
+        directory: &Path,
+        files: &mut BTreeMap<String, serde_json::Value>,
+    ) -> Result<()> {
+        for entry in std::fs::read_dir(directory)? {
+            let path = entry?.path();
+            let metadata = std::fs::symlink_metadata(&path)?;
+            let identity = if metadata.is_dir() {
+                visit(root, base, &path, files)?;
+                serde_json::json!({"kind": "directory"})
+            } else {
+                anyhow::ensure!(metadata.is_file(), "non-file snapshot input");
+                let path_text = path.to_str().context("task path is not UTF-8")?;
+                serde_json::json!({
+                    "kind": "file",
+                    "git_blob_oid": git(root, &["hash-object", "--no-filters", "--", path_text])?,
+                })
+            };
+            #[cfg(unix)]
+            let identity = {
+                use std::os::unix::fs::PermissionsExt;
+                let mut identity = identity;
+                identity["mode"] = metadata.permissions().mode().into();
+                identity
+            };
+            files.insert(
+                path.strip_prefix(base)?
+                    .to_str()
+                    .context("task path is not UTF-8")?
+                    .to_owned(),
+                identity,
+            );
+        }
+        Ok(())
+    }
+    let mut files = BTreeMap::new();
+    visit(root, directory, directory, &mut files)?;
+    Ok(files)
+}
+
+/// Evaluate frozen task inputs with `attempts` each, `concurrency` at a time.
 pub fn evaluate(
     root: &Path,
     args: &RunArgs,
@@ -366,10 +449,91 @@ pub fn evaluate(
         );
     }
     let tasks_dir = root.join(&args.tasks_dir);
+    let snapshot_dir = job_dir.join("tasks");
+    for name in tasks {
+        let destination = snapshot_dir.join(name);
+        std::fs::create_dir_all(&destination)?;
+        for input in ["task.toml", "instruction.md", "environment", "tests"] {
+            snapshot_inputs(&tasks_dir.join(name).join(input), &destination.join(input))?;
+        }
+    }
     let loaded: Vec<Task> = tasks
         .iter()
-        .map(|name| Task::load(&tasks_dir, name))
+        .map(|name| Task::load(&snapshot_dir, name))
         .collect::<Result<_>>()?;
+    // A build or external replacement between trials must not mix executable
+    // versions within one score. Every upload uses this job-owned snapshot.
+    let original_binary = binary;
+    let binary = job_dir.join("rigcoder.bin");
+    std::fs::copy(&original_binary, &binary).context("snapshotting evaluated binary")?;
+    let receipt_path = original_binary.with_file_name(format!(
+        "{}.build.json",
+        original_binary
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("binary filename is not UTF-8")?
+    ));
+    let has_receipt = match std::fs::symlink_metadata(&receipt_path) {
+        Ok(metadata) => {
+            anyhow::ensure!(metadata.is_file(), "build receipt must be a regular file");
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error).context("inspecting build receipt"),
+    };
+    let receipt = if has_receipt {
+        let arch = match original_binary.file_name().and_then(|name| name.to_str()) {
+            Some("rigcoder-linux-x86_64") => "x86_64",
+            Some("rigcoder-linux-aarch64") => "aarch64",
+            _ => std::env::consts::ARCH,
+        };
+        let checked = Command::new("python3")
+            .arg(root.join("harness/build-inputs.py"))
+            .arg("verify")
+            .arg(root)
+            .arg(&binary)
+            .arg(&receipt_path)
+            .arg(arch)
+            .output()
+            .context("validating build receipt")?;
+        anyhow::ensure!(
+            checked.status.success(),
+            "build receipt validation failed: {}",
+            String::from_utf8_lossy(&checked.stderr)
+        );
+        Some(
+            serde_json::from_slice::<serde_json::Value>(&checked.stdout)
+                .context("reading validated receipt")?,
+        )
+    } else {
+        anyhow::ensure!(args.no_build, "normal evaluation requires a build receipt");
+        None
+    };
+    let binary_path = binary.to_str().context("binary path is not UTF-8")?;
+    let mut manifest = serde_json::json!({
+        "version": 1,
+        "source_head": git(root, &["rev-parse", "HEAD"])?,
+        "source_dirty": !git(root, &["status", "--porcelain"])?.is_empty(),
+        "binary": {
+            "file": "rigcoder.bin",
+            "git_object_format": git(root, &["rev-parse", "--show-object-format"])?,
+            "git_blob_oid": git(root, &["hash-object", "--no-filters", "--", binary_path])?,
+            "source_binding": if receipt.is_some() { "matched_receipt" } else { "unverified" },
+            "build_receipt": receipt,
+        },
+        "provider": provider,
+        "model": model,
+        "tasks": tasks,
+        "task_files": input_identity(root, &snapshot_dir)?,
+        "attempts": args.attempts,
+        "concurrency": args.concurrency,
+        "max_turns": args.max_turns,
+        "checkpoint": args.checkpoint,
+    });
+    std::fs::write(
+        job_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
     println!(
         "job {job}: {} task(s) × {} attempt(s), {} at a time, {}",
         loaded.len(),
@@ -380,6 +544,7 @@ pub fn evaluate(
 
     // Images first, in parallel: docker serializes what it must.
     let build_errors: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let images = Mutex::new(BTreeMap::new());
     let queue: Mutex<VecDeque<&Task>> = Mutex::new(loaded.iter().collect());
     std::thread::scope(|scope| {
         for _ in 0..args.concurrency.max(1) {
@@ -392,13 +557,25 @@ pub fn evaluate(
                         "building {} ({}, {}s agent timeout)",
                         task.name, task.difficulty, task.agent_timeout_secs
                     );
-                    if let Err(error) = trial::build_image(task) {
-                        build_errors.lock().unwrap().push(format!("{error:#}"));
+                    match trial::build_image(
+                        task,
+                        &job_dir.join("images").join(format!("{}.id", task.name)),
+                    ) {
+                        Ok(image) => {
+                            images.lock().unwrap().insert(task.name.clone(), image);
+                        }
+                        Err(error) => build_errors.lock().unwrap().push(format!("{error:#}")),
                     }
                 }
             });
         }
     });
+    let images = images.into_inner().unwrap();
+    manifest["images"] = serde_json::to_value(&images)?;
+    std::fs::write(
+        job_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest)?,
+    )?;
     let build_errors = build_errors.into_inner().unwrap();
     if !build_errors.is_empty() {
         let errors = build_errors.join("\n");
@@ -424,6 +601,7 @@ pub fn evaluate(
                     };
                     let spec = TrialSpec {
                         task,
+                        image: &images[&task.name],
                         attempt,
                         job_dir: &job_dir,
                         binary: &binary,
@@ -631,31 +809,32 @@ fn improve(
     {
         bail!("meta agent changed HEAD or branch; inspect the repository before continuing");
     }
-    // Restore both staged and unstaged changes, including new files. The
-    // ledger is generated by this loop, so preserve its pre-agent contents.
-    let note_relative = note
-        .strip_prefix(root)?
-        .to_str()
-        .context("note path is not UTF-8")?;
-    let mut allowed_files = lane.files().to_vec();
-    allowed_files.push(note_relative);
-    clean_outside(root, &allowed_files)?;
-    if let Some(bytes) = ledger_before {
-        std::fs::write(&ledger_path, bytes)?;
-    }
-    let status = result?;
-    if !status.success() {
-        revert_mutable(root)?;
-        bail!("meta agent failed ({status}); candidate reverted");
-    }
-    // Refuse a change that does not compile: revert to the last kept state.
-    let check = Command::new("cargo")
-        .args(["check", "--workspace"])
-        .current_dir(root)
-        .status()?;
-    if !check.success() {
-        println!("improvement does not compile; reverting");
-        revert_mutable(root)?;
+    let checked = (|| -> Result<()> {
+        // Restore unauthorized edits and preserve this loop's generated ledger.
+        let note_relative = note
+            .strip_prefix(root)?
+            .to_str()
+            .context("note path is not UTF-8")?;
+        let mut allowed_files = lane.files().to_vec();
+        allowed_files.push(note_relative);
+        clean_outside(root, &allowed_files)?;
+        if let Some(bytes) = ledger_before {
+            std::fs::write(&ledger_path, bytes)?;
+        }
+        let status = result?;
+        anyhow::ensure!(status.success(), "meta agent failed ({status})");
+        let check = Command::new("cargo")
+            .args(["check", "--workspace"])
+            .current_dir(root)
+            .status()?;
+        anyhow::ensure!(check.success(), "improvement does not compile ({check})");
+        Ok(())
+    })();
+    if let Err(error) = checked {
+        if let Err(cleanup) = rollback_unscored(root, &args.run.binary, &note) {
+            return Err(error.context(format!("{cleanup:#}")));
+        }
+        return Err(error);
     }
     Ok(note)
 }
@@ -752,6 +931,51 @@ fn revert_mutable(root: &Path) -> Result<()> {
     restore_paths(root, &restore)
 }
 
+fn rollback_unscored(root: &Path, binary: &Path, note: &Path) -> Result<()> {
+    // Attempt source and binary cleanup even if evidence storage fails.
+    let archive = (|| -> Result<()> {
+        let relative = note
+            .strip_prefix(root)?
+            .to_str()
+            .context("note path is not UTF-8")?;
+        let indexed = !git(root, &["ls-files", "--stage", "--", relative])?.is_empty();
+        if note.is_file() || indexed {
+            let dir = new_job_dir(root, None, "unscored-candidate")?;
+            if note.is_file() {
+                std::fs::copy(note, dir.join("improvement.md"))?;
+            }
+            if indexed {
+                // Preserve exact bytes, including final newlines. Worktree and
+                // index can contain different versions of the same note.
+                let output = Command::new("git")
+                    .args(["show", &format!(":{relative}")])
+                    .current_dir(root)
+                    .output()?;
+                anyhow::ensure!(
+                    output.status.success(),
+                    "reading staged improvement note failed"
+                );
+                std::fs::write(dir.join("improvement-index.md"), output.stdout)?;
+            }
+        }
+        // A note can exist only in the index after a staged deletion.
+        restore_paths(root, &[relative.to_owned()])?;
+        Ok(())
+    })();
+    let invalidate = remove_build_output(&root.join(binary));
+    let restore = revert_mutable(root);
+    let errors: Vec<String> = [archive, invalidate, restore]
+        .into_iter()
+        .filter_map(|result| result.err().map(|error| format!("{error:#}")))
+        .collect();
+    anyhow::ensure!(
+        errors.is_empty(),
+        "unscored candidate cleanup failed: {}",
+        errors.join("; ")
+    );
+    Ok(())
+}
+
 pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
     let run_args = &args.run;
     if run_args.slice == "holdout" && !args.no_improve {
@@ -759,6 +983,18 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
     }
     let tasks = tasks_for(root, run_args)?;
     validate_run(run_args, &tasks)?;
+    let slice = slice_name(run_args);
+    let holdout = if !args.no_improve || (args.holdout && slice == "dev") {
+        slices::read(root, "holdout")?
+    } else {
+        Vec::new()
+    };
+    if !args.no_improve {
+        anyhow::ensure!(
+            !tasks.iter().any(|task| holdout.contains(task)),
+            "self-improvement tasks overlap the holdout; use disjoint development tasks"
+        );
+    }
     if args.generations == 0 {
         bail!("generations must be greater than zero");
     }
@@ -773,19 +1009,30 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
     // Every invocation evaluates its own baseline. Historical scores may
     // use other models, slices, task versions, or commits.
     let mut best = (-1.0, -1.0);
-    let slice = slice_name(run_args);
     let mut previous_lane = None;
     let mut lane_this_generation = None;
     let mut meta_commit = None;
     let mut note_this_generation: Option<PathBuf> = None;
 
     for generation in 0..args.generations {
-        if !run_args.no_build {
-            build_linux(root, &run_args.binary)?;
-        }
-        let (records, job_dir) = evaluate(root, run_args, &format!("gen-{generation:03}"), &tasks)?;
+        let evaluated = (|| {
+            if !run_args.no_build {
+                build_linux(root, &run_args.binary)?;
+            }
+            evaluate(root, run_args, &format!("gen-{generation:03}"), &tasks)
+        })();
+        let (records, job_dir) = match evaluated {
+            Ok(result) => result,
+            Err(error) => {
+                if let Some(note) = &note_this_generation
+                    && let Err(cleanup) = rollback_unscored(root, &run_args.binary, note)
+                {
+                    return Err(error.context(format!("{cleanup:#}")));
+                }
+                return Err(error);
+            }
+        };
         let summary = stats::summarize(&records);
-        let best_before = best;
         let decision = stats::keep_decision(summary.score, summary.ci_low, best.0, best.1);
         let mut e = entry(
             root,
@@ -799,6 +1046,7 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
         )?;
         e.lane = lane_this_generation;
         e.meta_commit = meta_commit.clone();
+        let mut rebuild_rejected = false;
         if !args.no_improve {
             match decision {
                 Decision::Kept | Decision::Tie => {
@@ -824,16 +1072,6 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
                         git(root, &["commit", "-q", "-m", &message])?;
                         e.commit = git(root, &["rev-parse", "--short", "HEAD"])?;
                         rebuild_host(root)?;
-                        if args.pr {
-                            open_pr(
-                                root,
-                                generation,
-                                lane_this_generation,
-                                &summary,
-                                best_before,
-                                note_this_generation.as_deref(),
-                            )?;
-                        }
                     }
                 }
                 Decision::Reverted => {
@@ -842,6 +1080,12 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
                         summary.score, summary.ci_low, best.0, best.1
                     );
                     revert_mutable(root)?;
+                    // Bookkeeping can fail too; invalidate rejected behavior
+                    // before archiving evidence or appending the ledger.
+                    remove_build_output(&root.join(&run_args.binary))?;
+                    // Restore the executable as well as source: a final rejection
+                    // may have no later generation or holdout to trigger a build.
+                    rebuild_rejected = true;
                     // Preserve rejected notes as job artifacts without including
                     // them in a later generation's commit.
                     if let Some(note) = &note_this_generation
@@ -862,6 +1106,10 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
             best = (summary.score, summary.ci_low);
         }
         ledger::append(root, &e)?;
+        // Persist the decision and rejected note before a fallible rebuild.
+        if rebuild_rejected {
+            build_linux(root, &run_args.binary)?;
+        }
         if args.no_improve || generation + 1 == args.generations {
             continue;
         }
@@ -880,7 +1128,6 @@ pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
     }
 
     if args.holdout && slice == "dev" {
-        let holdout = slices::read(root, "holdout")?;
         // A final rejected candidate left its binary on disk; rebuild HEAD.
         if !run_args.no_build {
             build_linux(root, &run_args.binary)?;
@@ -1046,54 +1293,6 @@ fn rebuild_host(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// A pull request for a kept generation: the note as the body, the ledger
-/// delta in the title.
-fn open_pr(
-    root: &Path,
-    generation: usize,
-    lane: Option<Lane>,
-    summary: &Summary,
-    best_before: (f64, f64),
-    note: Option<&Path>,
-) -> Result<()> {
-    let branch = git(root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
-    let _ = git(root, &["push", "-q", "-u", "origin", &branch]);
-    let title = format!(
-        "evolve: gen {generation:03} {} {:.3} [{:.3}] (was {:.3} [{:.3}])",
-        lane.map_or("baseline", Lane::name),
-        summary.score,
-        summary.ci_low,
-        best_before.0.max(0.0),
-        best_before.1.max(0.0)
-    );
-    let mut body = format!(
-        "Generation {generation}: score {:.3} (95% CI {:.3}–{:.3}), pass@1 {:.3}, pass@k {:.3}, {} trials of {} tasks; before: {:.3} [{:.3}].\n\n",
-        summary.score,
-        summary.ci_low,
-        summary.ci_high,
-        summary.pass1,
-        summary.passk,
-        summary.trials,
-        summary.tasks,
-        best_before.0.max(0.0),
-        best_before.1.max(0.0)
-    );
-    if let Some(text) = note.and_then(|n| std::fs::read_to_string(n).ok()) {
-        body.push_str("## The agent's note\n\n");
-        body.push_str(&text);
-    }
-    let status = Command::new("gh")
-        .args([
-            "pr", "create", "--base", "main", "--head", &branch, "--title", &title, "--body", &body,
-        ])
-        .current_dir(root)
-        .status()?;
-    if !status.success() {
-        println!("gh pr create failed (is the branch pushed and gh authenticated?)");
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod lane_tests {
     use super::*;
@@ -1106,6 +1305,27 @@ mod lane_tests {
             passed,
             trials: Vec::new(),
         }
+    }
+
+    #[test]
+    fn unknown_usage_cannot_supply_a_shaping_signal() {
+        let failed = Aggregate {
+            trials: 2,
+            input_tokens: Some(200.0),
+            ..Default::default()
+        };
+        let passed = Aggregate {
+            trials: 2,
+            input_tokens: Some(100.0),
+            ..Default::default()
+        };
+        let mut evidence = digest(failed, passed);
+        assert_eq!(Lane::choose(Some(&evidence), None), Lane::Shaping);
+        evidence.failed.input_tokens = None;
+        assert_eq!(Lane::choose(Some(&evidence), None), Lane::Prompt);
+        evidence.failed.input_tokens = Some(200.0);
+        evidence.passed.input_tokens = None;
+        assert_eq!(Lane::choose(Some(&evidence), None), Lane::Prompt);
     }
 
     #[test]

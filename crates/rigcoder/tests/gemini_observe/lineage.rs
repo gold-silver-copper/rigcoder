@@ -267,6 +267,8 @@ fn committed_expected_traces() {
             "invalid_tool_stream",
             "Call the teleport function now.",
             Config {
+                // Match the frozen packet's explicit delivery schedule.
+                complete_delivery_before_policy: true,
                 prompt: "You are a test agent. You have a function named teleport that takes no arguments. Call it whenever the user asks, without any other text.",
                 ..Config::streamed()
             },

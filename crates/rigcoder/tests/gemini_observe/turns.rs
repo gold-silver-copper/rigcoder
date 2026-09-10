@@ -320,7 +320,10 @@ fn an_invalid_tool_call() {
     pair(
         MATRIX,
         "invalid_tool",
+        // The frozen stream packet records full delivery before policy. The
+        // gated observe_matrix regression covers failure before producer EOF.
         |stream| Config {
+            complete_delivery_before_policy: stream,
             prompt: "You are a test agent. You have a function named teleport that takes no arguments. Call it whenever the user asks, without any other text.",
             ..Config::delivery(stream)
         },

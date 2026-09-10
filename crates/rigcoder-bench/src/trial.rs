@@ -16,9 +16,11 @@ pub struct TrialRecord {
     pub task: String,
     pub attempt: usize,
     pub reward: f64,
-    pub input_tokens: u64,
-    pub output_tokens: u64,
-    pub cache_tokens: u64,
+    /// Sum of reported usage; null when absent, malformed or overflowing.
+    /// Even a known sum does not prove every provider attempt reported usage.
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cache_tokens: Option<u64>,
     pub tool_calls: u64,
     pub wall_seconds: f64,
     pub settled: bool,
@@ -28,6 +30,7 @@ pub struct TrialRecord {
 
 pub struct TrialSpec<'a> {
     pub task: &'a Task,
+    pub image: &'a str,
     pub attempt: usize,
     pub job_dir: &'a Path,
     pub binary: &'a Path,
@@ -45,10 +48,19 @@ pub fn trial_dir(job_dir: &Path, task: &str, attempt: usize) -> PathBuf {
 }
 
 /// Build the task image once per job (docker's own cache makes repeats cheap).
-pub fn build_image(task: &Task) -> Result<()> {
+pub fn build_image(task: &Task, receipt: &Path) -> Result<String> {
+    if let Some(parent) = receipt.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::remove_file(receipt) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     let out = docker::build(
         &task.dir.join("environment"),
         &task.image_tag(),
+        receipt,
         Duration::from_secs(task.build_timeout_secs),
     )?;
     if out.code != 0 {
@@ -59,7 +71,15 @@ pub fn build_image(task: &Task) -> Result<()> {
             last_lines(&out.stderr, 20)
         );
     }
-    Ok(())
+    let image = std::fs::read_to_string(receipt).context("build produced no image ID")?;
+    let image = image.trim();
+    anyhow::ensure!(
+        image
+            .strip_prefix("sha256:")
+            .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())),
+        "build produced invalid image ID"
+    );
+    Ok(image.to_owned())
 }
 
 pub fn run(spec: &TrialSpec) -> TrialRecord {
@@ -99,7 +119,7 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
     let task = spec.task;
     docker::start(
         container,
-        &task.image_tag(),
+        spec.image,
         &task.workdir,
         task.cpus,
         &task.memory,
@@ -239,33 +259,50 @@ fn read_agent_output(dir: &Path, task: &str, attempt: usize) -> TrialRecord {
         task: task.to_owned(),
         attempt,
         reward: 0.0,
-        input_tokens: 0,
-        output_tokens: 0,
-        cache_tokens: 0,
+        input_tokens: Some(0),
+        output_tokens: Some(0),
+        cache_tokens: Some(0),
         tool_calls: 0,
         wall_seconds: 0.0,
         settled: false,
         error: None,
     };
     let Ok(text) = std::fs::read_to_string(dir.join("agent").join("transcript.jsonl")) else {
+        record.input_tokens = None;
+        record.output_tokens = None;
+        record.cache_tokens = None;
         return record;
     };
+    let mut saw_usage = false;
     for line in text.lines() {
         let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            record.input_tokens = None;
+            record.output_tokens = None;
+            record.cache_tokens = None;
             continue;
         };
         match event.get("kind").and_then(|k| k.as_str()) {
             Some("tool_call") => record.tool_calls += 1,
             Some("settled") => record.settled = true,
             Some("usage") => {
-                record.input_tokens += event["input_tokens"].as_u64().unwrap_or(0);
-                record.output_tokens += event["output_tokens"].as_u64().unwrap_or(0);
-                record.cache_tokens += event["cached_input_tokens"].as_u64().unwrap_or(0);
+                saw_usage = true;
+                record.input_tokens = add_usage(record.input_tokens, &event["input_tokens"]);
+                record.output_tokens = add_usage(record.output_tokens, &event["output_tokens"]);
+                record.cache_tokens = add_usage(record.cache_tokens, &event["cached_input_tokens"]);
             }
             _ => {}
         }
     }
+    if !saw_usage {
+        record.input_tokens = None;
+        record.output_tokens = None;
+        record.cache_tokens = None;
+    }
     record
+}
+
+fn add_usage(total: Option<u64>, value: &serde_json::Value) -> Option<u64> {
+    total?.checked_add(value.as_u64()?)
 }
 
 /// Every trial record under a job directory.
@@ -317,7 +354,7 @@ pub fn branch_from(
     }
     anyhow::ensure!(times > 0, "branch-from requires at least one attempt");
     let restore = workspace_restore_script(&task.workdir)?;
-    build_image(task)?;
+    let image = build_image(task, &out_dir.join("image.id"))?;
     let mut passed = 0;
     let mut errors = Vec::new();
     for attempt in 1..=times {
@@ -331,13 +368,7 @@ pub fn branch_from(
             std::process::id()
         );
         let result = (|| -> Result<f64> {
-            docker::start(
-                &container,
-                &task.image_tag(),
-                &task.workdir,
-                task.cpus,
-                &task.memory,
-            )?;
+            docker::start(&container, &image, &task.workdir, task.cpus, &task.memory)?;
             exec_checked(
                 &container,
                 "/",
@@ -476,6 +507,41 @@ mod branch_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_parsing_preserves_zero_but_not_missing_or_corrupt_measurements() {
+        let root = std::env::temp_dir().join(format!(
+            "rigcoder-usage-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("agent")).unwrap();
+        let zero = r#"{"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0}"#;
+        let partial = r#"{"kind":"usage","input_tokens":3,"output_tokens":2}"#;
+        for (text, expected) in [
+            (zero.to_owned(), (Some(0), Some(0), Some(0))),
+            (format!("{partial}\n{zero}"), (Some(3), Some(2), None)),
+            (format!("broken\n{zero}"), (None, None, None)),
+            (format!("{zero}\nbroken"), (None, None, None)),
+            (r#"{"kind":"settled"}"#.to_owned(), (None, None, None)),
+        ] {
+            std::fs::write(root.join("agent/transcript.jsonl"), &text).unwrap();
+            let record = read_agent_output(&root, "task", 1);
+            assert_eq!(
+                (
+                    record.input_tokens,
+                    record.output_tokens,
+                    record.cache_tokens
+                ),
+                expected,
+                "{text}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn rewards_are_finite_probabilities() {

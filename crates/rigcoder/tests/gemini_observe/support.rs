@@ -128,6 +128,9 @@ pub struct Config {
     /// a timing in it: a cancellation racing a handler); it is still
     /// written whenever packets are written.
     pub volatile: bool,
+    /// Reproduce the frozen complete-delivery schedule before invalid policy.
+    /// Native early-failure delivery is tested separately with a producer gate.
+    pub complete_delivery_before_policy: bool,
 }
 
 #[derive(Clone, Default)]
@@ -199,6 +202,7 @@ impl Default for Config {
             scope: None,
             keep_stream_events: false,
             volatile: false,
+            complete_delivery_before_policy: false,
         }
     }
 }
@@ -357,7 +361,7 @@ impl Cell {
                         rigcoder::observe::ClockSource::Absent
                     },
                 });
-        let described = serde_json::json!({
+        let mut described = serde_json::json!({
             "matrix": matrix,
             "cell": name,
             "source": match &config.source {
@@ -385,6 +389,9 @@ impl Cell {
             "rig": &RIG_REV[..12],
             "rigcoder": env!("CARGO_PKG_VERSION"),
         });
+        if config.complete_delivery_before_policy {
+            described["policy_delivery"] = serde_json::json!("complete_before_policy");
+        }
         let volatile = config.volatile;
         let cassette = mode.map(|mode| {
             if let Some(parent) = path.parent() {
@@ -457,6 +464,22 @@ impl Cell {
         }
         if let Some(scope) = config.scope {
             app.insert_resource(scope(&dir));
+        }
+        if config.complete_delivery_before_policy {
+            use rig_ecs::{
+                bus::{EffectOutcome, RigSchedule},
+                systems::RigSet,
+            };
+            // These frozen packets describe the complete-delivery interleaving.
+            // Keep collecting the genuine adapter's stream, but do not discover
+            // invalid names until its outcome lands. No sleeps or reordering.
+            app.world_mut()
+                .resource_mut::<Schedules>()
+                .get_mut(RigSchedule)
+                .unwrap()
+                .configure_sets(
+                    RigSet::Fold.run_if(|outcomes: Query<&EffectOutcome>| !outcomes.is_empty()),
+                );
         }
         let ticks = Arc::new(Ticks::default());
         match &config.witness {
@@ -1072,7 +1095,7 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "89f6980f5ba1137161e96484d67b5b38c56f217d";
+pub const RIG_REV: &str = "a1473e55cba7271b74f36740195e9c3b9fb1e0b0";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"

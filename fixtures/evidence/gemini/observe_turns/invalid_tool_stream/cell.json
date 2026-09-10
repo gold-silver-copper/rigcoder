@@ -25,6 +25,7 @@
     "session": null
   },
   "volatile": false,
-  "rig": "89f6980f5ba1",
-  "rigcoder": "0.1.0"
+  "rig": "a1473e55cba7",
+  "rigcoder": "0.1.0",
+  "policy_delivery": "complete_before_policy"
 }
