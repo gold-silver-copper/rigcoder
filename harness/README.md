@@ -372,3 +372,11 @@ Budgeted checkpoint branching is unsupported; use fresh trials.
 The real Docker relay preflight and mocked benchmark integration checks cover
 different boundaries. A complete real-Docker benchmark exercise and the live
 baseline/candidate experiment remain separate verification requirements.
+
+`python3 -B harness/check_budgeted_trial_docker.py target/debug/rigcoder-bench`
+exercises the complete benchmark path against Docker using a synthetic agent.
+It checks isolated runtime access, relay readiness/shutdown, explicit dev/holdout
+phases and host scoring of correct and wrong answers despite forged rewards.
+It makes no generation requests and asserts zero budget reservations. The custom
+agent is correctly labeled as an unverified build; this check does not establish
+product-agent performance or trusted compilation provenance.
