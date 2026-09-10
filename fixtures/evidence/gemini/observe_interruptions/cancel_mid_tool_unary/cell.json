@@ -2,8 +2,9 @@
   "matrix": "observe_interruptions",
   "cell": "cancel_mid_tool_unary",
   "source": {
-    "kind": "cassette",
-    "scenario": "observe_interruptions/cancel_mid_tool_unary"
+    "kind": "replay",
+    "path": "cassettes/gemini/observe_interruptions/cancel_mid_tool_unary_started.yaml",
+    "workspace_of": "observe_interruptions/cancel_mid_tool_unary"
   },
   "model": "gemini-3.8-flash",
   "stream": false,

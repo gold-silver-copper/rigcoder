@@ -5,7 +5,7 @@
 //! | `cancel_before_dispatch` | cancel in the frame the run was submitted | no request made; run failed cancelled | exactly `cancel_requested`, `ended:cancelled` with 2 ms scripted run total, structured `rigcoder/failure` without provider identity | local-only |
 //! | `long_answer_stream` | a long streamed answer, whole | settled | `issued, landed, ended:settled` | recorded (source of the next) |
 //! | `cancel_mid_stream` | cancel after the first text delta landed | run failed with the operator's reason; the completion lands whole after the run ended and no history reads it | `issued`, `cancel_requested`, `ended:cancelled`, then the model's `landed` (the product keeps the run entity, so the bus never drops the dispatch: no `cancelled@Collect`) | derived: the recorded frames served one per 150 ms by a local pacing server (an instant replay lands the whole stream in one pass) |
-//! | `cancel_mid_tool_{unary,stream}` | cancel with bash in flight (the CLI's timeout reason) | run failed; `late.txt` not written when the run ends | `cancel_requested` before `ended:cancelled`; the tool's dispatch `landed` after the run ended (the handler answers once told to stop; the bus never drops it, so no `cancelled@Collect`) | recorded |
+//! | `cancel_mid_tool_{unary,stream}` | cancel with bash in flight (the CLI's timeout reason) | run failed; `late.txt` not written when the run ends | `cancel_requested` before `ended:cancelled`; the tool's dispatch `landed` after the run ended (the handler answers once told to stop; the bus never drops it, so no `cancelled@Collect`) | derived command writes a startup marker and waits on a barrier; cancellation follows the marker |
 //! | `cancel_at_hold_stream` | cancel while a call waits for approval | run failed; file untouched | `held`, `approval:held`, `cancel_requested`, `ended:cancelled`, then `cancelled { despawned_before_dispatch }` for the held call; never `approved`, no `released` after the last hold | recorded |
 //! | `despawn_at_hold_stream` | the held call is despawned by the host | the runtime ends the run cancelled on its own; file untouched | `held` … `cancelled { despawned_before_dispatch }` with no `released` between, ending followed by structured `rigcoder/failure` | recorded |
 
@@ -237,23 +237,30 @@ fn cancel_with_bash_in_flight() {
             "cancel_mid_tool_{}",
             if stream { "stream" } else { "unary" }
         );
-        run(MATRIX, &name, Config::delivery(stream), |cell| {
+        // Preserve the provider recording; derive only the command body to
+        // expose real process startup and hold it until cancellation. Issued
+        // alone precedes both permit consumption and the shell's spawn.
+        let derived = derive(
+            &cassette_path(MATRIX, &name),
+            &cassette_path(MATRIX, &format!("{name}_started")),
+            |docs| {
+                let body = body_of(&mut docs[0]);
+                let original = "sleep 4; printf late > late.txt";
+                assert_eq!(body.matches(original).count(), 1);
+                *body = body.replace(original, "printf started > started.txt; while [ ! -f release.txt ]; do sleep 0.01; done; printf late > late.txt");
+            },
+        );
+        let config = Config {
+            source: Source::derived(derived, MATRIX, &name),
+            ..Config::delivery(stream)
+        };
+        run(MATRIX, &name, config, |cell| {
             cell.submit("Run this command: sleep 4; printf late > late.txt");
-            cell.drive_until("bash in flight", |world| {
-                // A ToolCall event can precede approval and dispatch. Wait for
-                // issuance so cancellation exercises an in-flight handler,
-                // rather than occasionally cancelling at the approval hold.
-                rigcoder::observations(world).is_some_and(|trace| {
-                    trace.observations.iter().any(|observation| {
-                        matches!(observation.action, Action::Issued)
-                            && observation
-                                .subject
-                                .key
-                                .as_ref()
-                                .is_some_and(|key| key.as_str() == "tool:bash")
-                    })
-                })
+            let started = cell.dir.join("started.txt");
+            cell.drive_until("bash process started", |_| {
+                std::fs::read(&started).is_ok_and(|bytes| bytes == b"started")
             });
+            assert!(!cell.dir.join("release.txt").exists());
             cell.cancel(TIMEOUT_REASON);
             cell.drive();
             assert_eq!(cell.failure().kind, "cancelled");

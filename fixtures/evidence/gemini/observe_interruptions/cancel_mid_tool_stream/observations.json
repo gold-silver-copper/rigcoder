@@ -325,7 +325,7 @@
         "action": "host",
         "kind": "rigcoder/approval",
         "payload": {
-          "operation": "b85170a58294d5271714778de116be170fc4cfe3601fefc7c0f2ebb074f46134",
+          "operation": "80650fd371f01081cd672f6ba89d41acc5b955966e62239cadebd2108bb3142e",
           "tool": "bash",
           "mode": "auto",
           "decision": "prepared"
@@ -349,7 +349,7 @@
         "action": "host",
         "kind": "rigcoder/approval",
         "payload": {
-          "operation": "b85170a58294d5271714778de116be170fc4cfe3601fefc7c0f2ebb074f46134",
+          "operation": "80650fd371f01081cd672f6ba89d41acc5b955966e62239cadebd2108bb3142e",
           "tool": "bash",
           "mode": "auto",
           "decision": "approved"
@@ -479,5 +479,5 @@
     "execution_mode": "cassette_replay",
     "clock_source": "absent"
   },
-  "recording_provenance": "live"
+  "recording_provenance": "derived"
 }

@@ -400,7 +400,7 @@
               "function": {
                 "name": "bash",
                 "arguments": {
-                  "command": "sleep 4; printf late > late.txt"
+                  "command": "printf started > started.txt; while [ ! -f release.txt ]; do sleep 0.01; done; printf late > late.txt"
                 }
               },
               "signature": "signature_REDACTED_1",
@@ -432,7 +432,7 @@
                       "functionCall": {
                         "name": "bash",
                         "args": {
-                          "command": "sleep 4; printf late > late.txt"
+                          "command": "printf started > started.txt; while [ ! -f release.txt ]; do sleep 0.01; done; printf late > late.txt"
                         },
                         "id": "call_67821"
                       }
@@ -476,7 +476,7 @@
       "kind": {
         "effect": "tool_call",
         "name": "bash",
-        "args": "{\"command\":\"sleep 4; printf late > late.txt\"}"
+        "args": "{\"command\":\"printf started > started.txt; while [ ! -f release.txt ]; do sleep 0.01; done; printf late > late.txt\"}"
       },
       "outcome": {
         "Ok": {
