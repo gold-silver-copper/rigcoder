@@ -224,6 +224,10 @@ pub struct IterateArgs {
     /// Model the improvement step uses (default: the provider's default).
     #[arg(long)]
     pub meta_model: Option<String>,
+    /// Use the isolated macOS prompt launcher through this local budget gateway.
+    /// Requires --lane prompt and RIGCODER_GATEWAY_TOKEN; affects only self-editing.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+    pub meta_gateway_port: Option<u16>,
     /// Evaluate only; never self-edit.
     #[arg(long)]
     pub no_improve: bool,
@@ -794,6 +798,9 @@ fn improve(
         .and_then(|name| name.to_str())
         .context("report job directory name")?;
     let note = notes_dir.join(format!("gen-{generation:03}-{}-{job_name}.md", lane.name()));
+    if let Some(port) = args.meta_gateway_port {
+        return improve_isolated_prompt(root, args, report_path, &note, port);
+    }
     let task = META_TASK
         .replace("{report}", &report_path.display().to_string())
         .replace("{lane}", lane.name())
@@ -885,6 +892,79 @@ fn improve(
         return Err(error);
     }
     Ok(note)
+}
+
+fn proposal_baseline(root: &Path) -> Result<Vec<String>> {
+    [
+        vec!["rev-parse", "HEAD"],
+        vec!["rev-parse", "--symbolic-full-name", "HEAD"],
+        vec!["status", "--porcelain=v1", "--untracked-files=all"],
+        vec!["diff", "--no-ext-diff", "--binary"],
+        vec!["diff", "--cached", "--no-ext-diff", "--binary"],
+    ]
+    .iter()
+    .map(|args| git(root, args))
+    .collect()
+}
+
+fn improve_isolated_prompt(
+    root: &Path,
+    args: &IterateArgs,
+    report: &Path,
+    note: &Path,
+    port: u16,
+) -> Result<PathBuf> {
+    use std::io::Write;
+    let prompt_path = root.join("crates/rigcoder/src/prompt.md");
+    anyhow::ensure!(
+        prompt_path.canonicalize()? == prompt_path
+            && std::fs::symlink_metadata(&prompt_path)?.is_file(),
+        "prompt must be a regular repository file"
+    );
+    let prompt = std::fs::read_to_string(&prompt_path)?;
+    let development = std::fs::read_to_string(report)?;
+    let binary = host_binary(root)?.canonicalize()?;
+    let baseline = proposal_baseline(root)?;
+    let evidence = report.with_file_name("prompt-proposal");
+    begin_improvement(root, &args.run.binary, note, &baseline[0])?;
+    let proposal = crate::prompt_proposal::launch(&binary, &prompt, &development, port, &evidence);
+    // External edits must survive. Keep the recovery marker and do not invoke
+    // the legacy broad cleanup if the repository changed during proposal work.
+    anyhow::ensure!(
+        proposal_baseline(root)? == baseline && std::fs::read_to_string(&prompt_path)? == prompt,
+        "repository changed during isolated proposal; retained candidate and recovery marker for inspection"
+    );
+    let proposal = match proposal {
+        Ok(proposal) => proposal,
+        Err(error) => {
+            finish_improvement(root)?;
+            return Err(error);
+        }
+    };
+    let applied = (|| -> Result<()> {
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(note)?;
+        output.write_all(
+            proposal
+                .note
+                .as_deref()
+                .unwrap_or("No rationale supplied.\n")
+                .as_bytes(),
+        )?;
+        output.sync_all()?;
+        std::fs::write(&prompt_path, proposal.prompt)?;
+        Ok(())
+    })();
+    if let Err(error) = applied {
+        rollback_unscored(root, &args.run.binary, note)?;
+        finish_improvement(root)?;
+        return Err(error);
+    }
+    // Only prompt text is applied here. The existing generation path builds
+    // and evaluates it; proposal collection does not make a keep decision.
+    Ok(note.to_owned())
 }
 
 fn paths(root: &Path, args: &[&str]) -> Result<Vec<String>> {
@@ -1026,6 +1106,26 @@ fn rollback_unscored(root: &Path, binary: &Path, note: &Path) -> Result<()> {
 
 pub fn iterate(root: &Path, args: IterateArgs) -> Result<()> {
     require_no_pending_improvement(root)?;
+    if args.meta_gateway_port.is_some() {
+        anyhow::ensure!(
+            cfg!(target_os = "macos"),
+            "isolated prompt improvement requires macOS"
+        );
+        anyhow::ensure!(
+            !args.no_improve
+                && args.lane == Some(Lane::Prompt)
+                && args.meta_provider == "gemini"
+                && args
+                    .meta_model
+                    .as_deref()
+                    .is_none_or(|model| model == "gemini-3.8-flash"),
+            "--meta-gateway-port requires self-editing, --lane prompt and Gemini gemini-3.8-flash"
+        );
+        anyhow::ensure!(
+            std::env::var("RIGCODER_GATEWAY_TOKEN").is_ok_and(|token| !token.is_empty()),
+            "RIGCODER_GATEWAY_TOKEN is required"
+        );
+    }
     let run_args = &args.run;
     if run_args.slice == "holdout" && !args.no_improve {
         bail!("the holdout slice is for evaluation only: pass --no-improve");

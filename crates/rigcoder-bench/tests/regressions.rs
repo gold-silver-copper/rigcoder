@@ -1222,3 +1222,139 @@ fn malformed_output_capture_cannot_record_an_acceptance_decision() {
     );
     assert!(!job.join("a__1/verifier/output-line-result.json").exists());
 }
+
+#[test]
+fn isolated_proposal_configuration_fails_before_any_trial() {
+    let f = Fixture::new();
+    let output = f.run(
+        &["iterate", "--meta-gateway-port", "12345", "--lane", "tools"],
+        &[],
+    );
+    assert!(!output.status.success());
+    assert!(!f.root.join("mock.log").exists());
+    assert!(f.ledger().is_empty());
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn isolated_launcher_failure_retains_real_manifest_without_applying() {
+    let f = Fixture::new();
+    let output = f.run(
+        &[
+            "iterate",
+            "--meta-gateway-port",
+            "12345",
+            "--lane",
+            "prompt",
+            "--generations",
+            "2",
+            "--holdout",
+            "false",
+        ],
+        &[
+            ("RIGCODER_GATEWAY_TOKEN", "synthetic"),
+            ("RIGCODER_HOST_BIN", "/usr/bin/false"),
+        ],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("isolated prompt proposal failed"));
+    assert_eq!(
+        fs::read_to_string(f.root.join(PROMPT)).unwrap(),
+        "baseline\n"
+    );
+    assert_eq!(f.ledger().len(), 1);
+    assert!(
+        !f.root
+            .join(".git/rigcoder-pending-improvement.json")
+            .exists()
+    );
+    let manifests: Vec<_> = fs::read_dir(f.root.join("harness/runs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("prompt-proposal/manifest.json"))
+        .filter(|path| path.is_file())
+        .collect();
+    assert_eq!(manifests.len(), 1);
+    let manifest: Value = serde_json::from_slice(&fs::read(&manifests[0]).unwrap()).unwrap();
+    assert_eq!(manifest["status"], "failed");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn isolated_proposals_use_existing_rejection_and_preserve_external_edits() {
+    let python = Command::new("python3")
+        .args(["-c", "import sys; print(sys.executable)"])
+        .output()
+        .unwrap();
+    success(&python);
+    let python = String::from_utf8(python.stdout).unwrap();
+    for mode in ["proposal", "tie", "external_edit", "failed", "apply_failed"] {
+        let f = Fixture::new();
+        // Substitute only the Python launcher here to exercise the Rust
+        // controller. Actual sandbox enforcement has separate CLI coverage.
+        f.script(
+            "fakebin/python3",
+            r#"#!/bin/sh
+if [ "$1" != -I ]; then exec "$MOCK_REAL_PYTHON" "$@"; fi
+cat >/dev/null
+if [ "$MOCK_PROPOSAL_MODE" = external_edit ]; then
+    printf 'user edit\n' > "$MOCK_ROOT/README.md"
+fi
+if [ "$MOCK_PROPOSAL_MODE" = failed ]; then exit 7; fi
+if [ "$MOCK_PROPOSAL_MODE" = apply_failed ]; then chmod 444 "$MOCK_ROOT/crates/rigcoder/src/prompt.md"; fi
+printf '%s\n' '{"prompt":"candidate\n","note":"synthetic hypothesis\n"}'
+"#,
+        );
+        let output = f.run(
+            &[
+                "iterate",
+                "--meta-gateway-port",
+                "12345",
+                "--lane",
+                "prompt",
+                "--generations",
+                "2",
+                "--holdout",
+                "false",
+            ],
+            &[
+                ("MOCK_REAL_PYTHON", python.trim()),
+                ("MOCK_PROPOSAL_MODE", mode),
+                ("MOCK_REWARD", if mode == "tie" { "1" } else { "" }),
+                ("MOCK_ROOT", f.root.to_str().unwrap()),
+                ("RIGCODER_GATEWAY_TOKEN", "synthetic"),
+            ],
+        );
+        let marker = f.root.join(".git/rigcoder-pending-improvement.json");
+        assert_eq!(
+            fs::read_to_string(f.root.join(PROMPT)).unwrap(),
+            if mode == "tie" {
+                "candidate\n"
+            } else {
+                "baseline\n"
+            }
+        );
+        if mode == "proposal" || mode == "tie" {
+            success(&output);
+            assert_eq!(f.ledger().len(), 2);
+            assert_eq!(
+                f.ledger()[1]["decision"],
+                if mode == "tie" { "tie" } else { "reverted" }
+            );
+            assert!(!marker.exists());
+        } else {
+            assert!(!output.status.success());
+            assert_eq!(f.ledger().len(), 1);
+            assert_eq!(marker.exists(), mode == "external_edit");
+            if mode == "external_edit" {
+                assert_eq!(
+                    fs::read_to_string(f.root.join("README.md")).unwrap(),
+                    "user edit\n"
+                );
+                assert!(
+                    String::from_utf8_lossy(&output.stderr)
+                        .contains("repository changed during isolated proposal")
+                );
+            }
+        }
+    }
+}

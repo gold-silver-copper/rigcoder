@@ -319,7 +319,17 @@ UTF-8 prompt/note files; links and special files are rejected. A host manifest
 records input/binary hashes and whether execution failed or a proposal was
 collected. This does not impose aggregate memory or disk quotas.
 
-The launcher is not yet integrated into `iterate`. Repository baseline checks,
-validated application, compilation isolation and recovery after controller
-termination remain the controller's responsibility. A collected proposal is
-not an accepted improvement.
+On macOS, `iterate --lane prompt --meta-gateway-port PORT` uses this launcher
+with Gemini `gemini-3.8-flash` and `RIGCODER_GATEWAY_TOKEN`. The port must belong
+to the trusted proposal-budget gateway. This option affects self-editing only;
+it does not route task trials through that gateway or establish their budget.
+The bench executable embeds the trusted Python sources. It checks HEAD, branch,
+index, worktree diff and prompt contents before applying the collected prompt
+and rationale. External repository edits stop application and retain the
+recovery marker; ordinary launcher failures leave the source unchanged.
+
+The existing generation loop builds and evaluates the proposal and handles
+keep/revert decisions. Its exploratory tie/keep rule is not promotion evidence.
+Compilation isolation, task-provider isolation and recovery of surviving
+processes after controller termination still require work before a trustworthy
+live experiment. A collected proposal is not an accepted improvement.

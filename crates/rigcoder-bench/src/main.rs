@@ -11,6 +11,7 @@ mod digest;
 mod docker;
 mod evolve;
 mod ledger;
+mod prompt_proposal;
 mod report;
 mod slices;
 mod stats;
