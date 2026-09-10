@@ -496,6 +496,13 @@ pub fn evaluate(
     let original_binary = binary;
     let binary = job_dir.join("rigcoder.bin");
     std::fs::copy(&original_binary, &binary).context("snapshotting evaluated binary")?;
+    // Docker preserves copied file ownership. Set the private snapshot's mode
+    // here so capability-free containers need not chmod a host-owned file.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))?;
+    }
     let receipt_path = original_binary.with_file_name(format!(
         "{}.build.json",
         original_binary

@@ -160,7 +160,11 @@ fn execute(spec: &TrialSpec, container: &str, dir: &Path) -> Result<f64> {
         container,
         "/",
         &[],
-        &format!("chmod 755 {REMOTE_BIN}"),
+        &if spec.budget.is_some() {
+            format!("test -x {REMOTE_BIN}")
+        } else {
+            format!("chmod 755 {REMOTE_BIN}")
+        },
         Duration::from_secs(30),
     )?;
     if chmod.code != 0 {
