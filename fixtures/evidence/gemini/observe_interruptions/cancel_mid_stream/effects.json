@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 59,
+        "batch": 61,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -10,15 +10,7 @@
         }
       },
       {
-        "batch": 79,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 94,
+        "batch": 89,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -34,7 +26,7 @@
         }
       },
       {
-        "batch": 127,
+        "batch": 138,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -42,7 +34,7 @@
         }
       },
       {
-        "batch": 146,
+        "batch": 163,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -50,7 +42,7 @@
         }
       },
       {
-        "batch": 168,
+        "batch": 187,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -58,7 +50,7 @@
         }
       },
       {
-        "batch": 189,
+        "batch": 210,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -66,7 +58,7 @@
         }
       },
       {
-        "batch": 207,
+        "batch": 234,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -74,31 +66,7 @@
         }
       },
       {
-        "batch": 220,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 235,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 256,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 269,
+        "batch": 259,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -114,7 +82,7 @@
         }
       },
       {
-        "batch": 307,
+        "batch": 309,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -122,7 +90,7 @@
         }
       },
       {
-        "batch": 323,
+        "batch": 333,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -130,7 +98,7 @@
         }
       },
       {
-        "batch": 339,
+        "batch": 358,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -138,7 +106,7 @@
         }
       },
       {
-        "batch": 353,
+        "batch": 382,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -146,7 +114,7 @@
         }
       },
       {
-        "batch": 373,
+        "batch": 406,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -154,7 +122,7 @@
         }
       },
       {
-        "batch": 380,
+        "batch": 431,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -162,7 +130,7 @@
         }
       },
       {
-        "batch": 401,
+        "batch": 455,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -170,7 +138,7 @@
         }
       },
       {
-        "batch": 421,
+        "batch": 480,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -178,7 +146,39 @@
         }
       },
       {
-        "batch": 434,
+        "batch": 504,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 528,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 552,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 576,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 600,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -186,7 +186,7 @@
         }
       },
       {
-        "batch": 434,
+        "batch": 600,
         "id": 0,
         "kind": {
           "delivery": "outcome"
@@ -383,7 +383,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 3730198418456126643
+        "policy": 2955189733583775520
       }
     }
   },

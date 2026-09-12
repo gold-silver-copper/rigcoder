@@ -207,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 3119079924129507690
+        "policy": 10203501343356064611
       }
     }
   },
@@ -386,9 +386,9 @@
       },
       "outcome": {
         "Err": {
-          "kind": "provider",
+          "kind": "http",
           "retryable": false,
-          "message": "ProviderError: Invalid content type was returned: \"text/plain\"",
+          "message": "HttpError: Invalid content type was returned: \"text/plain\"",
           "code": null,
           "http_status": null,
           "refusal": false,

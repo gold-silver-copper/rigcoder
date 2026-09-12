@@ -412,7 +412,11 @@ pub(crate) fn gate(world: &mut World) {
             // lifecycle depends on worker timing rather than approval state.
             // A ready auto approval can still release it in this same pass.
             world.entity_mut(entity).insert(PolicyHold);
-            rig_ecs::bus::acquire_hold(world, entity, crate::observe::emitter("approval"));
+            if let Err(refused) =
+                rig_ecs::bus::acquire_hold(world, entity, crate::observe::emitter("approval"))
+            {
+                tracing::warn!(?entity, %refused, "approval hold refused");
+            }
             let root = world.resource::<Workspace>().root.clone();
             let name = tool.clone();
             let arguments = args.clone();
@@ -569,10 +573,16 @@ pub(crate) fn gate(world: &mut World) {
             // gate's hold is its own to remove. A call the batch still holds
             // keeps `Held` until the batch releases it in call order.
             world.entity_mut(entity).remove::<PolicyHold>();
-            rig_ecs::bus::release_hold(world, entity, "rigcoder/approval");
+            if let Err(refused) = rig_ecs::bus::release_hold(world, entity, "rigcoder/approval") {
+                tracing::warn!(?entity, %refused, "approval hold release refused");
+            }
         } else {
             world.entity_mut(entity).insert(PolicyHold);
-            rig_ecs::bus::acquire_hold(world, entity, crate::observe::emitter("approval"));
+            if let Err(refused) =
+                rig_ecs::bus::acquire_hold(world, entity, crate::observe::emitter("approval"))
+            {
+                tracing::warn!(?entity, %refused, "approval hold refused");
+            }
         }
         world.entity_mut(entity).insert(invocation);
     }
@@ -661,7 +671,7 @@ mod tests {
         let (permit, arguments) = file_permit(&path);
         let context = ToolContext::new().with_scope(permit.clone());
         let mut world = World::new();
-        rig_ecs::bus::install_bus(&mut world, rig::serve::ServingPolicy::default());
+        rig_ecs::bus::Bus::with_policy(rig::serve::ServingPolicy::default()).install(&mut world);
         world.init_resource::<Approvals>();
         world.init_resource::<crate::Conversation>();
         world.add_observer(cancel_run);

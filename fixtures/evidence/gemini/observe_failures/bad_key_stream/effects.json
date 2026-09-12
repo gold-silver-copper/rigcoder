@@ -207,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 14577881354517312182
+        "policy": 736349443574797769
       }
     }
   },
@@ -386,19 +386,13 @@
       },
       "outcome": {
         "Err": {
-          "kind": {
-            "http": {
-              "status": 400
-            }
-          },
+          "kind": "provider_response",
           "retryable": false,
           "message": "[redacted]",
           "code": null,
           "http_status": 400,
           "refusal": false,
-          "source_chain": [
-            "[redacted]"
-          ],
+          "source_chain": [],
           "provider_response": {
             "status": 400,
             "body": "[redacted]",

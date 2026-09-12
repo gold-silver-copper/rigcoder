@@ -68,8 +68,9 @@ fn retry_trace() -> ObservationTrace {
 
 #[test]
 fn failure_joins_the_failed_scope_and_keeps_report_retryability() {
-    let report =
-        ErrorReport::new(ErrorKind::Http { status: Some(429) }, "quota").with_retryable(true);
+    let report = ErrorReport::new(ErrorKind::ProviderResponse, "quota")
+        .with_http_status(429)
+        .with_retryable(true);
     let mut failure = FailureDetail::report("provider", &report, &[]);
     failure.attach("rigcoder/run/1", &retry_trace());
     let attempt = failure.adapter.as_ref().unwrap();
@@ -117,18 +118,18 @@ fn interleaved_sends_do_not_invent_causal_attribution() {
     trace.observations.insert(2, other);
     let mut failure = FailureDetail::report(
         "provider",
-        &ErrorReport::new(ErrorKind::Http { status: Some(429) }, "quota"),
+        &ErrorReport::new(ErrorKind::ProviderResponse, "quota").with_http_status(429),
         &[],
     );
     failure.attach("rigcoder/run/1", &trace);
     assert!(failure.adapter.is_none());
-    assert_eq!(failure.kind, "http");
+    assert_eq!(failure.kind, "provider_response");
 }
 
 #[test]
 fn multiple_failed_effects_or_dropped_facts_leave_attribution_unknown() {
     let original = retry_trace();
-    let report = ErrorReport::new(ErrorKind::Http { status: Some(429) }, "quota");
+    let report = ErrorReport::new(ErrorKind::ProviderResponse, "quota").with_http_status(429);
     let mut trace = original.clone();
     let mut other = trace
         .observations
@@ -160,13 +161,13 @@ fn multiple_failed_effects_or_dropped_facts_leave_attribution_unknown() {
 fn classification_uses_types_and_messages_are_bounded_and_redacted() {
     let content_type = rig::http_client::Error::InvalidContentType("text/plain".parse().unwrap());
     let report = ErrorReport::from(rig::completion::CompletionError::HttpError(content_type));
-    assert_eq!(report.kind, ErrorKind::Http { status: None });
+    assert_eq!(report.kind, ErrorKind::Http);
     assert_eq!(
         FailureDetail::report("provider", &report, &[]).boundary,
         FailureBoundary::Unknown
     );
     for (kind, boundary) in [
-        (ErrorKind::Http { status: None }, FailureBoundary::Unknown),
+        (ErrorKind::Http, FailureBoundary::Unknown),
         (ErrorKind::Response, FailureBoundary::Decode),
         (ErrorKind::Json, FailureBoundary::Unknown),
         (ErrorKind::Provider, FailureBoundary::Unknown),

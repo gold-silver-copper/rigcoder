@@ -129,7 +129,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 400,
               "retryable": false
             }
@@ -156,8 +156,8 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "http",
-            "detail": "HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
+            "code": "provider_response",
+            "detail": "ProviderResponseError: status 400 Bad Request: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
           },
           "retryable": false
         }
@@ -177,7 +177,7 @@
         "action": "ended",
         "ending": {
           "code": "provider",
-          "detail": "http: HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
+          "detail": "provider_response: ProviderResponseError: status 400 Bad Request: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
         }
       }
     },
@@ -195,10 +195,10 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "http",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
-          "message": "HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}",
+          "message": "ProviderResponseError: status 400 Bad Request: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}",
           "retryable": false,
           "http_status": 400,
           "adapter": {
@@ -216,7 +216,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 400,
               "retryable": false
             },

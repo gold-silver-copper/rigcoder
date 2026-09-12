@@ -35,7 +35,7 @@ use std::{
 use bevy_app::App;
 use bevy_ecs::prelude::*;
 use rig::observe::{Action, Clock, ObservationLog, ObservationTrace, Stage};
-use rig_cassette::{CassetteMode, CassetteSpec, ProviderCassette};
+use rig_cassette::{CassetteMode, CassetteSpec, ProviderCassette, Transport};
 use rigcoder::{
     Conversation, Event, ModelChoice, RigcoderPlugin, Transcript,
     approval::ApprovalMode,
@@ -399,6 +399,7 @@ impl Cell {
             }
             let scenario: &'static str = Box::leak(format!("{matrix}/{name}").into_boxed_str());
             rt.block_on(ProviderCassette::start_at(
+                Transport::Proxy,
                 PROVIDER,
                 CassetteSpec::new(scenario),
                 UPSTREAM,
@@ -1089,7 +1090,7 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a";
+pub const RIG_REV: &str = "896bb8b4c62a21df9bb97a5973216c41ed995001";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"

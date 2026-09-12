@@ -536,7 +536,7 @@ fn rate_limited_then_answered() {
                 unreachable!()
             };
             assert!(retryable, "{reason:?}");
-            retried_then_settled(cell, "http", 429);
+            retried_then_settled(cell, "provider_response", 429);
             let Err(report) = &cell.log().records[0].outcome else {
                 panic!()
             };
@@ -582,7 +582,7 @@ fn server_error_then_answered() {
                 unreachable!()
             };
             assert!(retryable, "{reason:?}");
-            retried_then_settled(cell, "http", 503);
+            retried_then_settled(cell, "provider_response", 503);
             let Err(report) = &cell.log().records[0].outcome else {
                 panic!()
             };
@@ -781,7 +781,7 @@ fn an_error_frame_after_text() {
             let (_, kind, outcome) = ending_matches_landed(cell);
             assert_eq!(
                 kind,
-                rig::error::ErrorKind::Http { status: Some(500) }.code(),
+                rig::error::ErrorKind::ProviderResponse.code(),
                 "{outcome:?}"
             );
             let Err(report) = &cell.log().records[0].outcome else {
@@ -814,7 +814,7 @@ fn an_error_frame_after_text() {
                     AdapterEvent::ErrorEnvelope { error } if error.code.as_deref() == Some("500") && error.status.as_deref() == Some("INTERNAL")))));
             assert!(trace.observations.iter().any(|o| matches!(&o.action,
                 Action::Adapter { observation } if observation.event == AdapterEvent::Finished {
-                    ending: AdapterEnding::Error { boundary: rig::observe::AdapterErrorBoundary::ProviderResponse, kind: "http".into(), status: Some(500), retryable: true }
+                    ending: AdapterEnding::Error { boundary: rig::observe::AdapterErrorBoundary::ProviderResponse, kind: "provider_response".into(), status: Some(500), retryable: true }
                 })));
             assert_eq!(
                 cell.failure()
@@ -862,7 +862,7 @@ fn an_error_frame_is_retried_then_answered() {
         |cell| {
             cell.submit("Reply with the single word: pong");
             cell.drive();
-            retried_then_settled(cell, "http", 200);
+            retried_then_settled(cell, "provider_response", 200);
             assert_eq!(cell.log().records.len(), 2);
             let Err(report) = &cell.log().records[0].outcome else {
                 panic!("expected the first attempt's provider error");

@@ -17,6 +17,7 @@ async fn slow_ecs_validation_leaves_time_to_finalize_completed_recording() {
     let candidate = assert_fs::TempDir::new().unwrap();
     let path = candidate.path().join("provider.yaml");
     let cassette = ProviderCassette::start_at(
+        Transport::Proxy,
         "openai",
         CassetteSpec::new("slow-validation-capture-probe"),
         &upstream.base_url(),
@@ -89,6 +90,7 @@ async fn scrubbed_partial_traffic_survives_a_finalization_failure() {
     let path = candidate.path().join("provider.yaml");
     let partial = candidate.path().join("provider.partial.yaml");
     let cassette = ProviderCassette::start_at(
+        Transport::Proxy,
         "openai",
         CassetteSpec::new("partial-failure-probe"),
         &upstream.base_url(),

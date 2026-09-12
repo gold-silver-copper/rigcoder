@@ -430,7 +430,7 @@ fn program(app: &mut App, case: &Case) -> Result<Entity, Error> {
             .into(),
         });
     let recorder = app.world().resource::<EffectLogResource>().0.clone();
-    rig_ecs::replay::stamp_run(app.world_mut(), run, &recorder);
+    rig_ecs::replay::stamp_run(app.world_mut(), run, &recorder)?;
     custom::start(app.world_mut(), run, case)?;
     if case.interleaved {
         app.world_mut().spawn((

@@ -333,7 +333,15 @@ fn start_run(
         .get_resource::<rig_ecs::bus::EffectLogResource>()
         .map(|r| r.0.clone())
     {
-        rig_ecs::replay::stamp_run(world, run, &recorder);
+        // A log stamped without a verifiable identity could never replay;
+        // the run fails here, named, rather than at replay time.
+        if let Err(report) = rig_ecs::replay::stamp_run(world, run, &recorder) {
+            world
+                .entity_mut(run)
+                .insert(Failed(rig_ecs::agent::Failure::Unsupported(format!(
+                    "cannot stamp program identity: {report}"
+                ))));
+        }
     }
     Some(run)
 }

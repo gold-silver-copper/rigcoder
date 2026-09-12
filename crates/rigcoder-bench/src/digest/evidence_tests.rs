@@ -351,7 +351,7 @@ fn digest_retains_content_type_failure_boundary_and_actual_http_status() {
     assert_eq!(digest.attempts.len(), 1);
     assert_eq!(digest.attempts[0].status, Some(200));
     let failure = digest.last_failure.as_ref().unwrap();
-    assert_eq!(failure.kind, "provider");
+    assert_eq!(failure.kind, "http");
     assert_eq!(failure.http_status, None);
     assert_eq!(failure.boundary, rigcoder::failure::FailureBoundary::Decode);
     assert_eq!(
@@ -391,7 +391,8 @@ fn structured_failures_support_trial_investigation_without_text_classification()
     .unwrap();
     let mut failure = FailureDetail::report(
         "provider",
-        &rig::error::ErrorReport::new(rig::error::ErrorKind::Http { status: Some(429) }, "quota")
+        &rig::error::ErrorReport::new(rig::error::ErrorKind::ProviderResponse, "quota")
+            .with_http_status(429)
             .with_retryable(true),
         &[],
     );
@@ -441,7 +442,7 @@ fn structured_failures_support_trial_investigation_without_text_classification()
 
     let transcript = serde_json::json!({"kind":"failed", "reason":failure}).to_string();
     let trial = facts(&transcript);
-    assert_eq!(trial.ending, "http");
+    assert_eq!(trial.ending, "provider_response");
     assert_eq!(trial.failure, Some(failure));
     assert!(trial.no_settle);
     let unstructured = facts(r#"{"kind":"failed","reason":"provider 503 replay"}"#);
@@ -622,7 +623,7 @@ fn diagnostic_selection_keeps_the_original_trial_and_scoring_population() {
                 .observed
                 .last_failure
                 .as_ref()
-                .is_some_and(|failure| failure.kind == "http")
+                .is_some_and(|failure| failure.kind == "provider_response")
         })
         .collect();
     assert_eq!(selected.len(), 1);

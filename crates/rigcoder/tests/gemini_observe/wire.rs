@@ -142,7 +142,7 @@ fn invalid_stream_content_type() {
             cell.submit("Reply with the single word: pong");
             cell.drive();
             let failure = cell.failure();
-            assert_eq!(failure.kind, "provider");
+            assert_eq!(failure.kind, "http");
             assert_eq!(failure.http_status, None);
             assert_eq!(failure.boundary, rigcoder::failure::FailureBoundary::Decode);
             let attempt = failure.adapter.as_ref().unwrap();
@@ -298,7 +298,7 @@ fn retry_exhaustion_keeps_operation_and_failed_attempt_usage() {
                         AdapterEvent::Finished {
                             ending: AdapterEnding::Error {
                                 boundary: rig::observe::AdapterErrorBoundary::ProviderResponse,
-                                kind: "http".into(),
+                                kind: "provider_response".into(),
                                 status: Some(status),
                                 retryable: true
                             }
@@ -884,7 +884,7 @@ fn retry_headers_unary() {
                 failed[3].event,
                 AdapterEvent::Finished {
                     ending: AdapterEnding::Error {
-                        kind: "http".into(),
+                        kind: "provider_response".into(),
                         boundary: rig::observe::AdapterErrorBoundary::ProviderResponse,
                         status: Some(429),
                         retryable: true,

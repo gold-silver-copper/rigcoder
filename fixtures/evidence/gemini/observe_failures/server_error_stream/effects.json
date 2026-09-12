@@ -222,7 +222,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 12978733744482649369
+        "policy": 15178941783352965866
       },
       "rigcoder/run/2": {
         "required": {
@@ -234,7 +234,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 12978733744482649369
+        "policy": 15178941783352965866
       }
     }
   },
@@ -413,19 +413,13 @@
       },
       "outcome": {
         "Err": {
-          "kind": {
-            "http": {
-              "status": 503
-            }
-          },
+          "kind": "provider_response",
           "retryable": true,
-          "message": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}",
+          "message": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}",
           "code": null,
           "http_status": 503,
           "refusal": false,
-          "source_chain": [
-            "Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}"
-          ],
+          "source_chain": [],
           "provider_response": {
             "status": 503,
             "body": "{\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}",

@@ -91,7 +91,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 401,
               "retryable": false
             }

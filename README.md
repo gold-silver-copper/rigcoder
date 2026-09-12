@@ -1,7 +1,7 @@
 # rigcoder
 
 A coding agent built on `rig-ecs`, the Bevy-world runtime from
-[rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443). The model is a
+[rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443), now merged into Rig `main`. The model is a
 handler entity, every tool is a handler entity, the agent is an entity that
 `Grant`s them, and each prompt is a run entity whose turns, tool calls and
 outcomes are components the UI reads. Nothing in this repository awaits or
@@ -125,11 +125,11 @@ approval, persistence and process-isolation contracts.
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
 `rig-ecs`, `rig-effect-log` and `rig-cassette`) to
-`ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a`, the head of
-[Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443) (`feat/effect-bus`).
-[Rig PR #2482](https://github.com/0xPlaygrounds/rig/pull/2482), which added
-optional provider diagnostics and correct batch restoration, has merged into
-that branch. The consumer ownership transfer landed at the
+`896bb8b4c62a21df9bb97a5973216c41ed995001`, the commit that merged
+[Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443) (`feat/effect-bus`)
+into Rig `main`. [Rig PR #2482](https://github.com/0xPlaygrounds/rig/pull/2482),
+which added optional provider diagnostics and correct batch restoration, had
+merged into that branch beforehand. The consumer ownership transfer landed at the
 earlier pin `de83e9f` ([Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474)).
 To move the pin, update every Rig revision and `Cargo.lock`, then run the
 workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.
@@ -137,7 +137,7 @@ Rigcoder owns the transferred ECS consumer in `rigcoder-verify`, its repair
 project in `harness/repair-project`, and its fixtures in `fixtures/verify` and
 `fixtures/cassettes`. The pinned Rig revision retains `rig-cassette` and removes
 the original consumer after the verified replacement merged here. Rig PR #2443
-remains open and unmerged. The transfer preserves the harness's
+has merged into Rig `main`. The transfer preserves the harness's
 existing implementations and does not require product-agent/tool integration.
 
 Run the preserved offline matrix with

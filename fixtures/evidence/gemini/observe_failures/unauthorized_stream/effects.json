@@ -207,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 12978733744482649369
+        "policy": 15178941783352965866
       }
     }
   },
@@ -386,19 +386,13 @@
       },
       "outcome": {
         "Err": {
-          "kind": {
-            "http": {
-              "status": 401
-            }
-          },
+          "kind": "provider_response",
           "retryable": false,
-          "message": "HttpError: Invalid status code 401 Unauthorized with message: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}",
+          "message": "ProviderResponseError: status 401 Unauthorized: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}",
           "code": null,
           "http_status": 401,
           "refusal": false,
-          "source_chain": [
-            "Invalid status code 401 Unauthorized with message: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}"
-          ],
+          "source_chain": [],
           "provider_response": {
             "status": 401,
             "body": "{\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}",

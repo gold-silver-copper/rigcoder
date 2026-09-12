@@ -129,7 +129,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 401,
               "retryable": false
             }
@@ -156,8 +156,8 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "http",
-            "detail": "HttpError: Invalid status code 401 Unauthorized with message: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}"
+            "code": "provider_response",
+            "detail": "ProviderResponseError: status 401 Unauthorized: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}"
           },
           "retryable": false
         }
@@ -177,7 +177,7 @@
         "action": "ended",
         "ending": {
           "code": "provider",
-          "detail": "http: HttpError: Invalid status code 401 Unauthorized with message: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}"
+          "detail": "provider_response: ProviderResponseError: status 401 Unauthorized: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}"
         }
       }
     },
@@ -195,10 +195,10 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "http",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
-          "message": "HttpError: Invalid status code 401 Unauthorized with message: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}",
+          "message": "ProviderResponseError: status 401 Unauthorized: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}",
           "retryable": false,
           "http_status": 401,
           "adapter": {
@@ -216,7 +216,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 401,
               "retryable": false
             },

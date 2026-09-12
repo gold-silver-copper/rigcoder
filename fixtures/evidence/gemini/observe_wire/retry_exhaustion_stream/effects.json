@@ -222,7 +222,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 1531594540984675440
+        "policy": 476224322216666065
       },
       "rigcoder/run/2": {
         "required": {
@@ -234,7 +234,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 1531594540984675440
+        "policy": 476224322216666065
       }
     }
   },
@@ -413,19 +413,13 @@
       },
       "outcome": {
         "Err": {
-          "kind": {
-            "http": {
-              "status": 503
-            }
-          },
+          "kind": "provider_response",
           "retryable": true,
-          "message": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}",
+          "message": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}",
           "code": null,
           "http_status": 503,
           "refusal": false,
-          "source_chain": [
-            "Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}"
-          ],
+          "source_chain": [],
           "provider_response": {
             "status": 503,
             "body": "{\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}",
@@ -609,19 +603,13 @@
       },
       "outcome": {
         "Err": {
-          "kind": {
-            "http": {
-              "status": 503
-            }
-          },
+          "kind": "provider_response",
           "retryable": true,
-          "message": "HttpError: Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}",
+          "message": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}",
           "code": null,
           "http_status": 503,
           "refusal": false,
-          "source_chain": [
-            "Invalid status code 503 Service Unavailable with message: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}"
-          ],
+          "source_chain": [],
           "provider_response": {
             "status": 503,
             "body": "{\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}",

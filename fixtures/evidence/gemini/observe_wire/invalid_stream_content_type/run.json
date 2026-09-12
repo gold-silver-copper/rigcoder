@@ -1,6 +1,6 @@
 {
   "runs": 1,
-  "ending": "provider",
+  "ending": "http",
   "answer": "",
   "provider_retries": 0,
   "records": 1,

@@ -207,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 17539770203996390029
+        "policy": 18394979994214520542
       }
     }
   },
@@ -390,19 +390,13 @@
       },
       "outcome": {
         "Err": {
-          "kind": {
-            "http": {
-              "status": 400
-            }
-          },
+          "kind": "provider_response",
           "retryable": false,
-          "message": "HttpError: Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}",
+          "message": "ProviderResponseError: status 400 Bad Request: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}",
           "code": null,
           "http_status": 400,
           "refusal": false,
-          "source_chain": [
-            "Invalid status code 400 Bad Request with message: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}"
-          ],
+          "source_chain": [],
           "provider_response": {
             "status": 400,
             "body": "{\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}",

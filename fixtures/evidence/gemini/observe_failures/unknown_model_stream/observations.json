@@ -129,7 +129,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 404,
               "retryable": false
             }
@@ -156,8 +156,8 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "http",
-            "detail": "HttpError: Invalid status code 404 Not Found with message: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}"
+            "code": "provider_response",
+            "detail": "ProviderResponseError: status 404 Not Found: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}"
           },
           "retryable": false
         }
@@ -177,7 +177,7 @@
         "action": "ended",
         "ending": {
           "code": "provider",
-          "detail": "http: HttpError: Invalid status code 404 Not Found with message: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}"
+          "detail": "provider_response: ProviderResponseError: status 404 Not Found: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}"
         }
       }
     },
@@ -195,10 +195,10 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "http",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
-          "message": "HttpError: Invalid status code 404 Not Found with message: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}",
+          "message": "ProviderResponseError: status 404 Not Found: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}",
           "retryable": false,
           "http_status": 404,
           "adapter": {
@@ -216,7 +216,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 404,
               "retryable": false
             },

@@ -19,7 +19,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 2000000
+        "nanos": 0
       }
     },
     {
@@ -50,7 +50,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 4000000
+        "nanos": 1000000
       }
     },
     {
@@ -87,7 +87,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 6000000
+        "nanos": 2000000
       }
     },
     {
@@ -121,7 +121,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 7000000
+        "nanos": 3000000
       }
     },
     {
@@ -148,7 +148,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 429,
               "retryable": true
             }
@@ -157,7 +157,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 9000000
+        "nanos": 4000000
       }
     },
     {
@@ -179,15 +179,15 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "http",
-            "detail": "HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+            "code": "provider_response",
+            "detail": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
           },
           "retryable": true
         }
       },
       "at": {
         "secs": 0,
-        "nanos": 11000000
+        "nanos": 5000000
       }
     },
     {
@@ -204,12 +204,12 @@
         "action": "ended",
         "ending": {
           "code": "provider",
-          "detail": "http: HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+          "detail": "provider_response: ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
         }
       },
       "at": {
         "secs": 0,
-        "nanos": 13000000
+        "nanos": 6000000
       }
     },
     {
@@ -226,10 +226,10 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "http",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
-          "message": "HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
+          "message": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
           "retryable": true,
           "http_status": 429,
           "adapter": {
@@ -247,7 +247,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 429,
               "retryable": true
             },
@@ -267,7 +267,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 14000000
+        "nanos": 7000000
       }
     },
     {
@@ -287,12 +287,12 @@
           "operation": "rigcoder/request/1/completion/0",
           "attempt": 1,
           "wait_secs": 2,
-          "reason": "HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+          "reason": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
         }
       },
       "at": {
         "secs": 0,
-        "nanos": 15000000
+        "nanos": 8000000
       }
     },
     {
@@ -314,7 +314,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 18000000
+        "nanos": 9000000
       }
     },
     {
@@ -345,7 +345,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 20000000
+        "nanos": 10000000
       }
     },
     {
@@ -379,7 +379,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 22000000
+        "nanos": 11000000
       }
     },
     {
@@ -416,7 +416,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 23000000
+        "nanos": 12000000
       }
     },
     {
@@ -455,7 +455,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 24000000
+        "nanos": 13000000
       }
     },
     {
@@ -487,7 +487,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 26000000
+        "nanos": 14000000
       }
     },
     {
@@ -513,7 +513,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 28000000
+        "nanos": 15000000
       }
     },
     {
@@ -534,7 +534,7 @@
       },
       "at": {
         "secs": 0,
-        "nanos": 30000000
+        "nanos": 16000000
       }
     }
   ],

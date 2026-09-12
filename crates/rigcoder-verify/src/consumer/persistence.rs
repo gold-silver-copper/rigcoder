@@ -346,7 +346,7 @@ pub(crate) async fn resume(
     }
     rig_ecs::replay::check_replayable(app.world_mut(), run, log)?;
     let recorder = app.world().resource::<EffectLogResource>().0.clone();
-    rig_ecs::replay::stamp_run(app.world_mut(), run, &recorder);
+    rig_ecs::replay::stamp_run(app.world_mut(), run, &recorder)?;
     app.world_mut()
         .resource_mut::<Checkpoints>()
         .0

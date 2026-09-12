@@ -20,7 +20,7 @@ use std::{
 };
 
 use super::{Case, Error, Evidence, Provider, execute_with_deadline};
-use crate::cassettes::{CassetteMode, CassetteSpec, ProviderCassette};
+use crate::cassettes::{CassetteMode, CassetteSpec, ProviderCassette, Transport};
 
 #[cfg(test)]
 mod tests;
@@ -196,6 +196,7 @@ pub(crate) async fn run(
     let cassette = tokio::time::timeout_at(
         execution_deadline(mode, budget).into(),
         ProviderCassette::start_at(
+            Transport::Proxy,
             provider,
             CassetteSpec::new(case.id),
             upstream,

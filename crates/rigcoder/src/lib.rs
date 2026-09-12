@@ -29,8 +29,7 @@ use rig_ecs::{
         PolicyVersion, Preamble, Temperature, ToolChoiceSpec, ToolPolicy, UsesModel,
     },
     bus::{
-        Bound, BusSet, EffectLogResource, Handlers, Replay, RigSchedule, install_bus,
-        run_to_quiescence,
+        Bound, Bus, BusSet, EffectLogResource, Handlers, Replay, RigSchedule, run_to_quiescence,
     },
     prelude::*,
     systems::install_agent,
@@ -139,7 +138,7 @@ impl Plugin for RigcoderPlugin {
             prompt_override,
             keep_stream_events,
         } = self.clone();
-        install_bus(app.world_mut(), ServingPolicy::default());
+        Bus::with_policy(ServingPolicy::default()).install(app.world_mut());
         install_agent(app.world_mut());
         app.add_systems(Update, run_to_quiescence);
         app.add_plugins(steer::SteerPlugin);

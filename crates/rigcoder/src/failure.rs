@@ -85,12 +85,11 @@ impl FailureDetail {
             FailureBoundary::Host
         } else {
             match report.kind {
-                ErrorKind::Http { status: Some(_) } | ErrorKind::ProviderResponse => {
-                    FailureBoundary::ProviderResponse
-                }
-                // Statusless HTTP reports also cover request construction and
-                // response content-type rejection, not just transport errors.
-                ErrorKind::Http { status: None } => FailureBoundary::Unknown,
+                ErrorKind::ProviderResponse => FailureBoundary::ProviderResponse,
+                // `Http` never carries a status: a reply the server made is
+                // `ProviderResponse`. HTTP reports cover transport failures,
+                // request construction and response content-type rejection.
+                ErrorKind::Http => FailureBoundary::Unknown,
                 ErrorKind::Response => FailureBoundary::Decode,
                 // JSON errors also occur during request serialization, so a
                 // report alone cannot attribute them to response decoding.

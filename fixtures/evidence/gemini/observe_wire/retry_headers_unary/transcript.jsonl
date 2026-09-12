@@ -1,6 +1,6 @@
 {"kind":"user","text":"Reply with the single word: pong"}
 {"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
-{"kind":"retrying","reason":"http: HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}","attempt":1,"wait_secs":2}
+{"kind":"retrying","reason":"provider_response: ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}","attempt":1,"wait_secs":2}
 {"kind":"assistant","text":"pong"}
 {"kind":"usage","input_tokens":795,"output_tokens":1,"cached_input_tokens":0,"total_tokens":888}
 {"kind":"settled","answer":"pong"}

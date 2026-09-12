@@ -129,7 +129,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 429,
               "retryable": true
             }
@@ -156,8 +156,8 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "http",
-            "detail": "HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+            "code": "provider_response",
+            "detail": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
           },
           "retryable": true
         }
@@ -177,7 +177,7 @@
         "action": "ended",
         "ending": {
           "code": "provider",
-          "detail": "http: HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+          "detail": "provider_response: ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
         }
       }
     },
@@ -195,10 +195,10 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "http",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
-          "message": "HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
+          "message": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
           "retryable": true,
           "http_status": 429,
           "adapter": {
@@ -216,7 +216,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 429,
               "retryable": true
             },
@@ -252,7 +252,7 @@
           "operation": "rigcoder/request/1/completion/0",
           "attempt": 1,
           "wait_secs": 2,
-          "reason": "HttpError: Invalid status code 429 Too Many Requests with message: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
+          "reason": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}"
         }
       }
     },

@@ -129,7 +129,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 400,
               "retryable": false
             }
@@ -156,7 +156,7 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "http",
+            "code": "provider_response",
             "detail": "[redacted]"
           },
           "retryable": false
@@ -195,7 +195,7 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "http",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
           "message": "[redacted]",
@@ -216,7 +216,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "http",
+              "kind": "provider_response",
               "status": 400,
               "retryable": false
             },
