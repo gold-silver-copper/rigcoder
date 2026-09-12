@@ -2,10 +2,32 @@
 
 You are improving rigcoder, a coding agent built on `rig-ecs`, which
 landed in Rig `main` via PR #2443. Rig is pinned by git revision in
-`Cargo.toml`. The repo already contains its own benchmark
-runner and self-improvement loop; use them, do not add a second harness.
-Your job is a fast eval → diagnose → fix → re-eval loop. Optimize for
-cycle time. A full run is not the goal.
+`Cargo.toml`; Rig `main` moves often and with breaking changes, so the
+pin never floats and a pin move is its own procedure (section 4). The
+repo already contains its own benchmark runner and self-improvement
+loop; use them, do not add a second harness. Your job is a fast
+eval → diagnose → fix → re-eval loop. Optimize for cycle time. A full
+run is not the goal.
+
+## 0. Ground rules
+
+- Report only what ran in this session. A PR body, a notes entry or a
+  commit message never claims a test passed, a matrix is green or a
+  consumer compiles unless you ran it here and saw the result.
+- Before calling a test failure real, re-run that test alone. The
+  rigcoder-verify suite has a test that compiles a real project under a
+  deadline; it can fail under full-workspace parallel load and pass in
+  isolation.
+- Fast checks, in this order, before any paid run:
+  `cargo check --workspace --all-targets`, `cargo fmt --all`,
+  `cargo clippy --workspace --all-targets` (must be warning-free),
+  `cargo test --workspace`, then
+  `cargo run --locked -p rigcoder-verify -- verify` (42 cases, offline).
+- To read pinned Rig source, use cargo's checkout at
+  `~/.cargo/git/checkouts/rig-*/<rev prefix>/`; it is complete and fast.
+  For Rig history or a Rig branch, use a full clone in the scratchpad,
+  not a `--filter=blob:none` clone: `git grep` and `git log -S` on a
+  partial clone fetch blobs one at a time and stall.
 
 ## 1. Setup (once; verify before continuing)
 
@@ -80,9 +102,7 @@ Rules:
   pass-rate gain bought with retry fan-out that doubles cost is not an
   improvement; flag it and ask.
 - Never edit tasks, verifiers or timeouts. Never touch `holdout.txt`.
-- `cargo test --workspace` and
-  `cargo run --locked -p rigcoder-verify -- verify` must stay green after
-  every commit.
+- The section 0 checks must be green after every commit.
 
 ## 4. When the failure is in `rig`
 
@@ -92,32 +112,70 @@ mis-assembled, provider fields unparsed, history handling, panics, wrong
 error types, effect-bus or replay defects):
 
 1. Write a minimal failing Rust test against the pinned revision.
-2. Check whether Rig `main` has moved and whether its head already
-   fixes it. If so, bump the pin (all five Rig deps in
-   `Cargo.toml`, `Cargo.lock`, the `RIG_REV` constant in
-   `crates/rigcoder/tests/gemini_observe/support.rs`, and the evidence
-   `cell.json` labels) and stop here.
-3. Otherwise check the PR's review thread and open issues for coverage.
-4. Fork `0xPlaygrounds/rig`, branch `fix/<short-description>` from
-   `main`, add the fix and the test, and get `cargo test` and
-   `cargo clippy` green for the affected crate.
-5. Open a PR with `gh pr create` against `main`. Include observed and expected behaviour, the repro, and that it
-   was found in a Terminal-Bench trial through rigcoder-bench. Follow
-   CONTRIBUTING if present.
-6. Point every Rig dependency in `Cargo.toml` at your fork and revision
-   with a `# TODO: return to Rig main when <PR URL> merges` comment.
-   Record the URL in `harness/UPSTREAM.md`.
+2. Check whether Rig `main` has moved and whether its head already fixes
+   it. Compare the pin against the head before reading the diff:
+   `git ls-remote https://github.com/0xPlaygrounds/rig refs/heads/main`.
+   If the head fixes it, move the pin (procedure below) and stop here.
+3. Otherwise check open Rig issues and recent PRs for coverage. If an API
+   rigcoder uses was removed as "dead" or "no callers", the audit only
+   saw the Rig workspace: rigcoder and rigcoder-verify are out-of-tree
+   callers (rigcoder-verify was moved out of Rig in #2474). Say so in the
+   PR; restore the API rather than rewriting the consumer.
+4. You have write access to `0xPlaygrounds/rig`; do not fork. In a full
+   clone, branch `fix/<short-description>` from `main`, add the fix and
+   the test, and get these green for the affected crate:
+   `cargo test -p <crate>`, `cargo clippy -p <crate> --all-targets -- -D warnings`,
+   `cargo fmt -p <crate> -- --check`, then `cargo xtask verify --changed`
+   at the workspace root (CONTRIBUTING's fast loop).
+5. Commit in Conventional Commit form (`fix(<crate>): ...`). Open the PR
+   with `gh pr create` against `main` using the sections from
+   `.github/PULL_REQUEST_TEMPLATE/other.md`: Description (observed,
+   expected, the repro, how it was found), `## Changelog` in the
+   `- *(scope)* ...` voice, `## Migration` or `None`, Testing listing
+   only commands you ran. Never edit `CHANGELOG.md` or `MIGRATING.md`;
+   CI fails the PR if you do.
+6. Until it merges, point every Rig dependency in `Cargo.toml` at the
+   branch commit with a `# TODO: return to Rig main when <PR URL> merges`
+   comment. Record the URL in `harness/UPSTREAM.md`.
 7. Re-run smoke to confirm the bucket is gone.
 
 Stop and ask before opening a PR if the fix is a large or opinionated API
 change, or would break the effect-bus protocol.
+
+### Moving the Rig pin
+
+A pin move is a migration, not a one-line edit. Expect breaking API
+changes and a new effect-log wire shape. In order:
+
+1. Replace the revision in all five Rig deps in `Cargo.toml`, run
+   `cargo update -p rig-core -p rig -p rig-cassette -p rig-ecs -p rig-effect-log`,
+   and confirm `Cargo.lock` carries the new revision only.
+2. Set `RIG_REV` in `crates/rigcoder/tests/gemini_observe/support.rs` to
+   the full revision and every evidence `cell.json` `"rig"` label to its
+   first 12 characters.
+3. `cargo check --workspace --all-targets`. Fix each compile error by
+   reading the new API in cargo's checkout, not by guessing; a `Result`
+   that a function newly returns gets handled at the call site, never
+   discarded with `let _ =`. Handle `#[must_use]` warnings the same way.
+4. Run the Gemini observe matrix. Drift panics name the packet; the
+   packets are offline replays, so regenerate them all at once with
+   `RIGCODER_EVIDENCE=write cargo test -p rigcoder --test gemini_observe`.
+   Cells whose assertions fail are not written; fix the assertion, then
+   regenerate those cells the same way.
+5. Review `git diff --stat -- fixtures` and a normalized histogram of the
+   changed lines before accepting them. Expected churn: the `rig` label,
+   the `policy` hash, renamed error kinds, batch numbers and clock ticks.
+   Anything else is a behaviour change to explain or a bug to fix.
+6. Run the full section 0 checks. Update the pin description in
+   `README.md`, `docs/observe-minimal-migration.md` and
+   `harness/UPSTREAM.md`. Commit the pin move on its own.
 
 ## 5. Keep updated
 
 - `harness/NOTES.md`: one terse entry per iteration: taxonomy counts,
   what changed, the paired result, the threshold you set beforehand.
 - `harness/UPSTREAM.md`: Rig fixes opened and their status, plus the
-  current pin.
+  current pin and the date it was taken.
 - `harness/slices/smoke.txt`: written once.
 
 ## 6. Stop conditions
@@ -128,6 +186,10 @@ Stop and report when any of these hit:
 - The same failure mode survives two targeted fixes.
 - More than a third of smoke failures are `infra`.
 - A Rig fix needs a breaking API change.
+- A pin move breaks more than the fixtures and a handful of call sites,
+  or removes an API rigcoder-verify's design depends on. Report which
+  upstream commit did it and the options; do not rewrite the consumer
+  on your own.
 - Spend exceeds the budget.
 
 Report: taxonomy counts first vs last run, commits with per-task deltas,
