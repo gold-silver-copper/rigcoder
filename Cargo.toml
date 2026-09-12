@@ -9,12 +9,12 @@ license = "MIT"
 repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
-# Keep all Rig dependencies on the head of Rig PR #2482 (feat/observe-minimal, stacked on #2443).
-rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "e5002f86d0755ae720de254cbbc968fd57890fca", default-features = false }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "e5002f86d0755ae720de254cbbc968fd57890fca" }
-rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "e5002f86d0755ae720de254cbbc968fd57890fca", default-features = false }
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "e5002f86d0755ae720de254cbbc968fd57890fca", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "e5002f86d0755ae720de254cbbc968fd57890fca", default-features = false, features = ["reqwest", "rustls"] }
+# Keep all Rig dependencies on the head of Rig PR #2443 (feat/effect-bus; #2482 has merged into it).
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }

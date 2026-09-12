@@ -1089,7 +1089,7 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "e5002f86d0755ae720de254cbbc968fd57890fca";
+pub const RIG_REV: &str = "ef4cd8c15ef2001eb50a3a46bb9cbefb48f1780a";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"
