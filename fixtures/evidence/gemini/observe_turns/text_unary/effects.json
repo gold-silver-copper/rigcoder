@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 4,
+        "batch": 3,
         "id": 0,
         "kind": {
           "delivery": "outcome"
@@ -199,7 +199,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 18019224593700589145
+        "policy": 1057497822145935115
       }
     }
   },

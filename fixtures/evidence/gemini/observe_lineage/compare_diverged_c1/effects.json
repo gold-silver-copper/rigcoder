@@ -24,28 +24,28 @@
         }
       },
       {
-        "batch": 31,
+        "batch": 32,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 45,
+        "batch": 44,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 59,
+        "batch": 58,
         "id": 4,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 62,
+        "batch": 61,
         "id": 5,
         "kind": {
           "delivery": "stream",
@@ -53,7 +53,7 @@
         }
       },
       {
-        "batch": 62,
+        "batch": 61,
         "id": 5,
         "kind": {
           "delivery": "outcome"
@@ -251,7 +251,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 11630725443416017972
+        "policy": 5652738074469649994
       }
     }
   },

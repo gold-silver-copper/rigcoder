@@ -2,28 +2,28 @@
   "header": {
     "deliveries": [
       {
-        "batch": 4,
+        "batch": 3,
         "id": 0,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 11,
+        "batch": 9,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 27,
+        "batch": 18,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 30,
+        "batch": 20,
         "id": 3,
         "kind": {
           "delivery": "outcome"
@@ -221,7 +221,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 17239267916444830918
+        "policy": 10135997982862828644
       }
     }
   },

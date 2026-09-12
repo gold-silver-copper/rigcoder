@@ -908,8 +908,8 @@
       "seq": 36,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 4,
-        "effect": 4,
+        "order": 1,
+        "effect": 1,
         "key": "tool:bash",
         "family": "tool"
       },
@@ -952,8 +952,8 @@
       "seq": 38,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 3,
-        "effect": 3,
+        "order": 4,
+        "effect": 4,
         "key": "tool:bash",
         "family": "tool"
       },
@@ -974,8 +974,8 @@
       "seq": 39,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 1,
-        "effect": 1,
+        "order": 3,
+        "effect": 3,
         "key": "tool:bash",
         "family": "tool"
       },

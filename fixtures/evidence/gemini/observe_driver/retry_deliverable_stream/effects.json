@@ -32,14 +32,14 @@
         }
       },
       {
-        "batch": 22,
+        "batch": 19,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 25,
+        "batch": 22,
         "id": 3,
         "kind": {
           "delivery": "stream",
@@ -47,7 +47,7 @@
         }
       },
       {
-        "batch": 25,
+        "batch": 22,
         "id": 3,
         "kind": {
           "delivery": "outcome"
@@ -245,7 +245,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 5775828311158537576
+        "policy": 13328053870101965775
       }
     }
   },

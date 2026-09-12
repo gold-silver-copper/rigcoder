@@ -263,12 +263,19 @@ pub(crate) async fn prepare_file(
     if after.len() as u64 > crate::file_change::MAX_FILE_BYTES {
         return Err("file mutation exceeds the 16 MiB limit".into());
     }
+    let mut unformatted = false;
     let after = if source
         .path()
         .extension()
         .is_some_and(|extension| extension == "rs")
     {
-        format_rust(&after).await?
+        match format_rust(&after, find_rustfmt(std::env::var_os("PATH").as_deref())).await? {
+            Some(formatted) => formatted,
+            None => {
+                unformatted = true;
+                after
+            }
+        }
     } else {
         after
     };
@@ -286,6 +293,13 @@ pub(crate) async fn prepare_file(
     } else {
         format!("wrote {} bytes to {}", after.len(), path.display())
     };
+    // A container without a Rust toolchain still gets its file: the edit is
+    // written as authored and the receipt says formatting was skipped.
+    let receipt = if unformatted {
+        format!("{receipt}\n(rustfmt not found on PATH; written unformatted)")
+    } else {
+        receipt
+    };
     Ok(crate::approval::PreparedOperation::File {
         change: Box::new(source.prepare(after.into_bytes())),
         receipt,
@@ -299,26 +313,37 @@ fn check_mutation_size(size: Option<usize>) -> Result<(), String> {
     Ok(())
 }
 
-async fn format_rust(contents: &str) -> Result<String, String> {
+/// The `rustfmt` on an absolute entry of `path`, if any.
+fn find_rustfmt(path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    path.into_iter()
+        .flat_map(|paths| std::env::split_paths(paths).collect::<Vec<_>>())
+        .filter(|path| path.is_absolute())
+        .map(|path| path.join("rustfmt"))
+        .find(|path| path.is_file())
+}
+
+/// Format Rust source with `executable`. `Ok(None)` when there is no
+/// formatter: an edit is never refused for the container's toolchain, only
+/// for what the formatter rejects.
+async fn format_rust(
+    contents: &str,
+    executable: Option<PathBuf>,
+) -> Result<Option<String>, String> {
     // Format stdin into an owned scratch file. --emit stdout prevents a module
     // path in model-authored Rust from modifying a different workspace file.
     const MAX_FORMAT_BYTES: u64 = 16 * 1024 * 1024;
     if contents.len() as u64 > MAX_FORMAT_BYTES {
         return Err("Rust edit exceeds the 16 MiB formatting limit".into());
     }
+    let Some(executable) = executable else {
+        return Ok(None);
+    };
     let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
     let input = scratch.path().join("input.rs");
     let output = scratch.path().join("output.rs");
     let config = scratch.path().join("rustfmt.toml");
     std::fs::write(&input, contents).map_err(|error| error.to_string())?;
     std::fs::write(&config, "edition = \"2024\"\n").map_err(|error| error.to_string())?;
-    let executable = std::env::var_os("PATH")
-        .into_iter()
-        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
-        .filter(|path| path.is_absolute())
-        .map(|path| path.join("rustfmt"))
-        .find(|path| path.is_file())
-        .ok_or_else(|| "rustfmt is required to prepare Rust edits".to_owned())?;
     let mut command = Command::new(executable);
     command
         .args(["--emit", "stdout", "--edition", "2024", "--config-path"])
@@ -353,7 +378,9 @@ async fn format_rust(contents: &str) -> Result<String, String> {
     {
         return Err("formatted Rust exceeds the 16 MiB limit".into());
     }
-    std::fs::read_to_string(output).map_err(|error| error.to_string())
+    std::fs::read_to_string(output)
+        .map(Some)
+        .map_err(|error| error.to_string())
 }
 
 fn list_files(root: Arc<PathBuf>) -> ToolFn<Callback> {
@@ -970,6 +997,32 @@ mod rewrite_tests {
         assert!(ctx.contains("    15\tlet x = 2;"));
         assert!(ctx.contains("    20\tline 20"));
         assert!(!ctx.contains("line 22"));
+    }
+
+    #[test]
+    fn a_missing_rustfmt_writes_rust_unformatted_instead_of_refusing() {
+        let empty = tempfile::tempdir().unwrap();
+        assert_eq!(find_rustfmt(Some(empty.path().as_os_str())), None);
+        assert_eq!(find_rustfmt(None), None);
+        let source = "fn main(){println!(\"hi\");}\n";
+        let result = futures::executor::block_on(format_rust(source, None)).unwrap();
+        assert_eq!(
+            result, None,
+            "no formatter means no formatting, not an error"
+        );
+    }
+
+    #[test]
+    fn a_present_rustfmt_still_formats() {
+        let Some(rustfmt) = find_rustfmt(std::env::var_os("PATH").as_deref()) else {
+            return;
+        };
+        let source = "fn main(){println!(\"hi\");}\n";
+        let result = futures::executor::block_on(format_rust(source, Some(rustfmt))).unwrap();
+        assert_eq!(
+            result.as_deref(),
+            Some("fn main() {\n    println!(\"hi\");\n}\n")
+        );
     }
 
     #[test]

@@ -3,10 +3,10 @@
 {"kind":"tool_call","name":"bash","args":"{\"command\":\"echo 2\"}"}
 {"kind":"tool_call","name":"bash","args":"{\"command\":\"echo 3\"}"}
 {"kind":"tool_call","name":"bash","args":"{\"command\":\"echo 4\"}"}
-{"kind":"tool_result","name":"bash","output":"1\n[exit code: 0]","ok":true}
-{"kind":"tool_result","name":"bash","output":"3\n[exit code: 0]","ok":true}
-{"kind":"tool_result","name":"bash","output":"4\n[exit code: 0]","ok":true}
 {"kind":"tool_result","name":"bash","output":"2\n[exit code: 0]","ok":true}
+{"kind":"tool_result","name":"bash","output":"1\n[exit code: 0]","ok":true}
+{"kind":"tool_result","name":"bash","output":"4\n[exit code: 0]","ok":true}
+{"kind":"tool_result","name":"bash","output":"3\n[exit code: 0]","ok":true}
 {"kind":"assistant","text":"The four commands have been executed successfully."}
 {"kind":"usage","input_tokens":1876,"output_tokens":72,"cached_input_tokens":0,"total_tokens":2027}
 {"kind":"settled","answer":"The four commands have been executed successfully."}

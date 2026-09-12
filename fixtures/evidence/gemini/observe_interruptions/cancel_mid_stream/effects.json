@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 61,
+        "batch": 48,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -10,7 +10,7 @@
         }
       },
       {
-        "batch": 89,
+        "batch": 69,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -18,7 +18,7 @@
         }
       },
       {
-        "batch": 113,
+        "batch": 86,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -26,7 +26,23 @@
         }
       },
       {
-        "batch": 138,
+        "batch": 108,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 126,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 146,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -42,7 +58,7 @@
         }
       },
       {
-        "batch": 187,
+        "batch": 180,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -50,7 +66,7 @@
         }
       },
       {
-        "batch": 210,
+        "batch": 200,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -58,7 +74,7 @@
         }
       },
       {
-        "batch": 234,
+        "batch": 222,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -66,7 +82,7 @@
         }
       },
       {
-        "batch": 259,
+        "batch": 244,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -74,7 +90,15 @@
         }
       },
       {
-        "batch": 284,
+        "batch": 263,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 1
+        }
+      },
+      {
+        "batch": 285,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -90,7 +114,7 @@
         }
       },
       {
-        "batch": 333,
+        "batch": 331,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -98,7 +122,7 @@
         }
       },
       {
-        "batch": 358,
+        "batch": 353,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -106,7 +130,7 @@
         }
       },
       {
-        "batch": 382,
+        "batch": 372,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -114,7 +138,7 @@
         }
       },
       {
-        "batch": 406,
+        "batch": 392,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -122,7 +146,7 @@
         }
       },
       {
-        "batch": 431,
+        "batch": 407,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -130,7 +154,7 @@
         }
       },
       {
-        "batch": 455,
+        "batch": 425,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -138,7 +162,7 @@
         }
       },
       {
-        "batch": 480,
+        "batch": 443,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -146,7 +170,7 @@
         }
       },
       {
-        "batch": 504,
+        "batch": 462,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -154,31 +178,7 @@
         }
       },
       {
-        "batch": 528,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 552,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 576,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 1
-        }
-      },
-      {
-        "batch": 600,
+        "batch": 483,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -186,7 +186,7 @@
         }
       },
       {
-        "batch": 600,
+        "batch": 483,
         "id": 0,
         "kind": {
           "delivery": "outcome"
@@ -383,7 +383,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 2955189733583775520
+        "policy": 3713472993926329747
       }
     }
   },
