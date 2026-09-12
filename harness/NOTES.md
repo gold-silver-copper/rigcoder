@@ -60,3 +60,13 @@ Terse log of the eval → diagnose → fix → re-eval loop described in
   benchmark neither confirmed nor contradicted it.
 - Evidence packets regenerated: only the policy hash plus timing-bound
   stream batching changed.
+
+## Iteration 2: no fix, convergence check (2026-09-12)
+
+- Job `iter2-clean-run-smoke-1789256741270633000-97421`, commit `dfafa76`,
+  same slice, model and settings.
+- 10/10. Taxonomy: no failed trials; `harness` 0, `rig` 0, `infra` 0.
+  Two deny-list denials (`find /`-style searches in git-multibranch and
+  kv-store-grpc), as designed. 10 file-tool writes, none refused.
+- Cost $9.15, $0.92 per resolved task. Smoke spend to date $29.23.
+- Second consecutive iteration with no `harness`/`rig` failure.
