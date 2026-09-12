@@ -14,6 +14,11 @@ class DispatchTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        # These tests exercise phase exhaustion: admit exactly one maximal
+        # reservation regardless of the production limits.
+        limits = patch.dict("gemini_budget.LIMITS", {"proposal": cost(MAX_INPUT, MAX_OUTPUT)})
+        limits.start()
+        self.addCleanup(limits.stop)
         self.budget = Budget(Path(self.temp.name) / "budget.sqlite")
         self.budget.initialize()
         self.body = {"contents": [{"role": "user", "parts": [{"text": "test"}]}]}

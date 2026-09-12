@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from gemini_budget import Budget, MAX_INPUT, MAX_OUTPUT, cost
+from gemini_budget import Budget, LIMITS, MAX_INPUT, MAX_OUTPUT, cost
 
 
 class BudgetTests(unittest.TestCase):
@@ -22,10 +22,13 @@ class BudgetTests(unittest.TestCase):
                 return Budget(self.path).reserve("proposal", MAX_INPUT, MAX_OUTPUT)
             except ValueError:
                 return None
+        # Only as many maximal reservations fit as the phase limit admits;
+        # every request beyond that is refused, however they interleave.
+        fit = LIMITS["proposal"] // cost(MAX_INPUT, MAX_OUTPUT)
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(reserve, range(16)))
-        self.assertEqual(sum(value is not None for value in results), 1)
-        self.assertEqual(Budget(self.path).committed_microdollars(), cost(MAX_INPUT, MAX_OUTPUT))
+            results = list(pool.map(reserve, range(fit + 16)))
+        self.assertEqual(sum(value is not None for value in results), fit)
+        self.assertEqual(Budget(self.path).committed_microdollars(), fit * cost(MAX_INPUT, MAX_OUTPUT))
         with self.assertRaises(FileExistsError):
             self.budget.initialize()
 

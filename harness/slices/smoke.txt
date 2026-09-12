@@ -1,0 +1,14 @@
+# Smoke slice: a fixed 10-task subset of dev.txt, run at -k 1 every
+# iteration to catch breakage (edits not applying, malformed tool calls,
+# container/setup failures). Chosen once on 2026-09-12; do not change
+# mid-session. All tasks have a 900 s agent timeout.
+cancel-async-tasks            # hard 900
+password-recovery             # hard 900
+polyglot-rust-c               # hard 900  (edit-format sensitive)
+git-leak-recovery             # medium 900
+db-wal-recovery               # medium 900
+chess-best-move               # medium 900
+extract-elf                   # medium 900
+git-multibranch               # medium 900
+headless-terminal             # medium 900
+kv-store-grpc                 # medium 900

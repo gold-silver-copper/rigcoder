@@ -7,3 +7,6 @@ harness/tasks/
 
 # Verification candidates and reports; committed fixtures live in fixtures/.
 .rigcoder-verify/
+
+# Trusted Gemini budget ledger (host-only, never inside a container).
+harness/gemini-budget.sqlite
