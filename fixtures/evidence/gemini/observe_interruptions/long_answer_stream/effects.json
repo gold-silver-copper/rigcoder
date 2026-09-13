@@ -6,11 +6,27 @@
         "id": 0,
         "kind": {
           "delivery": "stream",
-          "items": 25
+          "items": 10
         }
       },
       {
-        "batch": 4,
+        "batch": 5,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 3
+        }
+      },
+      {
+        "batch": 8,
+        "id": 0,
+        "kind": {
+          "delivery": "stream",
+          "items": 12
+        }
+      },
+      {
+        "batch": 8,
         "id": 0,
         "kind": {
           "delivery": "outcome"
