@@ -9,35 +9,35 @@
         }
       },
       {
-        "batch": 18,
+        "batch": 16,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 31,
+        "batch": 28,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 44,
+        "batch": 41,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 58,
+        "batch": 55,
         "id": 4,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 61,
+        "batch": 58,
         "id": 5,
         "kind": {
           "delivery": "outcome"
@@ -235,7 +235,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 18066215283321625080
+        "policy": 593921720491919207
       }
     }
   },

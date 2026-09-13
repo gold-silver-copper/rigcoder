@@ -129,6 +129,40 @@ fn resolve(root: &Path, path: &str) -> PathBuf {
     }
 }
 
+/// Roots a walking tool never starts from and never descends into: the
+/// whole filesystem, and the pseudo-filesystems whose files are endless or
+/// unreadable. The bash deny list refuses `find /` and `grep -r /` with the
+/// same reason; without this the tools themselves walked `/` and the
+/// process was killed at the task's memory limit reading `/proc`.
+const UNWALKABLE_ROOTS: &[&str] = &["/", "/proc", "/sys", "/dev"];
+
+/// The reason a walk of an unwalkable root is refused, as the model reads it.
+const UNWALKABLE_REASON: &str =
+    "searching the whole filesystem hangs the run; search inside the workspace";
+
+/// A file the grep tool reads whole; larger files are skipped, not read.
+const MAX_GREP_FILE_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Refuse `dir` as a walk root when it is one of [`UNWALKABLE_ROOTS`].
+fn walkable_root(dir: &Path) -> Result<(), String> {
+    let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    if UNWALKABLE_ROOTS.iter().any(|root| dir == Path::new(root)) {
+        return Err(format!("{UNWALKABLE_REASON} (refused: {})", dir.display()));
+    }
+    Ok(())
+}
+
+/// A walker over `dir` that never descends into a pseudo-filesystem.
+fn walker(dir: &Path) -> ignore::WalkBuilder {
+    let mut builder = ignore::WalkBuilder::new(dir);
+    builder.hidden(false).filter_entry(|entry| {
+        !UNWALKABLE_ROOTS[1..]
+            .iter()
+            .any(|root| entry.path() == Path::new(root))
+    });
+    builder
+}
+
 fn str_arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
     args.get(key)
         .and_then(Value::as_str)
@@ -400,17 +434,13 @@ fn list_files(root: Arc<PathBuf>) -> ToolFn<Callback> {
                 .as_str()
                 .map(|p| resolve(&root, p))
                 .unwrap_or_else(|| root.as_ref().clone());
+            walkable_root(&dir)?;
             let max_depth = args["max_depth"].as_u64().unwrap_or(3) as usize;
             let limit = args["limit"].as_u64().unwrap_or(500) as usize;
             let mut out = String::new();
             let mut count = 0usize;
             let mut truncated = false;
-            for entry in ignore::WalkBuilder::new(&dir)
-                .max_depth(Some(max_depth))
-                .hidden(false)
-                .build()
-                .flatten()
-            {
+            for entry in walker(&dir).max_depth(Some(max_depth)).build().flatten() {
                 if entry.depth() == 0 {
                     continue;
                 }
@@ -452,13 +482,20 @@ fn grep(root: Arc<PathBuf>) -> ToolFn<Callback> {
             },
             "required": ["pattern"]
         }),
-        move |args| {
-            let pattern = str_arg(&args, "pattern")?;
+        move |args| grep_in(&root, &args),
+    )
+}
+
+/// The grep tool's work: `args` searched under `root`.
+fn grep_in(root: &Path, args: &Value) -> Result<String, String> {
+    {
+        {
+            let pattern = str_arg(args, "pattern")?;
             let regex = regex::Regex::new(pattern).map_err(|e| format!("bad pattern: {e}"))?;
             let dir = args["path"]
                 .as_str()
-                .map(|p| resolve(&root, p))
-                .unwrap_or_else(|| root.as_ref().clone());
+                .map(|p| resolve(root, p))
+                .unwrap_or_else(|| root.to_path_buf());
             let glob = match args["glob"].as_str() {
                 Some(g) => Some(
                     globset::Glob::new(g)
@@ -467,19 +504,24 @@ fn grep(root: Arc<PathBuf>) -> ToolFn<Callback> {
                 ),
                 None => None,
             };
+            walkable_root(&dir)?;
             let limit = args["limit"].as_u64().unwrap_or(200) as usize;
             let mut out = String::new();
             let mut count = 0usize;
-            'files: for entry in ignore::WalkBuilder::new(&dir)
-                .hidden(false)
-                .build()
-                .flatten()
-            {
+            'files: for entry in walker(&dir).build().flatten() {
                 if !entry.file_type().is_some_and(|t| t.is_file()) {
                     continue;
                 }
                 if let Some(glob) = &glob
                     && !glob.is_match(entry.file_name())
+                {
+                    continue;
+                }
+                // A file is read whole; one too large to read is skipped,
+                // never loaded (the memory limit is the run's, not a file's).
+                if entry
+                    .metadata()
+                    .is_ok_and(|meta| meta.len() > MAX_GREP_FILE_BYTES)
                 {
                     continue;
                 }
@@ -506,8 +548,8 @@ fn grep(root: Arc<PathBuf>) -> ToolFn<Callback> {
                 out.push_str("(no matches)");
             }
             Ok(out)
-        },
-    )
+        }
+    }
 }
 
 fn bash(root: Arc<PathBuf>) -> ToolFn<Callback> {
@@ -1023,6 +1065,52 @@ mod rewrite_tests {
             result.as_deref(),
             Some("fn main() {\n    println!(\"hi\");\n}\n")
         );
+    }
+
+    #[test]
+    fn walking_tools_refuse_the_filesystem_roots_and_skip_pseudo_filesystems() {
+        for root in ["/", "/proc", "/sys", "/dev"] {
+            let err = walkable_root(Path::new(root)).unwrap_err();
+            assert!(err.contains("search inside the workspace"), "{root}: {err}");
+        }
+        let dir = tempfile::tempdir().unwrap();
+        assert!(walkable_root(dir.path()).is_ok());
+        // A descent never enters /proc: the filter drops it as an entry.
+        let entries: Vec<_> = walker(Path::new("/"))
+            .max_depth(Some(1))
+            .build()
+            .flatten()
+            .map(|entry| entry.path().to_path_buf())
+            .collect();
+        assert!(
+            !entries.iter().any(|p| p == Path::new("/proc")),
+            "{entries:?}"
+        );
+        assert!(
+            !entries.iter().any(|p| p == Path::new("/sys")),
+            "{entries:?}"
+        );
+    }
+
+    #[test]
+    fn grep_skips_a_file_too_large_to_read_whole_and_still_matches_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("small.txt"), "needle here\n").unwrap();
+        let big = std::fs::File::create(dir.path().join("big.txt")).unwrap();
+        big.set_len(MAX_GREP_FILE_BYTES + 1).unwrap();
+        let out = grep_in(
+            dir.path(),
+            &serde_json::json!({"pattern": "needle", "path": dir.path().to_str().unwrap()}),
+        )
+        .unwrap();
+        assert!(out.contains("small.txt:1:needle here"), "{out}");
+        assert!(!out.contains("big.txt"), "{out}");
+        let refused = grep_in(
+            dir.path(),
+            &serde_json::json!({"pattern": "needle", "path": "/"}),
+        )
+        .unwrap_err();
+        assert!(refused.contains("search inside the workspace"), "{refused}");
     }
 
     #[test]

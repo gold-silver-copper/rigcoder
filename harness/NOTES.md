@@ -216,3 +216,21 @@ had merged. Commits 1 and 2 pair against the smoke run this produces.
   prompt change, and the next target. Mean tool calls 52.4 → 51.6, no
   denials, no retries. Cost $11.10, $1.23 per resolved task (one
   password-recovery trial at 83 calls). Kept. Spend to date ~$163.
+
+## Walker confinement (grep and list_files never walk `/`)
+
+Not in `HARNESS_FIX_PROMPT.md`; taken ahead of commit 2 because the
+commit 1 run produced it and it is the most frequent `harness` mode on
+smoke (1 kill vs 0 repeat spirals on the last two runs).
+
+- Change (`tools.rs`): `grep` and `list_files` refuse `/`, `/proc`,
+  `/sys` and `/dev` as a walk root with the bash deny list's reason, and
+  never descend into the pseudo-filesystems; `grep` skips files over
+  4 MiB instead of reading them whole. Unit tests pin the refusal, the
+  filter and the skip. Evidence packets: policy hash and batch numbers.
+- Threshold, set before the run: paired against the commit 1 run
+  (`c1-audit-run-smoke-1789278185724667000-1527`, 9/10, $11.10). Kept if
+  headless-terminal passes or fails on a model cause with the process
+  ending normally (exit 0, usage recorded), no task that passed before
+  fails on a harness cause, and any refused walk shows as a tool error
+  the model recovered from. Spend to date ~$163; this run about $10.

@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 61,
+        "batch": 55,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -10,7 +10,7 @@
         }
       },
       {
-        "batch": 89,
+        "batch": 79,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -18,7 +18,7 @@
         }
       },
       {
-        "batch": 114,
+        "batch": 101,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -26,7 +26,7 @@
         }
       },
       {
-        "batch": 139,
+        "batch": 123,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -34,7 +34,7 @@
         }
       },
       {
-        "batch": 164,
+        "batch": 145,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -42,7 +42,7 @@
         }
       },
       {
-        "batch": 188,
+        "batch": 166,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -50,7 +50,7 @@
         }
       },
       {
-        "batch": 212,
+        "batch": 187,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -58,7 +58,7 @@
         }
       },
       {
-        "batch": 236,
+        "batch": 209,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -66,7 +66,7 @@
         }
       },
       {
-        "batch": 260,
+        "batch": 230,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -74,7 +74,7 @@
         }
       },
       {
-        "batch": 282,
+        "batch": 251,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -82,7 +82,7 @@
         }
       },
       {
-        "batch": 305,
+        "batch": 273,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -90,7 +90,7 @@
         }
       },
       {
-        "batch": 328,
+        "batch": 296,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -98,7 +98,7 @@
         }
       },
       {
-        "batch": 353,
+        "batch": 314,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -106,7 +106,7 @@
         }
       },
       {
-        "batch": 378,
+        "batch": 320,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -114,7 +114,7 @@
         }
       },
       {
-        "batch": 402,
+        "batch": 341,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -122,7 +122,7 @@
         }
       },
       {
-        "batch": 427,
+        "batch": 362,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -130,7 +130,7 @@
         }
       },
       {
-        "batch": 451,
+        "batch": 382,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -138,7 +138,7 @@
         }
       },
       {
-        "batch": 475,
+        "batch": 400,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -146,7 +146,7 @@
         }
       },
       {
-        "batch": 500,
+        "batch": 409,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -154,7 +154,7 @@
         }
       },
       {
-        "batch": 524,
+        "batch": 428,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -162,7 +162,7 @@
         }
       },
       {
-        "batch": 549,
+        "batch": 450,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -170,7 +170,7 @@
         }
       },
       {
-        "batch": 572,
+        "batch": 470,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -178,7 +178,7 @@
         }
       },
       {
-        "batch": 596,
+        "batch": 491,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -186,7 +186,7 @@
         }
       },
       {
-        "batch": 596,
+        "batch": 491,
         "id": 0,
         "kind": {
           "delivery": "outcome"
@@ -383,7 +383,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 17448505739246733064
+        "policy": 16162395616190957123
       }
     }
   },
