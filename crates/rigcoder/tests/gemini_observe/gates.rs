@@ -513,6 +513,9 @@ fn two_layers_patch_in_order() {
         "patched_twice_stream",
         Config {
             layers: Some(|h| h.layered(Capper(64)).layered(Cooler(0.2))),
+            // The recorded answer under a 64-token cap is empty; this cell
+            // pins the patches, not the empty-turn reprompt.
+            steer: Some(|steer| steer.max_empty_retries = 0),
             ..Config::streamed()
         },
         |cell| {

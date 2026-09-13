@@ -46,6 +46,11 @@ pub struct Steer {
     /// retried with feedback, up to `max_deliverable_retries` per run.
     pub deliverables: Vec<PathBuf>,
     pub max_deliverable_retries: usize,
+    /// A completed turn with no tool call and no answer text (Gemini
+    /// sometimes returns only a thought signature) would settle the run on
+    /// an empty answer; it is retried with feedback instead, up to this
+    /// many times per run.
+    pub max_empty_retries: usize,
 }
 
 #[cfg(test)]
@@ -118,6 +123,7 @@ impl Default for Steer {
             max_result_chars: 30_000,
             deliverables: Vec::new(),
             max_deliverable_retries: 2,
+            max_empty_retries: 2,
         }
     }
 }
@@ -148,6 +154,10 @@ struct Compiled {
 #[derive(Component, Default, serde::Serialize, serde::Deserialize)]
 pub struct DeliverableRetries(pub usize);
 
+/// Empty-turn retries spent by a run.
+#[derive(Component, Debug, Default)]
+pub struct EmptyTurnRetries(pub usize);
+
 pub struct SteerPlugin;
 
 impl Plugin for SteerPlugin {
@@ -165,7 +175,9 @@ impl Plugin for SteerPlugin {
                         .chain()
                         .in_set(BusSet::Gate),
                     shape_results.in_set(BusSet::Judge),
-                    demand_deliverables.in_set(RigSet::Judge),
+                    (reprompt_empty_turns, demand_deliverables)
+                        .chain()
+                        .in_set(RigSet::Judge),
                 ),
             );
     }
@@ -328,6 +340,73 @@ fn shape_results(
 
 /// A text-only answer while a required file is missing is not the end.
 type Judgable = (With<Turn>, Without<Materialised>, Without<Retry>);
+
+/// A completed turn that neither called a tool nor said anything is not
+/// an answer: the runtime would settle the run on an empty string. Retry it
+/// with feedback while the budget lasts; past it, the empty settlement
+/// stands and the transcript shows it.
+fn reprompt_empty_turns(
+    turns: Query<(Entity, &Outputs, &ChildOf), Judgable>,
+    effects: Query<(&ChildOf, &EffectOutcome), With<PendingEffect>>,
+    mut runs: Query<Option<&mut EmptyTurnRetries>, With<RunOf>>,
+    steer: Res<Steer>,
+    mut commands: Commands,
+    witness: Option<Res<rig_ecs::bus::Witnessing>>,
+    subjects: rig_ecs::bus::Subjects,
+) {
+    for (turn, outs, child_of) in &turns {
+        if !outs.done
+            || outs
+                .content
+                .iter()
+                .any(|c| matches!(c, AssistantContent::ToolCall(_)))
+            || !rig_ecs::policy::answer_text(&outs.content)
+                .trim()
+                .is_empty()
+        {
+            continue;
+        }
+        // Only a completion the provider answered: a failed attempt also
+        // folds to an empty turn, and that is the runtime's to retry or end.
+        let answered = effects.iter().any(|(effect_of, outcome)| {
+            effect_of.parent() == turn
+                && matches!(outcome.0, Ok(rig::effect::Outcome::Completion(_)))
+        });
+        if !answered {
+            continue;
+        }
+        let run = child_of.parent();
+        let spent = match runs.get_mut(run) {
+            Ok(Some(mut retries)) => {
+                retries.0 += 1;
+                retries.0
+            }
+            Ok(None) => {
+                commands.entity(run).insert(EmptyTurnRetries(1));
+                1
+            }
+            Err(_) => continue,
+        };
+        if spent > steer.max_empty_retries {
+            continue;
+        }
+        crate::observe::emit(
+            witness.as_deref(),
+            subjects.of_scope(run),
+            "steer",
+            &crate::observe::EmptyTurnRetry {
+                attempt: spent,
+                budget: steer.max_empty_retries,
+            },
+        );
+        commands.entity(turn).insert(Retry {
+            feedback: Some(
+                "Your last reply was empty. Continue the task: call a tool, or give the final answer."
+                    .to_owned(),
+            ),
+        });
+    }
+}
 
 fn demand_deliverables(
     turns: Query<(Entity, &Outputs, &ChildOf), Judgable>,

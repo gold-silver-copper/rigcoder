@@ -263,6 +263,62 @@ fn a_text_only_answer_with_a_deliverable_missing_is_retried_then_accepted() {
 }
 
 #[test]
+fn an_empty_turn_is_reprompted_then_the_answer_settles() {
+    // Gemini sometimes answers with only a thought signature: a reasoning
+    // part with empty text, no tool call, no words. The runtime would
+    // settle the run on "" (the turn is not empty by its rule); the
+    // steering layer retries it with feedback instead.
+    let dir = scratch("empty-turn");
+    let (events, seen) = run_scripted(
+        &dir,
+        Steer::default(),
+        vec![
+            vec![AssistantContent::Reasoning(
+                rig::message::Reasoning::new_with_signature("", Some("sig".to_owned())),
+            )],
+            vec![AssistantContent::text("")],
+            vec![AssistantContent::text("The answer is 42.")],
+        ],
+        "what is the answer",
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Event::Settled { answer } if answer == "The answer is 42.")),
+        "{events:?}"
+    );
+    assert_eq!(seen.len(), 3, "two reprompts, then the answer");
+    let second = format!("{:?}", seen[1]);
+    assert!(second.contains("Your last reply was empty"), "{second}");
+}
+
+#[test]
+fn empty_turn_reprompts_are_bounded_and_the_empty_settlement_then_stands() {
+    let dir = scratch("empty-turn-budget");
+    let steer = Steer {
+        max_empty_retries: 1,
+        ..Default::default()
+    };
+    let (events, seen) = run_scripted(
+        &dir,
+        steer,
+        vec![
+            vec![AssistantContent::text("")],
+            vec![AssistantContent::text("")],
+            vec![AssistantContent::text("never asked")],
+        ],
+        "say something",
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Event::Settled { answer } if answer.is_empty())),
+        "{events:?}"
+    );
+    assert_eq!(seen.len(), 2, "one retry, then the empty settlement stands");
+}
+
+#[test]
 fn invalid_steering_regexes_fail_closed() {
     let dir = scratch("invalid-regex");
     let steer = Steer {

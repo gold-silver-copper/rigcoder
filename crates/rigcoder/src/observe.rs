@@ -217,6 +217,20 @@ impl HostAction for ResultShaped {
     const KIND: &'static str = "rigcoder/result_shaped";
 }
 
+/// The steering layer retried a completed turn that had no tool call and
+/// no answer text, instead of letting the run settle on an empty answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmptyTurnRetry {
+    /// The retry about to be made, counting from 1.
+    pub attempt: usize,
+    /// The run's budget of empty-turn retries.
+    pub budget: usize,
+}
+
+impl HostAction for EmptyTurnRetry {
+    const KIND: &'static str = "rigcoder/empty_turn_retry";
+}
+
 /// The runtime re-issued a completion after a retryable provider failure
 /// (CONTRACT §5). The library's fact, at `Stage::Runtime` under the agent
 /// emitter: attempt, budget, reason. Re-exported so hosts and the digest

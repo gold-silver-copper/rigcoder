@@ -146,6 +146,7 @@ fn the_cli_writes_the_trace_of_a_replayed_run() {
         rigcoder::observe::Approval::KIND,
         rigcoder::observe::SteerDenial::KIND,
         rigcoder::observe::ResultShaped::KIND,
+        rigcoder::observe::EmptyTurnRetry::KIND,
         rigcoder::observe::ProviderRetry::KIND,
     ]
     .into_iter()

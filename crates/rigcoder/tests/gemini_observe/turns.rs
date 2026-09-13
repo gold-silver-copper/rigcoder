@@ -636,11 +636,16 @@ fn an_empty_member_settles_stream() {
             *body = join_frames(&frames);
         },
     );
+    // This cell pins the runtime's shape: an empty answer settles. The
+    // steering rule that reprompts an empty turn is off here; it is pinned
+    // by `tests/steer.rs` with a scripted model, because a live recording
+    // cannot make Gemini answer nothing on cue.
     run(
         MATRIX,
         "empty_member_stream",
         Config {
             source: Source::derived(derived, MATRIX, "text_stream"),
+            steer: Some(|steer| steer.max_empty_retries = 0),
             ..Config::streamed()
         },
         |cell| {

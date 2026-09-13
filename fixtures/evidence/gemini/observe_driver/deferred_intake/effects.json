@@ -17,22 +17,15 @@
         }
       },
       {
-        "batch": 18,
+        "batch": 19,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 19,
-        "id": 2,
-        "kind": {
-          "delivery": "outcome"
-        }
-      },
-      {
         "batch": 21,
-        "id": 3,
+        "id": 2,
         "kind": {
           "delivery": "outcome"
         }
@@ -45,23 +38,22 @@
         }
       },
       {
+        "batch": 24,
+        "id": 3,
+        "kind": {
+          "delivery": "outcome"
+        }
+      },
+      {
         "batch": 27,
         "id": 5,
         "kind": {
           "delivery": "stream",
-          "items": 3
+          "items": 5
         }
       },
       {
-        "batch": 28,
-        "id": 5,
-        "kind": {
-          "delivery": "stream",
-          "items": 2
-        }
-      },
-      {
-        "batch": 28,
+        "batch": 27,
         "id": 5,
         "kind": {
           "delivery": "outcome"
@@ -259,7 +251,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 16330598528745245511
+        "policy": 4567573886818630525
       }
     }
   },
