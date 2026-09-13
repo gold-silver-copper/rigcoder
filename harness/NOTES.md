@@ -487,3 +487,20 @@ budget left, so the one-sentence experiment runs as its own commit.
   then a paired smoke against the step 1 run: no passing task lost, no
   new harness event, mean tool calls per trial up by no more than a
   couple. Spend before launch $296.27; ask before passing $370.
+- Result: job `r3-cgw-run-custom-1789318839562661000-78370`, 0/3
+  (was 0/3 three times), $6.16. The sentence changed behaviour and not
+  the outcome: every attempt now runs the user's clone, push and curl
+  itself (16 such calls in one attempt), saw nginx answer
+  `403 Forbidden` on its final check, and settled anyway, while the
+  verifier's own push and curl still get 404. What the task needs is
+  not "run the sequence" but "believe its output"; that is the model's,
+  and the same shape as the spirals. Below threshold: reverted
+  (`git revert 42db03b`), no paired smoke spent. The ledger's
+  `custom`-slice row is this run.
+
+## Run 3, step 4: holdout not proposed
+
+The condition was step 1 clean and step 2 landed. Step 1 is clean;
+step 2 did not land (both context levers had needed-later hits), so
+the holdout is not proposed this run. Spend to date is in the last
+entry; the cap is $400.
