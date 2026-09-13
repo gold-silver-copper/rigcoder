@@ -70,3 +70,22 @@ Terse log of the eval → diagnose → fix → re-eval loop described in
   kv-store-grpc), as designed. 10 file-tool writes, none refused.
 - Cost $9.15, $0.92 per resolved task. Smoke spend to date $29.23.
 - Second consecutive iteration with no `harness`/`rig` failure.
+
+## Iteration 3: no fix, convergence check (2026-09-12)
+
+- Job `iter3-clean-run-smoke-1789257486902491000-21858`, commit `a91e46e`.
+- 10/10. Taxonomy: no failed trials; `harness` 0, `rig` 0, `infra` 0.
+  One deny-list denial (git-multibranch, whole-filesystem search), as
+  designed. 16 file-tool writes, none refused.
+- Cost $8.98, $0.90 per resolved task. Smoke spend to date $38.21.
+- Third consecutive iteration with no `harness`/`rig` failure: stop
+  condition met. Proposal: move to the dev tier (20 tasks, k=3).
+
+## Summary
+
+| iteration | commit | passed | cost | per resolved | harness | rig | infra | model |
+|---|---|---|---|---|---|---|---|---|
+| 0 baseline | f3fed29 | 10/10 | $10.43 | $1.04 | 1 (rustfmt refusal, non-fatal) | 0 | 0 | 0 |
+| 1 rustfmt fix | dfafa76 | 9/10 | $9.65 | $1.07 | 0 | 0 | 0 | 1 |
+| 2 | dfafa76 | 10/10 | $9.15 | $0.92 | 0 | 0 | 0 | 0 |
+| 3 | a91e46e | 10/10 | $8.98 | $0.90 | 0 | 0 | 0 | 0 |
