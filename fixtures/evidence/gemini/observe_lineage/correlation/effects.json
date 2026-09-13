@@ -6,70 +6,54 @@
         "id": 0,
         "kind": {
           "delivery": "stream",
-          "items": 6
+          "items": 9
         }
       },
       {
-        "batch": 8,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 3
-        }
-      },
-      {
-        "batch": 8,
+        "batch": 4,
         "id": 0,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 22,
-        "id": 1,
-        "kind": {
-          "delivery": "outcome"
-        }
-      },
-      {
-        "batch": 22,
+        "batch": 18,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 22,
+        "batch": 18,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 22,
+        "batch": 20,
+        "id": 1,
+        "kind": {
+          "delivery": "outcome"
+        }
+      },
+      {
+        "batch": 20,
         "id": 4,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 25,
+        "batch": 23,
         "id": 5,
         "kind": {
           "delivery": "stream",
-          "items": 2
+          "items": 5
         }
       },
       {
-        "batch": 29,
-        "id": 5,
-        "kind": {
-          "delivery": "stream",
-          "items": 3
-        }
-      },
-      {
-        "batch": 29,
+        "batch": 23,
         "id": 5,
         "kind": {
           "delivery": "outcome"

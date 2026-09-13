@@ -21,19 +21,11 @@
         "id": 1,
         "kind": {
           "delivery": "stream",
-          "items": 2
+          "items": 4
         }
       },
       {
-        "batch": 12,
-        "id": 1,
-        "kind": {
-          "delivery": "stream",
-          "items": 2
-        }
-      },
-      {
-        "batch": 12,
+        "batch": 9,
         "id": 1,
         "kind": {
           "delivery": "outcome"

@@ -6,70 +6,54 @@
         "id": 0,
         "kind": {
           "delivery": "stream",
-          "items": 6
+          "items": 9
         }
       },
       {
-        "batch": 7,
-        "id": 0,
-        "kind": {
-          "delivery": "stream",
-          "items": 3
-        }
-      },
-      {
-        "batch": 7,
+        "batch": 4,
         "id": 0,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 22,
+        "batch": 20,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 24,
+        "batch": 23,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 27,
+        "batch": 23,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 29,
+        "batch": 24,
         "id": 4,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 32,
+        "batch": 27,
         "id": 5,
         "kind": {
           "delivery": "stream",
-          "items": 3
+          "items": 5
         }
       },
       {
-        "batch": 35,
-        "id": 5,
-        "kind": {
-          "delivery": "stream",
-          "items": 2
-        }
-      },
-      {
-        "batch": 35,
+        "batch": 27,
         "id": 5,
         "kind": {
           "delivery": "outcome"

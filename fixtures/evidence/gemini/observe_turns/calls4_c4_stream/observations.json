@@ -516,6 +516,66 @@
       "seq": 17,
       "subject": {
         "scope": "rigcoder/run/1",
+        "order": 2,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
+      }
+    },
+    {
+      "seq": 19,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "gate",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "held",
+        "reason": {
+          "code": "unknown"
+        }
+      }
+    },
+    {
+      "seq": 20,
+      "subject": {
+        "scope": "rigcoder/run/1",
         "order": 1,
         "key": "tool:bash",
         "family": "tool"
@@ -537,7 +597,7 @@
       }
     },
     {
-      "seq": 18,
+      "seq": 21,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -561,7 +621,7 @@
       }
     },
     {
-      "seq": 19,
+      "seq": 22,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -578,81 +638,27 @@
       }
     },
     {
-      "seq": 20,
+      "seq": 23,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
         "key": "tool:bash",
         "family": "tool"
       },
-      "stage": "gate",
+      "stage": "host",
       "emitter": {
         "name": "rigcoder/approval",
         "version": "0.1.0"
       },
       "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
         }
-      }
-    },
-    {
-      "seq": 21,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
-        }
-      }
-    },
-    {
-      "seq": 22,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 4,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "gate",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "held",
-        "reason": {
-          "code": "unknown"
-        }
-      }
-    },
-    {
-      "seq": 23,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 1,
-        "effect": 1,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "dispatch",
-      "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
-      },
-      "action": {
-        "action": "issued"
       }
     },
     {
@@ -675,36 +681,12 @@
           "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
           "tool": "bash",
           "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
-      "seq": 25,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 2,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "62786be194b3892cbd13a83ff8b418638c1b5bfbaee43c99b034983491edde20",
-          "tool": "bash",
-          "mode": "auto",
           "decision": "approved"
         }
       }
     },
     {
-      "seq": 26,
+      "seq": 25,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 2,
@@ -718,6 +700,30 @@
       },
       "action": {
         "action": "released"
+      }
+    },
+    {
+      "seq": 26,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
+        }
       }
     },
     {
@@ -740,36 +746,12 @@
           "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
           "tool": "bash",
           "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
-      "seq": 28,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "17ebfd53a07ad299cb7e20f2392c6f74f10c4d3c99d086b69c03845837260ed9",
-          "tool": "bash",
-          "mode": "auto",
           "decision": "approved"
         }
       }
     },
     {
-      "seq": 29,
+      "seq": 28,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 3,
@@ -783,6 +765,30 @@
       },
       "action": {
         "action": "released"
+      }
+    },
+    {
+      "seq": 29,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 4,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/approval",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/approval",
+        "payload": {
+          "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
+          "tool": "bash",
+          "mode": "auto",
+          "decision": "prepared"
+        }
       }
     },
     {
@@ -805,36 +811,12 @@
           "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
           "tool": "bash",
           "mode": "auto",
-          "decision": "prepared"
-        }
-      }
-    },
-    {
-      "seq": 31,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 4,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "host",
-      "emitter": {
-        "name": "rigcoder/approval",
-        "version": "0.1.0"
-      },
-      "action": {
-        "action": "host",
-        "kind": "rigcoder/approval",
-        "payload": {
-          "operation": "300b12c471ce72e6b6a6c7afe91194106c1e8baa2026b563f47d53d775b1b9f8",
-          "tool": "bash",
-          "mode": "auto",
           "decision": "approved"
         }
       }
     },
     {
-      "seq": 32,
+      "seq": 31,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
@@ -848,6 +830,24 @@
       },
       "action": {
         "action": "released"
+      }
+    },
+    {
+      "seq": 32,
+      "subject": {
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "effect": 1,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "dispatch",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "issued"
       }
     },
     {
@@ -952,8 +952,8 @@
       "seq": 38,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 1,
-        "effect": 1,
+        "order": 4,
+        "effect": 4,
         "key": "tool:bash",
         "family": "tool"
       },
@@ -974,8 +974,8 @@
       "seq": 39,
       "subject": {
         "scope": "rigcoder/run/1",
-        "order": 4,
-        "effect": 4,
+        "order": 1,
+        "effect": 1,
         "key": "tool:bash",
         "family": "tool"
       },
