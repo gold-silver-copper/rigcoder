@@ -488,7 +488,7 @@ budget left, so the one-sentence experiment runs as its own commit.
   new harness event, mean tool calls per trial up by no more than a
   couple. Spend before launch $296.27; ask before passing $370.
 - Result: job `r3-cgw-run-custom-1789318839562661000-78370`, 0/3
-  (was 0/3 three times), $6.16. The sentence changed behaviour and not
+  (was 0/3 three times), $4.64. The sentence changed behaviour and not
   the outcome: every attempt now runs the user's clone, push and curl
   itself (16 such calls in one attempt), saw nginx answer
   `403 Forbidden` on its final check, and settled anyway, while the
