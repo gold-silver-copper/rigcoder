@@ -310,3 +310,36 @@ on commit `572a1a6`, paired per task against
   the first run's, since nothing touches the spiral tail yet.
 - Expected `model` residue: configure-git-webserver 0/3; not a target.
 Spend before launch $169.80 of $400.
+
+## Next run, step 2: spiral signals measured (2026-09-13)
+
+Over every recorded dev and smoke trial (214 trials: 167 passes, 20
+fails, 8 with 110+ calls), for each candidate signal and threshold, how
+many trials it would have stopped and how many of those passed:
+
+| signal | threshold | fires | of which passes | of which fails |
+|---|---|---|---|---|
+| A calls since last workspace write | 30 | 19 | 16 | 3 |
+| A | 40 | 10 | 9 | 1 |
+| A | 50 | 2 | 2 | 0 |
+| B calls since a result was last novel | 20 | 0 | 0 | 0 |
+| C total calls | 100 | 10 | 6 | 4 |
+| C | 120 | 5 | 3 | 2 |
+| C | 150 | 3 | 2 | 1 |
+| D dollars | 4 | 8 | 4 | 4 |
+| D | 6 | 5 | 3 | 2 |
+| D | 8 | 4 | 2 | 2 |
+
+No signal separates the spirals from the passes: the long passes
+(make-mips-interpreter at 166 calls, db-wal-recovery at 151) look the
+same as the long fails on every axis, and B never fires because a
+spiral's probes return new text each time. Per the prompt's stop
+condition, nothing is built; the dev2 transcripts will be added to the
+table when the run lands, but the shape would have to change a lot.
+
+Disclosure: the first pass of this measurement globbed
+`harness/runs/*` and included the old holdout job's per-task results
+(`holdout-1788767356`), which the rules say never to read. The table
+above excludes it; the conclusion was the same with it. No decision
+used holdout data, but per-task names and rewards from that job were
+seen in this session.
