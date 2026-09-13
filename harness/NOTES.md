@@ -397,3 +397,19 @@ seen in this session.
   calls): unchanged. Total calls ≥ 120 fires on 9 trials, 5 of them
   passes; dollars ≥ 8 on 8, 4 passes; calls since a novel result never
   reaches 40. Nothing built.
+- Result: job `c5-empty-run-smoke-1789291780571062000-11822`, commit
+  `9b2cce0`, paired against the walker run. 10/10 vs 10/10. No
+  `rigcoder/empty_turn_retry` fact fired (the mode is 1.2% of trials;
+  the steer tests are the pin). Deny-list denials 1. No new harness
+  event. Cost $11.22, $1.12 per resolved task vs $1.76 (the walker run
+  carried a $7.85 db-wal-recovery spiral; this one did not). Kept.
+  Spend to date $282.98 of $400.
+
+## Summary of the next-run prompt (2026-09-13)
+
+| step | outcome |
+|---|---|
+| 1 dev tier on the three fixes | 54/60 vs 50/60, $1.89 vs $2.08 per resolved task; every threshold item met |
+| 2 spiral signal | no signal separates spirals from passes on 274 trials; nothing built |
+| 3 retry not working live | not triggered: two live retries verified in dev2 |
+| new: empty-turn reprompt | `9b2cce0` + Rig #2504 (green, open); paired smoke 10/10 |
