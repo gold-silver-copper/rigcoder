@@ -83,9 +83,7 @@ fn drive(app: &mut App) {
         app.update();
         // Provider backoff is a live-provider courtesy; the assertion is
         // about what is retried, not how long the wait is.
-        app.world_mut()
-            .resource_mut::<Conversation>()
-            .expire_backoff();
+        rigcoder::expire_backoffs(app.world_mut());
         if !app.world().resource::<Conversation>().is_busy() {
             return;
         }

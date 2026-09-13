@@ -174,92 +174,57 @@
         "version": "0.42.0"
       },
       "action": {
-        "action": "ended",
-        "ending": {
-          "code": "provider",
-          "detail": "provider_response: ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}"
+        "action": "host",
+        "kind": "rig-ecs/agent/provider_retry",
+        "payload": {
+          "attempt": 1,
+          "budget": 3,
+          "reason": {
+            "code": "provider_response",
+            "detail": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}"
+          }
         }
       }
     },
     {
       "seq": 7,
       "subject": {
-        "scope": "rigcoder/run/1"
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
       },
-      "stage": "host",
+      "stage": "gate",
       "emitter": {
-        "name": "rigcoder/session",
-        "version": "0.1.0"
+        "name": "unknown"
       },
       "action": {
-        "action": "host",
-        "kind": "rigcoder/failure",
-        "payload": {
-          "kind": "provider_response",
-          "origin": "provider",
-          "boundary": "provider_response",
-          "message": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}",
-          "retryable": true,
-          "http_status": 503,
-          "adapter": {
-            "subject": {
-              "scope": "rigcoder/run/1",
-              "order": 0,
-              "effect": 0,
-              "key": "rigcoder/model",
-              "family": "completion"
-            },
-            "operation": "rigcoder/request/1/completion/0",
-            "attempt": 1,
-            "host_attempt": 1,
-            "response_status": 503,
-            "ending": {
-              "ending": "error",
-              "boundary": "provider_response",
-              "kind": "provider_response",
-              "status": 503,
-              "retryable": true
-            },
-            "verdict": {
-              "finish_reason": null,
-              "block_reason": null,
-              "detail": null,
-              "model": null
-            },
-            "error_envelope": {
-              "code": "503",
-              "status": "UNAVAILABLE",
-              "message": "The model is overloaded. Please try again later."
-            }
-          }
+        "action": "held",
+        "reason": {
+          "code": "unknown"
         }
       }
     },
     {
       "seq": 8,
       "subject": {
-        "scope": "rigcoder/run/1"
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
       },
-      "stage": "host",
+      "stage": "gate",
       "emitter": {
-        "name": "rigcoder/session",
-        "version": "0.1.0"
+        "name": "unknown"
       },
       "action": {
-        "action": "host",
-        "kind": "rigcoder/provider_retry",
-        "payload": {
-          "operation": "rigcoder/request/1/completion/0",
-          "attempt": 1,
-          "wait_secs": 2,
-          "reason": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}"
-        }
+        "action": "released"
       }
     },
     {
       "seq": 9,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -277,7 +242,7 @@
     {
       "seq": 10,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -304,7 +269,7 @@
     {
       "seq": 11,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -334,7 +299,7 @@
     {
       "seq": 12,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -367,7 +332,7 @@
     {
       "seq": 13,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -402,7 +367,7 @@
     {
       "seq": 14,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -435,7 +400,7 @@
     {
       "seq": 15,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -470,7 +435,7 @@
     {
       "seq": 16,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -497,7 +462,7 @@
     {
       "seq": 17,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -525,7 +490,7 @@
     {
       "seq": 18,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -547,7 +512,7 @@
     {
       "seq": 19,
       "subject": {
-        "scope": "rigcoder/run/2"
+        "scope": "rigcoder/run/1"
       },
       "stage": "runtime",
       "emitter": {

@@ -10,8 +10,11 @@ use rig::{
     message::{AssistantContent, UserContent},
 };
 use rig_ecs::{
-    agent::{MessageParts, Order, Parts, RunResult, ToolCallSlot, Usage, Utterance},
-    bus::PendingEffect,
+    agent::{
+        MessageParts, Order, Parts, ProviderRetried, ProviderRetries, ProviderRetrying, RunResult,
+        ToolCallSlot, Usage, Utterance,
+    },
+    bus::{Held, PendingEffect},
     prelude::*,
     systems::spawn_run,
 };
@@ -36,31 +39,25 @@ pub struct Conversation {
     shown: HashMap<Entity, usize>,
     /// Runs started, ever.
     pub runs: usize,
-    /// The last prompt and the history it was submitted after, so a run
-    /// that fails on a transient provider error can be submitted again.
-    last: Option<(
-        String,
-        Vec<MessageParts>,
-        crate::RunSettings,
-        crate::approval::ApprovalMode,
-    )>,
-    /// A resubmission due at this instant.
-    retry_at: Option<std::time::Instant>,
-    pub provider_retries: usize,
-    /// Runtime-only identity of the initial completion, shared by safe prompt retries.
-    provider_operation: Option<rig::observe::AdapterContext>,
 }
 
-/// Consumed by the first completion effect of this run, never inherited by
-/// later tool-result turns. Whole-prompt retries are permitted only before tools.
+/// The run's initial completion identity, runtime-only: every attempt of
+/// the run's first completion (the runtime's provider retries, CONTRACT
+/// §5) is stamped with it and its one-based host attempt, so the adapter's
+/// facts correlate across attempts. Never inherited by later tool-result
+/// turns: those are new operations.
 #[derive(Component)]
-pub(crate) struct InitialProviderOperation(Option<rig_ecs::bus::AdapterOperation>);
+pub(crate) struct ProviderOperation(rig::observe::AdapterContext);
 
 pub(crate) fn correlate_provider_attempts(
     mut commands: Commands,
     effects: Query<(Entity, &PendingEffect, &ChildOf), Added<PendingEffect>>,
     parents: Query<&ChildOf>,
-    mut runs: Query<&mut InitialProviderOperation>,
+    runs: Query<(
+        &ProviderOperation,
+        &ProviderRetried,
+        &rig_ecs::agent::Cursor,
+    )>,
 ) {
     for (entity, effect, turn) in &effects {
         if !matches!(effect.kind, EffectKind::Completion { .. }) {
@@ -69,33 +66,162 @@ pub(crate) fn correlate_provider_attempts(
         let Ok(run) = parents.get(turn.parent()) else {
             continue;
         };
-        if let Ok(mut initial) = runs.get_mut(run.parent())
-            && let Some(operation) = initial.0.take()
-        {
-            commands.entity(entity).insert(operation);
+        let Ok((operation, retried, cursor)) = runs.get(run.parent()) else {
+            continue;
+        };
+        // The first model call is turn 1; a retry re-issues it without
+        // advancing the cursor, so the cursor names the initial completion
+        // for as long as its attempts last.
+        if cursor.turn != 1 {
+            continue;
         }
+        let Some(host_attempt) = u64::try_from(retried.0)
+            .ok()
+            .and_then(|spent| spent.checked_add(1))
+            .and_then(std::num::NonZeroU64::new)
+        else {
+            continue;
+        };
+        commands
+            .entity(entity)
+            .insert(rig_ecs::bus::AdapterOperation {
+                context: operation.0.clone(),
+                host_attempt,
+            });
     }
 }
 
-/// Transient provider failures are retried this many times, with backoff.
-pub const MAX_PROVIDER_RETRIES: usize = 3;
+/// Transient provider failures are retried this many times, with backoff:
+/// the run's `ProviderRetries` budget (CONTRACT §5).
+pub const MAX_PROVIDER_RETRIES: usize = rig_ecs::agent::DEFAULT_PROVIDER_RETRIES;
 
 impl Conversation {
-    pub fn has_pending_retry(&self) -> bool {
-        self.retry_at.is_some()
-    }
-
-    /// A provider backoff still belongs to the current user request.
+    /// A run is in flight, its provider backoff included.
     pub fn is_busy(&self) -> bool {
-        self.active.is_some() || self.has_pending_retry()
+        self.active.is_some()
     }
+}
 
-    /// Make a pending provider retry due now: a host that already waited
-    /// (or a test that must not) submits it on the next tick.
-    pub fn expire_backoff(&mut self) {
-        if self.retry_at.is_some() {
-            self.retry_at = Some(std::time::Instant::now());
+/// The deadline a re-issued completion waits for before dispatch: the
+/// host's backoff, as a hold on the effect (CONTRACT §5).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RetryBackoff(pub std::time::Instant);
+
+/// Exponential backoff for the `attempt`th retry, capped at 64 seconds.
+fn backoff(attempt: usize) -> std::time::Duration {
+    std::time::Duration::from_secs(1u64 << attempt.min(6))
+}
+
+/// Hold a retried completion for its backoff, live only: replay delivery
+/// checks for missing requests at quiescence, so a recorded continuation
+/// must not wait on the wall clock.
+pub(crate) fn hold_retried_completions(
+    mut commands: Commands,
+    effects: Query<(Entity, &PendingEffect, &ChildOf), Added<PendingEffect>>,
+    parents: Query<&ChildOf>,
+    runs: Query<&ProviderRetried>,
+    setup: Res<crate::Setup>,
+) {
+    if matches!(setup.mode, crate::Mode::Replay(_)) {
+        return;
+    }
+    for (entity, effect, turn) in &effects {
+        if !matches!(effect.kind, EffectKind::Completion { .. }) {
+            continue;
         }
+        let Ok(run) = parents.get(turn.parent()) else {
+            continue;
+        };
+        let Ok(retried) = runs.get(run.parent()) else {
+            continue;
+        };
+        if retried.0 == 0 {
+            continue;
+        }
+        commands.entity(entity).insert((
+            Held,
+            RetryBackoff(std::time::Instant::now() + backoff(retried.0)),
+        ));
+    }
+}
+
+/// Release every backoff hold that is due. Add it to `Update`, before the
+/// runner, so a due retry dispatches on this tick.
+pub fn release_backoffs(world: &mut World) {
+    let now = std::time::Instant::now();
+    let due: Vec<Entity> = world
+        .query::<(Entity, &RetryBackoff)>()
+        .iter(world)
+        .filter(|(_, deadline)| now >= deadline.0)
+        .map(|(entity, _)| entity)
+        .collect();
+    if due.is_empty() {
+        return;
+    }
+    for entity in due {
+        world.entity_mut(entity).remove::<(Held, RetryBackoff)>();
+    }
+    world.resource_mut::<rig_ecs::bus::Progress>().mark();
+}
+
+/// Make every pending backoff due now: a host that already waited (or a
+/// test that must not) dispatches it on the next tick.
+pub fn expire_backoffs(world: &mut World) {
+    let now = std::time::Instant::now();
+    let pending: Vec<Entity> = world
+        .query_filtered::<Entity, With<RetryBackoff>>()
+        .iter(world)
+        .collect();
+    for entity in pending {
+        world.entity_mut(entity).insert(RetryBackoff(now));
+    }
+}
+
+/// A run whose completion the runtime just re-issued.
+type JustRetried = (With<ProviderRetrying>, Changed<ProviderRetried>);
+
+/// The runtime re-issued the active run's completion (CONTRACT §5): the
+/// transcript says so, with the failure it retries and the backoff.
+pub(crate) fn announce_provider_retries(
+    runs: Query<(Entity, &ProviderRetried), JustRetried>,
+    turns: Query<&ChildOf, With<rig_ecs::agent::Turn>>,
+    effects: Query<(&ChildOf, &Order, &rig_ecs::bus::EffectOutcome), With<PendingEffect>>,
+    conversation: Res<Conversation>,
+    setup: Res<crate::Setup>,
+    connection: Option<Res<crate::model::ModelConnection>>,
+    mut transcript: ResMut<Transcript>,
+) {
+    for (run, retried) in &runs {
+        if conversation.active != Some(run) || retried.0 == 0 {
+            continue;
+        }
+        // The attempt just lost: the run's latest failed completion.
+        let reason = effects
+            .iter()
+            .filter(|(turn, _, _)| turns.get(turn.parent()).is_ok_and(|of| of.parent() == run))
+            .filter_map(|(_, order, outcome)| match &outcome.0 {
+                Err(report) => Some((order.0, report)),
+                Ok(_) => None,
+            })
+            .max_by_key(|(order, _)| *order)
+            .map(|(_, report)| {
+                let secrets = crate::model::diagnostic_secrets(
+                    connection.as_deref(),
+                    Some(&setup.diagnostic_secrets),
+                );
+                rig::observe::scrub_diagnostic(&report.message, &secrets)
+            })
+            .unwrap_or_default();
+        let wait = if matches!(setup.mode, crate::Mode::Replay(_)) {
+            std::time::Duration::ZERO
+        } else {
+            backoff(retried.0)
+        };
+        transcript.push(Event::Retrying {
+            reason,
+            attempt: retried.0,
+            wait_secs: wait.as_secs(),
+        });
     }
 }
 
@@ -134,7 +260,8 @@ pub enum Event {
     Failed {
         reason: crate::failure::FailureDetail,
     },
-    /// The run failed on a transient provider error and will be submitted again.
+    /// The runtime re-issued the completion after a transient provider
+    /// failure (CONTRACT §5): no tool is re-run, no history rewritten.
     Retrying {
         reason: String,
         attempt: usize,
@@ -188,16 +315,14 @@ pub fn submit(world: &mut World, prompt: &str) -> Option<Entity> {
     if world.resource::<Conversation>().is_busy() {
         return None;
     }
-    world.resource_mut::<Conversation>().provider_retries = 0;
     let settings = world.resource::<crate::RunSettings>().clone();
     let approval = *world.resource::<crate::approval::ApprovalMode>();
-    start_run(world, prompt, true, settings, approval)
+    start_run(world, prompt, settings, approval)
 }
 
 fn start_run(
     world: &mut World,
     prompt: &str,
-    announce: bool,
     settings: crate::RunSettings,
     approval: crate::approval::ApprovalMode,
 ) -> Option<Entity> {
@@ -261,49 +386,24 @@ fn start_run(
         .insert(rig_ecs::agent::PolicyVersion(format!(
             "rigcoder-{policy:016x}"
         )));
-    if announce {
-        world.resource_mut::<Transcript>().push(Event::User {
-            text: prompt.to_owned(),
-        });
-    }
-    {
-        let mut conversation = world.resource_mut::<Conversation>();
-        conversation.last = Some((
-            prompt.to_owned(),
-            history.clone(),
-            settings.clone(),
-            approval,
-        ));
-    }
+    world.resource_mut::<Transcript>().push(Event::User {
+        text: prompt.to_owned(),
+    });
     let run = spawn_run(world, agent, &history, prompt, settings.stream, None);
-    if announce {
-        let context = world
-            .get_resource::<rig_ecs::bus::Witnessing>()
-            .map(|witness| {
-                rig::observe::AdapterContext::new(
-                    witness.sink().clone(),
-                    rig::observe::Subject::default(),
-                    format!("rigcoder/request/{sequence}/completion/0"),
-                )
-            });
-        world.resource_mut::<Conversation>().provider_operation = context;
-    }
-    let operation = {
-        let conversation = world.resource::<Conversation>();
-        conversation.provider_operation.clone().and_then(|context| {
-            let ordinal = conversation.provider_retries.checked_add(1)?;
-            Some(rig_ecs::bus::AdapterOperation {
-                context,
-                host_attempt: std::num::NonZeroU64::new(u64::try_from(ordinal).ok()?)?,
-            })
+    if let Some(context) = world
+        .get_resource::<rig_ecs::bus::Witnessing>()
+        .map(|witness| {
+            rig::observe::AdapterContext::new(
+                witness.sink().clone(),
+                rig::observe::Subject::default(),
+                format!("rigcoder/request/{sequence}/completion/0"),
+            )
         })
-    };
-    if operation.is_some() {
-        world
-            .entity_mut(run)
-            .insert(InitialProviderOperation(operation));
+    {
+        world.entity_mut(run).insert(ProviderOperation(context));
     }
     world.entity_mut(run).insert((
+        ProviderRetries(usize::from(settings.provider_retries)),
         crate::RunConfiguration(settings),
         crate::approval::RunApproval(approval),
     ));
@@ -348,21 +448,6 @@ fn start_run(
 
 /// Stop the run in flight: `Cancelled` on the run ends it `Failed(Cancelled)`.
 pub fn cancel(world: &mut World, reason: &str) {
-    if world
-        .resource_mut::<Conversation>()
-        .retry_at
-        .take()
-        .is_some()
-    {
-        world.resource_mut::<Conversation>().last = None;
-        let secrets = crate::model::world_diagnostic_secrets(world);
-        crate::failure::record_world(
-            world,
-            rig::observe::Subject::default(),
-            "session",
-            crate::failure::FailureDetail::host("cancelled", reason, &secrets),
-        );
-    }
     if let Some(run) = world.resource::<Conversation>().active {
         world.entity_mut(run).insert(Cancelled(reason.to_owned()));
     }
@@ -457,7 +542,6 @@ pub fn on_failed(
     mut conversation: ResMut<Conversation>,
     mut transcript: ResMut<Transcript>,
     setup: Res<crate::Setup>,
-    settings: Query<&crate::RunConfiguration>,
     witness: Option<Res<rig_ecs::bus::Witnessing>>,
     scopes: Query<&rig_ecs::bus::Scope>,
     observations: Option<Res<crate::observe::Observations>>,
@@ -496,41 +580,6 @@ pub fn on_failed(
         commands.queue(move |_: &mut World| {
             crate::observe::emit(Some(&witness), subject, "session", &reason);
         });
-    }
-    // A whole-prompt retry is safe only before this request has produced
-    // tool calls. Completed tools may have irreversible side effects, so a
-    // later provider failure must preserve their history and end the run.
-    if let Some(rig_ecs::agent::Failure::Provider(report)) = &failure
-        && conversation.provider_retries < settings.get(run).map_or(0, |s| usize::from(s.0.provider_retries))
-        && transient(report)
-        && let Some((_, history, _, _)) = conversation.last.clone()
-        && !conversation.history.iter().skip(history.len()).any(|parts| matches!(parts,
-            MessageParts::Assistant { content, .. } if content.iter().any(|part| matches!(part, AssistantContent::ToolCall(_)))))
-    {
-        conversation.provider_retries += 1;
-        // Replay delivery checks for missing requests at quiescence. The
-        // recorded causal continuation must occur in this schedule pass;
-        // wall-clock backoff is a live-provider concern.
-        let wait = if matches!(setup.mode, crate::Mode::Replay(_)) {
-            std::time::Duration::ZERO
-        } else {
-            std::time::Duration::from_secs(1u64 << conversation.provider_retries.min(6))
-        };
-        conversation.history = history;
-        conversation.retry_at = Some(std::time::Instant::now() + wait);
-        if let Some(witness) = witness.as_deref().cloned() {
-            let retry = crate::observe::ProviderRetry {
-                operation: conversation.provider_operation.as_ref().map(|context| context.operation().to_owned()),
-                attempt: conversation.provider_retries,
-                wait_secs: wait.as_secs(),
-                reason: reason.message.clone(),
-            };
-            commands.queue(move |_: &mut World| {
-                crate::observe::emit(Some(&witness), subject, "session", &retry);
-            });
-        }
-        transcript.push(Event::Retrying { reason: reason.to_string(), attempt: conversation.provider_retries, wait_secs: wait.as_secs() });
-        return;
     }
     transcript.push(Event::Failed { reason });
 }
@@ -585,75 +634,6 @@ pub fn message_text(parts: &MessageParts) -> String {
     }
 }
 
-/// Does this provider report look like something a second attempt can fix?
-fn transient(report: &rig::error::ErrorReport) -> bool {
-    use rig::error::ErrorKind;
-    // A replay divergence is a finding, never something to retry.
-    if matches!(report.kind, ErrorKind::Divergence) {
-        return false;
-    }
-    if report.retryable {
-        return true;
-    }
-    if matches!(report.http_status, Some(429 | 500 | 502 | 503 | 504 | 529)) {
-        return true;
-    }
-    let text = report.message.to_lowercase();
-    [
-        "stream ended",
-        "terminal record",
-        "rate limit",
-        "overloaded",
-        "timed out",
-        "timeout",
-        "connection reset",
-        "connection closed",
-        "eof",
-        "temporarily",
-    ]
-    .iter()
-    .any(|needle| text.contains(needle))
-        || matches!(report.kind, ErrorKind::Timeout)
-}
-
-/// The exclusive step that submits a retried prompt once its backoff has
-/// elapsed. Add it to `Update`.
-pub fn resubmit_when_due(world: &mut World) {
-    let due = {
-        let conversation = world.resource::<Conversation>();
-        conversation.active.is_none()
-            && conversation
-                .retry_at
-                .is_some_and(|at| std::time::Instant::now() >= at)
-    };
-    if !due {
-        return;
-    }
-    let (prompt, settings, approval) = {
-        let mut conversation = world.resource_mut::<Conversation>();
-        conversation.retry_at = None;
-        let Some((prompt, history, settings, approval)) = conversation.last.clone() else {
-            return;
-        };
-        conversation.history = history.clone();
-        (prompt, settings, approval)
-    };
-    if world.get_resource::<AgentHandle>().is_none() {
-        crate::failure::record_world(
-            world,
-            rig::observe::Subject::default(),
-            "session",
-            crate::failure::FailureDetail::host(
-                "retry_submission",
-                "could not retry: no agent is registered",
-                &[],
-            ),
-        );
-    } else if start_run(world, &prompt, false, settings, approval).is_some() {
-        world.resource_mut::<rig_ecs::bus::Progress>().mark();
-    }
-}
-
 #[cfg(test)]
 mod retry_tests {
     use super::*;
@@ -665,7 +645,7 @@ mod retry_tests {
         serve::{Dispatch, Reply, Serve},
     };
     use rig_ecs::bus::Handlers;
-    use std::{collections::VecDeque, sync::Mutex, time::Instant};
+    use std::{collections::VecDeque, sync::Mutex};
 
     type Answer = Result<Vec<AssistantContent>, ErrorReport>;
     struct Scripted(Mutex<VecDeque<Answer>>);
@@ -723,8 +703,10 @@ mod retry_tests {
         app.update();
         app
     }
+    /// A typed retryable report: the runtime retries on `retryable`, not
+    /// on the message.
     fn transient_failure() -> Answer {
-        Err(ErrorReport::new(ErrorKind::Timeout, "timed out"))
+        Err(ErrorReport::new(ErrorKind::Timeout, "timed out").with_retryable(true))
     }
     fn done() -> Answer {
         Ok(vec![AssistantContent::text("done")])
@@ -732,11 +714,9 @@ mod retry_tests {
     fn drive(app: &mut App) {
         for _ in 0..2_000 {
             app.update();
-            // Advance only the application's retry deadline; no wall-clock
-            // backoff is needed to test the state transition deterministically.
-            if app.world().resource::<Conversation>().has_pending_retry() {
-                app.world_mut().resource_mut::<Conversation>().retry_at = Some(Instant::now());
-            }
+            // The backoff is a hold on the re-issued effect; make it due so
+            // the state transition is tested, not the wall clock.
+            expire_backoffs(app.world_mut());
             if !app.world().resource::<Conversation>().is_busy() {
                 return;
             }
@@ -759,6 +739,25 @@ mod retry_tests {
             stream,
             provider_retries: retries,
         }
+    }
+
+    fn retries(app: &App) -> Vec<usize> {
+        app.world()
+            .resource::<Transcript>()
+            .events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Retrying { attempt, .. } => Some(*attempt),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn held_backoffs(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, (With<Held>, With<RetryBackoff>)>()
+            .iter(app.world())
+            .count()
     }
 
     #[test]
@@ -819,6 +818,15 @@ mod retry_tests {
             assert_eq!(request.max_tokens, Some(512));
             assert!(!stream);
         }
+        // The budget of one was the run's, set when it was submitted.
+        assert_eq!(retries(&live), [1]);
+        assert!(
+            live.world()
+                .resource::<Transcript>()
+                .events
+                .iter()
+                .any(|e| matches!(e, Event::Failed { reason } if reason.kind == "timeout"))
+        );
         submit(live.world_mut(), "second").unwrap();
         drive(&mut live);
         let log = crate::effect_log(live.world());
@@ -900,6 +908,11 @@ mod retry_tests {
         assert_eq!(restored.max_tokens, 512);
         assert!(!restored.stream);
         assert_eq!(restored.provider_retries, 1);
+        // The run's budget travels with the scene as the library's setting.
+        assert_eq!(
+            resumed.world().get::<ProviderRetries>(run).map(|r| r.0),
+            Some(1)
+        );
         assert_eq!(resumed.world().resource::<Conversation>().runs, 7);
         drive(&mut resumed);
         let next = submit(resumed.world_mut(), "next").unwrap();
@@ -920,8 +933,10 @@ mod retry_tests {
         submit(live.world_mut(), "finish").unwrap();
         drive(&mut live);
         let log = crate::effect_log(live.world());
-        assert_eq!(log.records.len(), 2);
-        assert_eq!(live.world().resource::<Conversation>().runs, 2);
+        assert_eq!(log.records.len(), 2, "the lost attempt and the retry");
+        // One run: the retry is the run's, not a second submission.
+        assert_eq!(live.world().resource::<Conversation>().runs, 1);
+        assert_eq!(retries(&live), [1]);
         let mut replay = App::new();
         replay
             .add_plugins(crate::RigcoderPlugin {
@@ -938,7 +953,7 @@ mod retry_tests {
         drive(&mut replay);
         assert_eq!(
             replay.world().resource::<Conversation>().runs,
-            2,
+            1,
             "{:?}",
             replay.world().resource::<Transcript>().events
         );
@@ -950,10 +965,19 @@ mod retry_tests {
                 .iter()
                 .any(|e| matches!(e, Event::Settled { answer } if answer == "done"))
         );
+        assert_eq!(
+            retries(&replay),
+            [1],
+            "the replay retries where the log did"
+        );
     }
 
     #[test]
-    fn a_provider_failure_after_a_tool_is_not_retried_or_reexecuted() {
+    fn a_provider_failure_after_a_tool_is_retried_without_reexecuting_it() {
+        // Before the run-level retry a provider failure after tool work was
+        // fatal, because the only retry resubmitted the whole prompt. Now
+        // the completion is re-issued over the history the tool result is
+        // in: the tool ran once and the run finishes.
         let dir = scratch("side-effects");
         let command = Ok(vec![AssistantContent::tool_call(
             "append",
@@ -974,39 +998,43 @@ mod retry_tests {
         drive(&mut app);
         assert_eq!(std::fs::read_to_string(dir.join("count.txt")).unwrap(), "x");
         assert_eq!(app.world().resource::<Conversation>().runs, 1);
+        assert_eq!(retries(&app), [1, 2]);
         assert!(
-            !app.world()
+            app.world()
                 .resource::<Transcript>()
                 .events
                 .iter()
-                .any(|e| matches!(e, Event::Retrying { .. }))
+                .any(|e| matches!(e, Event::Settled { answer } if answer == "done"))
         );
-        // Earlier conversation tools do not prevent a safe retry of a new
-        // request that fails before doing tool work of its own.
-        submit(app.world_mut(), "a new request").unwrap();
-        drive(&mut app);
-        assert_eq!(app.world().resource::<Conversation>().runs, 3);
-        assert_eq!(std::fs::read_to_string(dir.join("count.txt")).unwrap(), "x");
+        let log = crate::effect_log(app.world());
+        let tools = log
+            .iter()
+            .filter(|r| matches!(r.kind, EffectKind::ToolCall { .. }))
+            .count();
+        assert_eq!(tools, 1, "the tool is in the log once");
     }
 
     #[test]
-    fn a_backoff_is_busy_and_can_be_canceled_without_a_hidden_resubmission() {
+    fn a_backoff_is_a_hold_and_a_cancel_during_it_ends_the_run() {
         let dir = scratch("cancel");
         let mut app = app(&dir, crate::Mode::Live, Some(vec![transient_failure()]));
         submit(app.world_mut(), "first").unwrap();
         for _ in 0..2_000 {
             app.update();
-            if app.world().resource::<Conversation>().has_pending_retry() {
+            if held_backoffs(&mut app) > 0 {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        assert!(app.world().resource::<Conversation>().has_pending_retry());
+        assert_eq!(held_backoffs(&mut app), 1, "the re-issued completion waits");
+        assert!(app.world().resource::<Conversation>().is_busy());
         assert!(submit(app.world_mut(), "second").is_none());
+        assert_eq!(retries(&app), [1]);
         cancel(app.world_mut(), "stop during backoff");
-        resubmit_when_due(app.world_mut());
+        drive(&mut app);
         assert!(!app.world().resource::<Conversation>().is_busy());
         assert_eq!(app.world().resource::<Conversation>().runs, 1);
+        assert_eq!(held_backoffs(&mut app), 0, "the held attempt is gone");
         assert!(app.world().resource::<Transcript>().events.iter().any(
             |e| matches!(e, Event::Failed { reason } if reason.kind == "cancelled" && reason.message == "stop during backoff")
         ));
@@ -1023,72 +1051,30 @@ mod retry_tests {
             .collect();
         assert_eq!(cancellations.len(), 1);
         assert_eq!(cancellations[0].message, "stop during backoff");
-        assert!(cancellations[0].adapter.is_none());
+        // The held attempt never went out: one record, the lost one.
+        assert_eq!(crate::effect_log(app.world()).records.len(), 1);
     }
 
     #[test]
-    fn rejected_retry_reports_its_actual_failure_once() {
-        use rig::observe::HostAction as _;
-        for missing_agent in [false, true] {
-            let dir = scratch(if missing_agent {
-                "retry-no-agent"
-            } else {
-                "retry-id-exhausted"
-            });
-            let mut app = app(&dir, crate::Mode::Live, Some(vec![transient_failure()]));
-            submit(app.world_mut(), "first").unwrap();
-            for _ in 0..2_000 {
-                app.update();
-                if app.world().resource::<Conversation>().has_pending_retry() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(1));
-            }
-            assert!(app.world().resource::<Conversation>().has_pending_retry());
-            if missing_agent {
-                app.world_mut().remove_resource::<AgentHandle>();
-            } else {
-                app.world_mut().resource_mut::<Conversation>().runs = usize::MAX;
-            }
-            app.world_mut()
-                .resource_mut::<Conversation>()
-                .expire_backoff();
-            resubmit_when_due(app.world_mut());
-            let expected = if missing_agent {
-                "retry_submission"
-            } else {
-                "identity_exhausted"
-            };
-            let failures: Vec<_> = app
-                .world()
-                .resource::<Transcript>()
-                .events
-                .iter()
-                .filter_map(|event| match event {
-                    Event::Failed { reason } => Some(reason),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(failures.len(), 1);
-            assert_eq!(failures[0].kind, expected);
-            let observed: Vec<_> = crate::observations(app.world())
-                .unwrap()
-                .observations
-                .iter()
-                .filter_map(|observation| {
-                    crate::failure::FailureDetail::from_action(&observation.action)
-                })
-                .map(Result::unwrap)
-                .collect();
-            assert_eq!(
-                observed.len(),
-                2,
-                "original retryable failure and one retry rejection"
-            );
-            assert_eq!(observed.last().unwrap(), failures[0]);
-            assert!(!app.world().resource::<Conversation>().is_busy());
-            assert_eq!(crate::effect_log(app.world()).records.len(), 1);
-        }
+    fn a_non_retryable_failure_is_not_retried() {
+        let dir = scratch("refusal");
+        let mut app = app(
+            &dir,
+            crate::Mode::Live,
+            Some(vec![
+                Err(ErrorReport::new(ErrorKind::Provider, "blocked: SAFETY")),
+                done(),
+            ]),
+        );
+        submit(app.world_mut(), "first").unwrap();
+        drive(&mut app);
+        assert!(retries(&app).is_empty());
+        assert!(
+            app.world().resource::<Transcript>().events.iter().any(
+                |e| matches!(e, Event::Failed { reason } if reason.message == "blocked: SAFETY")
+            )
+        );
+        assert_eq!(crate::effect_log(app.world()).records.len(), 1);
     }
 
     #[test]
@@ -1108,16 +1094,6 @@ mod retry_tests {
         drive(&mut app);
         submit(app.world_mut(), "second").unwrap();
         drive(&mut app);
-        let attempts: Vec<_> = app
-            .world()
-            .resource::<Transcript>()
-            .events
-            .iter()
-            .filter_map(|e| match e {
-                Event::Retrying { attempt, .. } => Some(*attempt),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(attempts, vec![1, 1]);
+        assert_eq!(retries(&app), vec![1, 1]);
     }
 }

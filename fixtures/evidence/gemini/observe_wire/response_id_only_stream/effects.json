@@ -207,7 +207,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 11347234076885374349
+        "policy": 10888144669495434839
       }
     }
   },
@@ -387,7 +387,7 @@
       "outcome": {
         "Err": {
           "kind": "response",
-          "retryable": false,
+          "retryable": true,
           "message": "the stream ended before its terminal record",
           "code": null,
           "http_status": null,

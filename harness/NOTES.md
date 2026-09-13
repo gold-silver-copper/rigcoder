@@ -130,3 +130,40 @@ Terse log of the eval → diagnose → fix → re-eval loop described in
 - Polyglot leftovers (3/6 trials) are model behavior addressable only by
   prompting (the deliverables audit could say "remove build outputs the
   task did not ask for"); parked behind the provider-failure fix.
+
+## Commit 3 of `HARNESS_FIX_PROMPT.md`: consume the Rig run-level retry (2026-09-13)
+
+Done first of the three, because the user asked for the pin and #2500
+had merged. Commits 1 and 2 pair against the smoke run this produces.
+
+- Pin: `7830f83399ede81adc9f62370073e3ca196c1de2`, the head of Rig PR
+  #2502. Moving to `main` (`724dce27`) exposed two more "no callers"
+  removals from #2499: `observe::scrub_diagnostic` and
+  `diagnostic_url_secrets`, which rigcoder's failure records use and
+  which reach a private module; and a stream truncation classified
+  non-retryable, which the session used to retry by message text.
+  Both restored upstream in #2502 rather than copied into rigcoder.
+- `session.rs`: the whole-prompt resubmission is gone (`last`,
+  `retry_at`, `provider_retries`, `transient()`, `resubmit_when_due`).
+  `RunSettings.provider_retries` becomes the run's `ProviderRetries`.
+  Every attempt of the run's first completion is stamped with the same
+  operation and `host_attempt = ProviderRetried + 1`. Backoff is a
+  `Gate` hold on the re-issued effect (`RetryBackoff`), released by
+  `release_backoffs` in `Update`; `expire_backoffs` is the test hook.
+  `announce_provider_retries` writes the transcript's `retrying` line.
+  `rigcoder::observe::ProviderRetry` is now Rig's fact; the digest counts
+  `rig-ecs/agent/provider_retry` and correlates the operation itself.
+- Tests: session retry tests rewritten to drive the run; new
+  `a_provider_failure_after_a_tool_is_retried_without_reexecuting_it`
+  and `a_non_retryable_failure_is_not_retried`; observe matrix, Gemini
+  cells and digest expectations updated to the new fact sequence
+  (`landed, rig-ecs/agent/provider_retry, held, released, issued`; one
+  run, one ending).
+- Evidence: 259 files regenerated. Beyond the label and policy hash:
+  retries no longer start `run/2`, no `ended:provider`/`rigcoder/failure`
+  before a retry, the backoff hold's `held`/`released` facts, and batch
+  numbers. `fixtures/verify`: 42 cases derived and promoted after
+  inspection; every checkpoint gains `provider_retried: 0`, every
+  effects header its policy hash, nothing else.
+- Checks: fmt, clippy warning-free, `cargo test --workspace`,
+  `rigcoder-verify verify` 42/42.

@@ -568,7 +568,11 @@ impl Cell {
                 "runs": conversation.runs,
                 "ending": self.ending(),
                 "answer": self.answer(),
-                "provider_retries": conversation.provider_retries,
+                "provider_retries": world
+                    .iter_entities()
+                    .filter_map(|entity| entity.get::<rig_ecs::agent::ProviderRetried>())
+                    .map(|retried| retried.0)
+                    .sum::<usize>(),
                 "records": log.records.len(),
                 "observations": rigcoder::observations(world).map(|t| t.observations.len()),
             })),
@@ -657,10 +661,7 @@ impl Cell {
         let deadline = Instant::now() + Duration::from_secs(180);
         while Instant::now() < deadline {
             self.app.update();
-            self.app
-                .world_mut()
-                .resource_mut::<Conversation>()
-                .expire_backoff();
+            rigcoder::expire_backoffs(self.app.world_mut());
             if !self.app.world().resource::<Conversation>().is_busy() {
                 return;
             }
@@ -1090,7 +1091,7 @@ pub fn pair(matrix: &str, name: &str, config: fn(bool) -> Config, body: impl Fn(
 }
 
 /// The Rig revision every cell runs against (the workspace pin).
-pub const RIG_REV: &str = "896bb8b4c62a21df9bb97a5973216c41ed995001";
+pub const RIG_REV: &str = "7830f83399ede81adc9f62370073e3ca196c1de2";
 
 fn pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap() + "\n"

@@ -258,7 +258,7 @@
             "code": "response",
             "detail": "the stream ended before its terminal record"
           },
-          "retryable": false
+          "retryable": true
         }
       }
     },
@@ -273,85 +273,57 @@
         "version": "0.42.0"
       },
       "action": {
-        "action": "ended",
-        "ending": {
-          "code": "provider",
-          "detail": "response: the stream ended before its terminal record"
+        "action": "host",
+        "kind": "rig-ecs/agent/provider_retry",
+        "payload": {
+          "attempt": 1,
+          "budget": 3,
+          "reason": {
+            "code": "response",
+            "detail": "the stream ended before its terminal record"
+          }
         }
       }
     },
     {
       "seq": 10,
       "subject": {
-        "scope": "rigcoder/run/1"
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
       },
-      "stage": "host",
+      "stage": "gate",
       "emitter": {
-        "name": "rigcoder/session",
-        "version": "0.1.0"
+        "name": "unknown"
       },
       "action": {
-        "action": "host",
-        "kind": "rigcoder/failure",
-        "payload": {
-          "kind": "response",
-          "origin": "provider",
-          "boundary": "decode",
-          "message": "the stream ended before its terminal record",
-          "retryable": false,
-          "http_status": null,
-          "adapter": {
-            "subject": {
-              "scope": "rigcoder/run/1",
-              "order": 0,
-              "effect": 0,
-              "key": "rigcoder/model",
-              "family": "completion"
-            },
-            "operation": "rigcoder/request/1/completion/0",
-            "attempt": 1,
-            "host_attempt": 1,
-            "response_status": 200,
-            "ending": {
-              "ending": "eof",
-              "after": 1
-            },
-            "verdict": {
-              "finish_reason": null,
-              "block_reason": null,
-              "detail": null,
-              "model": "gemini-3.8-flash"
-            },
-            "error_envelope": null
-          }
+        "action": "held",
+        "reason": {
+          "code": "unknown"
         }
       }
     },
     {
       "seq": 11,
       "subject": {
-        "scope": "rigcoder/run/1"
+        "scope": "rigcoder/run/1",
+        "order": 1,
+        "key": "rigcoder/model",
+        "family": "completion"
       },
-      "stage": "host",
+      "stage": "gate",
       "emitter": {
-        "name": "rigcoder/session",
-        "version": "0.1.0"
+        "name": "unknown"
       },
       "action": {
-        "action": "host",
-        "kind": "rigcoder/provider_retry",
-        "payload": {
-          "operation": "rigcoder/request/1/completion/0",
-          "attempt": 1,
-          "wait_secs": 2,
-          "reason": "the stream ended before its terminal record"
-        }
+        "action": "released"
       }
     },
     {
       "seq": 12,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -369,7 +341,7 @@
     {
       "seq": 13,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -396,7 +368,7 @@
     {
       "seq": 14,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -426,7 +398,7 @@
     {
       "seq": 15,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -459,7 +431,7 @@
     {
       "seq": 16,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -494,7 +466,7 @@
     {
       "seq": 17,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -527,7 +499,7 @@
     {
       "seq": 18,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -562,7 +534,7 @@
     {
       "seq": 19,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -589,7 +561,7 @@
     {
       "seq": 20,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -617,7 +589,7 @@
     {
       "seq": 21,
       "subject": {
-        "scope": "rigcoder/run/2",
+        "scope": "rigcoder/run/1",
         "order": 1,
         "effect": 1,
         "key": "rigcoder/model",
@@ -639,7 +611,7 @@
     {
       "seq": 22,
       "subject": {
-        "scope": "rigcoder/run/2"
+        "scope": "rigcoder/run/1"
       },
       "stage": "runtime",
       "emitter": {

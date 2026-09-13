@@ -87,12 +87,19 @@ process tree. Invalid steering regexes fail closed, and cancelled approval holds
 are removed. The rules live in the `Steer` resource (the settings lane); the systems are the
 systems lane. `crates/rigcoder/tests/steer.rs` pins them.
 
-Transient provider failures may retry the current prompt up to three times,
-with backoff, only before that request has produced tool work. A new user request
-resets the retry budget. Backoff remains busy and can be cancelled; effect-log
-publication waits for all attempts and fails the CLI if the requested file cannot
-be written. Tests cover failure after a tool, cancellation during backoff and
-record/replay across failed and successful attempts.
+A completion lost to a retryable provider failure (a 5xx, a rate limit, a
+block for `OTHER`, a stream cut before its terminal record) is re-issued by the
+runtime inside the run, up to `RunSettings.provider_retries` times (default 3),
+over the same history: no tool is re-run, no history is rewritten, and every
+attempt is its own effect in the log (Rig CONTRACT §5). Time is rigcoder's: the
+re-issued completion is held for an exponential backoff from a `Gate` system and
+released when due; the run stays busy and can be cancelled during it, and a
+checkpoint taken then resumes into the retry. The transcript records each retry
+(`retrying`), the witness gets Rig's `rig-ecs/agent/provider_retry` fact, and
+the digest counts it. `crates/rigcoder/src/session.rs` tests cover a failure
+after a tool (retried, the tool not re-run), cancellation during backoff,
+record/replay across failed and successful attempts, and a non-retryable report
+ending the run at once.
 
 ## Recording, replay, checkpoints
 

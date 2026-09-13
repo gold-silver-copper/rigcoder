@@ -104,7 +104,7 @@ fn failed_once(cell: &Cell, expect_status: Option<u16>) {
         ],
         "{facts:?}"
     );
-    assert_eq!(cell.count("rigcoder/provider_retry"), 0, "{facts:?}");
+    assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0, "{facts:?}");
     let (code, kind, outcome) = ending_matches_landed(cell);
     let OutcomeSummary::Err { reason, retryable } = outcome else {
         panic!("{outcome:?}")
@@ -380,6 +380,9 @@ fn retried_then_settled(cell: &Cell, first_kind: &str, first_wire_status: u16) {
     assert_eq!(reason.code, first_kind, "the first landing's kind");
     // The join on the first ending: the runtime's `provider` code, the
     // report's kind and message as the detail.
+    // The run does not end on the lost attempt: the runtime re-issues it
+    // (CONTRACT §5) and names the failure it retries; the one ending is the
+    // settlement.
     let Action::Ended { ending } = cell
         .find(|a| matches!(a, Action::Ended { .. }))
         .unwrap()
@@ -387,15 +390,15 @@ fn retried_then_settled(cell: &Cell, first_kind: &str, first_wire_status: u16) {
     else {
         unreachable!()
     };
-    assert_eq!(ending.code, "provider");
-    assert!(
-        ending
-            .detail
-            .as_deref()
-            .unwrap_or("")
-            .starts_with(&format!("{first_kind}: ")),
-        "{ending:?}"
-    );
+    assert_eq!(ending.code, "settled");
+    let retry = cell
+        .find(|a| matches!(a, Action::Host { kind, .. } if kind == "rig-ecs/agent/provider_retry"))
+        .unwrap();
+    let retry = rigcoder::observe::ProviderRetry::from_action(&retry.action)
+        .unwrap()
+        .unwrap();
+    assert_eq!(retry.attempt, 1);
+    assert_eq!(retry.reason.code, first_kind, "{retry:?}");
     let streamed = cell.described["stream"].as_bool().unwrap();
     let first_count = if first_kind == "response" { 6 } else { 4 };
     let second_count = if streamed { 8 } else { 5 };
@@ -403,9 +406,9 @@ fn retried_then_settled(cell: &Cell, first_kind: &str, first_wire_status: u16) {
         .chain(std::iter::repeat_n("adapter", first_count))
         .chain([
             "landed",
-            "ended:provider",
-            "rigcoder/failure",
-            "rigcoder/provider_retry",
+            "rig-ecs/agent/provider_retry",
+            "held",
+            "released",
             "issued",
         ])
         .chain(std::iter::repeat_n("adapter", second_count))
@@ -413,13 +416,6 @@ fn retried_then_settled(cell: &Cell, first_kind: &str, first_wire_status: u16) {
         .map(str::to_owned)
         .collect();
     assert_eq!(semantic_facts(&cell.trace()), expected, "{facts:?}");
-    let retry = cell
-        .find(|a| matches!(a, Action::Host { kind, .. } if kind == "rigcoder/provider_retry"))
-        .unwrap();
-    let fact = rigcoder::observe::ProviderRetry::from_action(&retry.action)
-        .unwrap()
-        .unwrap();
-    assert_eq!(fact.attempt, 1);
     assert_eq!(cell.log().records.len(), 2);
     assert!(cell.log().records[0].outcome.is_err());
     assert!(cell.log().records[1].outcome.is_ok());
@@ -492,9 +488,9 @@ fn retried_then_settled(cell: &Cell, first_kind: &str, first_wire_status: u16) {
     }
     assert_eq!(
         operations[0], operations[1],
-        "a host retry retains its logical operation"
+        "a retried attempt retains its logical operation"
     );
-    assert_eq!(fact.operation.as_deref(), Some(operations[0].as_str()));
+    assert_eq!(retry.attempt, 1);
 }
 
 use rig::observe::HostAction as _;
@@ -618,7 +614,7 @@ fn a_blocked_prompt() {
             let facts = cell.facts();
             eprintln!("[{}/{}] ending: {}", MATRIX, cell.name, cell.ending());
             assert_eq!(
-                cell.count("rigcoder/provider_retry"),
+                cell.count("rig-ecs/agent/provider_retry"),
                 0,
                 "a verdict is not transient: {facts:?}"
             );
@@ -720,7 +716,7 @@ fn a_stream_cut_before_its_terminal_is_retried() {
             eprintln!("[{MATRIX}/stream_truncated_stream] facts: {facts:?}");
             assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
             assert_eq!(cell.count("stream_truncated"), 1, "{facts:?}");
-            assert_eq!(cell.count("rigcoder/provider_retry"), 1, "{facts:?}");
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 1, "{facts:?}");
             let truncated = cell
                 .find(|a| matches!(a, Action::StreamTruncated { .. }))
                 .unwrap();
@@ -790,7 +786,7 @@ fn an_error_frame_after_text() {
             assert_eq!(report.http_status, Some(500));
             assert!(report.is_retryable());
             assert_eq!(cell.count("stream_truncated"), 0, "{facts:?}");
-            assert_eq!(cell.count("rigcoder/provider_retry"), 0, "{facts:?}");
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0, "{facts:?}");
             assert_eq!(
                 facts,
                 [
@@ -870,7 +866,7 @@ fn an_error_frame_is_retried_then_answered() {
             assert_eq!(report.http_status, Some(500));
             assert!(report.is_retryable());
             assert_eq!(cell.count("stream_truncated"), 0);
-            assert_eq!(cell.count("rigcoder/provider_retry"), 1);
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 1);
         },
     );
 }
@@ -927,7 +923,7 @@ fn a_malformed_frame() {
                 "a corrupt frame is a parse failure, not a cut: {facts:?}"
             );
             assert_eq!(
-                cell.count("rigcoder/provider_retry"),
+                cell.count("rig-ecs/agent/provider_retry"),
                 0,
                 "a parse failure is not retried: {facts:?}"
             );

@@ -90,8 +90,9 @@ and an incomplete trace cannot establish which owners remain active.
    one `Grant` link entity per tool.
 2. `submit` spawns a run over that agent with the conversation so far
    as history (`rig_ecs::systems::spawn_run`).
-   `RunSettings` controls streaming, output tokens and provider retries; its
-   defaults preserve streaming and each run freezes its own settings.
+   `RunSettings` controls streaming, output tokens and the run's provider-retry
+   budget (`ProviderRetries`, Rig CONTRACT §5); its defaults preserve streaming
+   and each run freezes its own settings.
 3. The bus folds the graph into a request, dispatches the completion, and
    materialises the model's tool calls as child effects; the handlers run on
    Bevy's IO task pool.
@@ -125,11 +126,13 @@ approval, persistence and process-isolation contracts.
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
 `rig-ecs`, `rig-effect-log` and `rig-cassette`) to
-`896bb8b4c62a21df9bb97a5973216c41ed995001`, the commit that merged
+`7830f83399ede81adc9f62370073e3ca196c1de2`, the head of
+[Rig PR #2502](https://github.com/0xPlaygrounds/rig/pull/2502): Rig `main` after
 [Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443) (`feat/effect-bus`)
-into Rig `main`. [Rig PR #2482](https://github.com/0xPlaygrounds/rig/pull/2482),
-which added optional provider diagnostics and correct batch restoration, had
-merged into that branch beforehand. The consumer ownership transfer landed at the
+and [#2500](https://github.com/0xPlaygrounds/rig/pull/2500) (run-level provider
+retries) merged, plus the two fixes #2502 carries (the observe scrub helpers
+restored; a truncated stream retryable). Return to `main` when it merges. The
+consumer ownership transfer landed at the
 earlier pin `de83e9f` ([Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474)).
 To move the pin, update every Rig revision and `Cargo.lock`, then run the
 workspace tests and `cargo run --locked -p rigcoder-verify -- verify`.

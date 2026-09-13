@@ -8,14 +8,14 @@
     "model": "claude-haiku-4-5"
   },
   "generation": {
-    "revision": "805fb18e6135c9050ee7ca4295d96ddf08cb223f",
+    "revision": "86c8ee14885f254ca35353160b2c8b9495f11aad",
     "dirty": true
   },
   "capture": null,
   "artifacts_sha256": {
     "application": "13ecad599be76cbe1714f58871372fbd669317d6e357594952b8288b3e274978",
-    "checkpoints": "50ffb17d70c30664f8e5085dda60d13bbc0a04d1c25966afff96b857ec0b058e",
-    "effects": "72c470a88cef3a9a3e6fe71f2004f673e677f892e2751a4f343a759d8e41c53d",
+    "checkpoints": "9edd8d9cd9f5a2f0baf6b3e4be9bdd1696c83214ef476017105459673785add8",
+    "effects": "8d053dc97584f5d772b1839e87895d4fa4e93dc3fa238b6d1a2a925a8328146f",
     "observations": "953cb3227b51835f5438e7e45699d116606c867a18dd035431acb8f5ba5673b8"
   }
 }

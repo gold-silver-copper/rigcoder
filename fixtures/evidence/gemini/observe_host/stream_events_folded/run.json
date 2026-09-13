@@ -1,5 +1,5 @@
 {
-  "runs": 2,
+  "runs": 1,
   "ending": "settled",
   "answer": "pong",
   "provider_retries": 1,

@@ -404,7 +404,7 @@ fn structured_failures_support_trial_investigation_without_text_classification()
         .iter()
         .find(|o| {
             matches!(&o.action,
-                Action::Host { kind, .. } if kind == "rigcoder/provider_retry"
+                Action::Host { kind, .. } if kind == "rig-ecs/agent/provider_retry"
             )
         })
         .unwrap()
@@ -472,12 +472,13 @@ fn exhausted_retries_keep_one_operation_and_separate_failed_usage() {
                 .iter()
                 .map(|run| run.ending.as_str())
                 .collect::<Vec<_>>(),
-            ["provider", "provider"]
+            ["provider"]
         );
         let first = &digest.attempts[0];
         let second = &digest.attempts[1];
         assert_eq!(first.operation, second.operation);
-        assert_ne!(first.subject.scope, second.subject.scope);
+        // One run re-issued its completion: the same scope, a new effect.
+        assert_eq!(first.subject.scope, second.subject.scope);
         assert_ne!(first.subject.effect, second.subject.effect);
         assert_eq!((first.attempt, second.attempt), (1, 2));
         assert_eq!(first.host_attempt.map(std::num::NonZeroU64::get), Some(1));
@@ -589,10 +590,10 @@ fn diagnostic_selection_keeps_the_original_trial_and_scoring_population() {
             "retried__1",
             "0",
             include_str!(
-                "../../../../fixtures/evidence/gemini/observe_failures/rate_limited_unary/observations.json"
+                "../../../../fixtures/evidence/gemini/observe_wire/retry_exhaustion_unary/observations.json"
             ),
             include_str!(
-                "../../../../fixtures/evidence/gemini/observe_failures/rate_limited_unary/transcript.jsonl"
+                "../../../../fixtures/evidence/gemini/observe_wire/retry_exhaustion_unary/transcript.jsonl"
             ),
         ),
         (
@@ -630,16 +631,14 @@ fn diagnostic_selection_keeps_the_original_trial_and_scoring_population() {
     let trial = selected[0];
     assert_eq!(trial.trial, "retried__1");
     assert_eq!(trial.reward, Some(0.0));
-    assert_eq!(trial.ending, "settled");
-    let operation = &trial
-        .observed
-        .last_failure
+    // The budget ran out: the run failed on the last attempt's report.
+    assert_eq!(trial.ending, "provider_response");
+    // Two failed attempts of one operation leave the failure's own
+    // attribution unknown; the digest's retry decision names the operation.
+    let operation = trial.observed.retry_decisions[0]
+        .operation
         .as_ref()
-        .unwrap()
-        .adapter
-        .as_ref()
-        .unwrap()
-        .operation;
+        .unwrap();
     let attempts: Vec<_> = trial
         .observed
         .attempts
@@ -649,7 +648,7 @@ fn diagnostic_selection_keeps_the_original_trial_and_scoring_population() {
     assert_eq!(attempts.len(), 2);
     assert_eq!(
         (attempts[0].status, attempts[1].status),
-        (Some(429), Some(200))
+        (Some(429), Some(429))
     );
     assert_eq!(
         digest.trials.len(),

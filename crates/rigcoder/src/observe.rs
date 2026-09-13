@@ -217,18 +217,8 @@ impl HostAction for ResultShaped {
     const KIND: &'static str = "rigcoder/result_shaped";
 }
 
-/// The session decided to submit the prompt again after a transient
-/// provider failure.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderRetry {
-    /// Initial completion's execution-local identity, absent without observation context.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub operation: Option<String>,
-    pub attempt: usize,
-    pub wait_secs: u64,
-    pub reason: String,
-}
-
-impl HostAction for ProviderRetry {
-    const KIND: &'static str = "rigcoder/provider_retry";
-}
+/// The runtime re-issued a completion after a retryable provider failure
+/// (CONTRACT §5). The library's fact, at `Stage::Runtime` under the agent
+/// emitter: attempt, budget, reason. Re-exported so hosts and the digest
+/// count it by its one name.
+pub use rig_ecs::systems::witness::ProviderRetry;

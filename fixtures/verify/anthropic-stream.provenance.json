@@ -8,7 +8,7 @@
     "model": "claude-haiku-4-5"
   },
   "generation": {
-    "revision": "719fdc8b912837c7779023733feab20bbb269f48",
+    "revision": "86c8ee14885f254ca35353160b2c8b9495f11aad",
     "dirty": true
   },
   "capture": {
@@ -28,8 +28,8 @@
   },
   "artifacts_sha256": {
     "application": "581b49c1a4de178d918cfd58790186c50315626098cde6151b3cb2c2985e47b7",
-    "checkpoints": "7796a8c967fafa4a706fdcf4fa8eb0060362f873fc64f09448e8ae4686b0248a",
-    "effects": "489de41680082c31042ae58f114b71145f01a73ac600864de94a071a046551ae",
+    "checkpoints": "d13c3ff9d93e96e8b5ca2e1e2a31e7f9fdc2d3c58305afcd88e69e08cc135254",
+    "effects": "9f9cb0ad4404b9b4807a326793b2e8cf10478e8b2fddb8f8ebf8ea132e9235c8",
     "observations": "f275fca3118ca4c37af409e8eadca62d8c6f620cfe6bf5bef8213fbdc27ec8d2"
   }
 }

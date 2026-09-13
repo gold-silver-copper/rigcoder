@@ -466,7 +466,7 @@ fn max_tokens_cut() {
                     cell.ending()
                 );
                 assert_eq!(
-                    cell.count("rigcoder/provider_retry"),
+                    cell.count("rig-ecs/agent/provider_retry"),
                     0,
                     "a length cut is not transient"
                 );
@@ -545,7 +545,7 @@ fn an_empty_candidate_is_rejected_unary() {
             assert_eq!(reason.code, rig::error::ErrorKind::Response.code());
             assert!(!retryable);
             assert_eq!(
-                cell.count("rigcoder/provider_retry"),
+                cell.count("rig-ecs/agent/provider_retry"),
                 0,
                 "not transient, even with retries allowed"
             );

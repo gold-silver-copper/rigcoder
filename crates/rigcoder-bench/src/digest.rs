@@ -136,10 +136,16 @@ pub struct ObservedEof {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObservedRetry {
     pub subject: rig::observe::Subject,
+    /// The operation of the attempt the retry re-issues: the scope's latest
+    /// failed adapter attempt when the fact was emitted. The runtime's
+    /// fact names the run, not the effect; the correlation is the digest's.
     pub operation: Option<String>,
     /// One-based retry decision ordinal (retry 1 follows host attempt 1).
     pub retry: Option<u64>,
-    pub wait_secs: Option<u64>,
+    /// The run's retry budget.
+    pub budget: Option<u64>,
+    /// The failure's kind code, as the runtime reported it.
+    pub reason: Option<String>,
 }
 
 /// One owner's acquisition or release, in trace order. These are transitions,
@@ -184,7 +190,8 @@ pub struct Observed {
     pub stream_truncations: u64,
     /// Tool calls a gate or steering rule denied.
     pub denials: u64,
-    /// Whole-prompt provider retries the session made.
+    /// Completions the runtime re-issued after a retryable provider
+    /// failure (`rig-ecs/agent/provider_retry`, CONTRACT §5).
     pub provider_retries: u64,
     #[serde(default)]
     pub retry_decisions: Vec<ObservedRetry>,
@@ -345,13 +352,29 @@ pub fn observed(trace: &str) -> Observed {
                 "rigcoder/failure" => {
                     o.last_failure = serde_json::from_value(payload.clone()).ok();
                 }
-                "rigcoder/provider_retry" => {
+                kind if kind
+                    == <rigcoder::observe::ProviderRetry as rig::observe::HostAction>::KIND =>
+                {
                     o.provider_retries += 1;
+                    let operation = o
+                        .attempts
+                        .iter()
+                        .rev()
+                        .find(|attempt| {
+                            attempt.subject.scope == observation.subject.scope
+                                && matches!(
+                                    attempt.ending,
+                                    Some(rig::observe::AdapterEnding::Error { .. })
+                                        | Some(rig::observe::AdapterEnding::Eof { .. })
+                                )
+                        })
+                        .map(|attempt| attempt.operation.clone());
                     o.retry_decisions.push(ObservedRetry {
                         subject: observation.subject.clone(),
-                        operation: payload["operation"].as_str().map(str::to_owned),
+                        operation,
                         retry: payload["attempt"].as_u64(),
-                        wait_secs: payload["wait_secs"].as_u64(),
+                        budget: payload["budget"].as_u64(),
+                        reason: payload["reason"]["code"].as_str().map(str::to_owned),
                     });
                 }
                 "rigcoder/approval" => match payload["decision"].as_str() {

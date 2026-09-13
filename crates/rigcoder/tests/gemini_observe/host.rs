@@ -279,7 +279,7 @@ fn the_bench_digest_counts_the_trace() {
                 .map(|run| run["ending"].clone())
                 .collect()
         ),
-        serde_json::json!(["provider", "settled"]),
+        serde_json::json!(["settled"]),
         "{observed}"
     );
     assert!(rendered.contains("truncat"), "{rendered}");
@@ -305,10 +305,9 @@ fn host_kinds_round_trip() {
         kept: 30_000,
     };
     let retry = rigcoder::observe::ProviderRetry {
-        operation: None,
         attempt: 1,
-        wait_secs: 2,
-        reason: "timed out".into(),
+        budget: 3,
+        reason: rig::observe::Reason::with_detail("timeout", "timed out"),
     };
     let a = approval.action().unwrap();
     let s = steer.action().unwrap();
@@ -318,7 +317,7 @@ fn host_kinds_round_trip() {
         (&a, "rigcoder/approval"),
         (&s, "rigcoder/steer"),
         (&h, "rigcoder/result_shaped"),
-        (&r, "rigcoder/provider_retry"),
+        (&r, "rig-ecs/agent/provider_retry"),
     ] {
         let Action::Host { kind: k, payload } = action else {
             panic!()

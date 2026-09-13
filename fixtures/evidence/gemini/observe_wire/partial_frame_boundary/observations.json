@@ -259,7 +259,7 @@
             "code": "response",
             "detail": "the stream ended before its terminal record"
           },
-          "retryable": false
+          "retryable": true
         }
       }
     },
@@ -299,7 +299,7 @@
           "origin": "provider",
           "boundary": "decode",
           "message": "the stream ended before its terminal record",
-          "retryable": false,
+          "retryable": true,
           "http_status": null,
           "adapter": {
             "subject": {

@@ -154,7 +154,7 @@ fn invalid_stream_content_type() {
                     ..
                 })
             ));
-            assert_eq!(cell.count("rigcoder/provider_retry"), 0);
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0);
             assert_eq!(cell.log().records.len(), 1);
             rigcoder::observe::finalize(cell.app.world());
         },
@@ -188,7 +188,7 @@ fn observation_preserves_retry_decisions_and_effects() {
                 assert_eq!(cell.ending(), "settled");
                 assert_eq!(cell.log().records.len(), 2);
                 if enabled {
-                    assert_eq!(cell.count("rigcoder/provider_retry"), 1);
+                    assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 1);
                     rigcoder::observe::finalize(cell.app.world());
                 } else {
                     assert!(rigcoder::observations(cell.app.world()).is_none());
@@ -253,7 +253,7 @@ fn retry_exhaustion_keeps_operation_and_failed_attempt_usage() {
                 cell.submit("Reply with the single word: pong");
                 cell.drive();
                 assert_ne!(cell.ending(), "settled");
-                assert_eq!(cell.count("rigcoder/provider_retry"), 1);
+                assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 1);
                 assert_eq!(cell.log().records.len(), 2);
                 rigcoder::observe::finalize(cell.app.world());
                 let trace = cell.trace();
@@ -327,7 +327,7 @@ fn tool_result_starts_a_new_operation() {
                 std::fs::read_to_string(cell.dir.join("out.txt")).unwrap(),
                 "hi"
             );
-            assert_eq!(cell.count("rigcoder/provider_retry"), 0);
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0);
             rigcoder::observe::finalize(cell.app.world());
             let trace = cell.trace();
             let starts: Vec<_> = trace
@@ -445,7 +445,7 @@ fn optional_response_id_unary() {
                 cell.submit("Reply with the single word: pong");
                 cell.drive();
                 assert_ne!(cell.ending(), "settled");
-                assert_eq!(cell.count("rigcoder/provider_retry"), 0);
+                assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0);
                 rigcoder::observe::finalize(cell.app.world());
                 let trace = cell.trace();
                 let facts: Vec<_> = trace
@@ -751,7 +751,7 @@ fn blocked_prompt_boundary() {
             cell.submit("Reply with the single word: pong");
             cell.drive();
             assert_ne!(cell.ending(), "settled");
-            assert_eq!(cell.count("rigcoder/provider_retry"), 0);
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0);
             rigcoder::observe::finalize(cell.app.world());
             let trace = cell.trace();
             let facts: Vec<_> = trace
@@ -818,7 +818,7 @@ fn retry_headers_unary() {
             cell.submit("Reply with the single word: pong");
             cell.drive();
             assert_eq!(cell.ending(), "settled");
-            assert_eq!(cell.count("rigcoder/provider_retry"), 1);
+            assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 1);
             let log = cell.log();
             assert_eq!(log.records.len(), 2);
             rigcoder::observe::finalize(cell.app.world());

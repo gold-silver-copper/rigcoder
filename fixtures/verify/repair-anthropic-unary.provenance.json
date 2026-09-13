@@ -8,7 +8,7 @@
     "model": "claude-opus-5"
   },
   "generation": {
-    "revision": "805fb18e6135c9050ee7ca4295d96ddf08cb223f",
+    "revision": "86c8ee14885f254ca35353160b2c8b9495f11aad",
     "dirty": true
   },
   "capture": {
@@ -34,8 +34,8 @@
   },
   "artifacts_sha256": {
     "application": "2be5e3a981bfc154e600b938f149398df447dd6434d135536b995a04212c3c9f",
-    "checkpoints": "2ba9a5fadf3e6b662100454c36ba4f2f7dcb16d12fc1b826caa2cfe0244a1d72",
-    "effects": "740f8fc82dba92dabae800b3ecabb955812dd0ee61e56814c1f87267ec88c0b5",
+    "checkpoints": "be5599103545303f89440366940652ec827c0def7339559adc6689a158312dda",
+    "effects": "2d9fd4818a263637b665d7c756f7077faa488221a8722b4998d3e26ff0876bb7",
     "observations": "dfb02691a395640227789e0ed19bf4c6c051ccfb51a726948bc3f5d308d5773c"
   }
 }

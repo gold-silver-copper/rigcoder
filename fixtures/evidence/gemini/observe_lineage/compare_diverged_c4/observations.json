@@ -908,6 +908,28 @@
       "seq": 36,
       "subject": {
         "scope": "rigcoder/run/1",
+        "order": 3,
+        "effect": 3,
+        "key": "tool:bash",
+        "family": "tool"
+      },
+      "stage": "collect",
+      "emitter": {
+        "name": "rig-ecs/bus",
+        "version": "0.42.0"
+      },
+      "action": {
+        "action": "landed",
+        "outcome": {
+          "outcome": "ok",
+          "family": "tool"
+        }
+      }
+    },
+    {
+      "seq": 37,
+      "subject": {
+        "scope": "rigcoder/run/1",
         "order": 2,
         "effect": 2,
         "key": "tool:bash",
@@ -927,7 +949,7 @@
       }
     },
     {
-      "seq": 37,
+      "seq": 38,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 1,
@@ -949,33 +971,11 @@
       }
     },
     {
-      "seq": 38,
+      "seq": 39,
       "subject": {
         "scope": "rigcoder/run/1",
         "order": 4,
         "effect": 4,
-        "key": "tool:bash",
-        "family": "tool"
-      },
-      "stage": "collect",
-      "emitter": {
-        "name": "rig-ecs/bus",
-        "version": "0.42.0"
-      },
-      "action": {
-        "action": "landed",
-        "outcome": {
-          "outcome": "ok",
-          "family": "tool"
-        }
-      }
-    },
-    {
-      "seq": 39,
-      "subject": {
-        "scope": "rigcoder/run/1",
-        "order": 3,
-        "effect": 3,
         "key": "tool:bash",
         "family": "tool"
       },

@@ -17,7 +17,7 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 9,
         "id": 1,
         "kind": {
           "delivery": "stream",
@@ -25,7 +25,7 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 9,
         "id": 1,
         "kind": {
           "delivery": "outcome"
@@ -222,19 +222,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 11921372504636527560
-      },
-      "rigcoder/run/2": {
-        "required": {
-          "rigcoder/model": "completion",
-          "tool:bash": "tool",
-          "tool:edit_file": "tool",
-          "tool:grep": "tool",
-          "tool:list_files": "tool",
-          "tool:read_file": "tool",
-          "tool:write_file": "tool"
-        },
-        "policy": 11921372504636527560
+        "policy": 10566876999224994578
       }
     }
   },
@@ -617,7 +605,7 @@
           }
         }
       },
-      "scope": "rigcoder/run/2"
+      "scope": "rigcoder/run/1"
     }
   ]
 }

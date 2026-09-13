@@ -17,7 +17,7 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 9,
         "id": 1,
         "kind": {
           "delivery": "stream",
@@ -25,7 +25,7 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 9,
         "id": 1,
         "kind": {
           "delivery": "outcome"
@@ -222,19 +222,7 @@
           "tool:read_file": "tool",
           "tool:write_file": "tool"
         },
-        "policy": 10422569056428580603
-      },
-      "rigcoder/run/2": {
-        "required": {
-          "rigcoder/model": "completion",
-          "tool:bash": "tool",
-          "tool:edit_file": "tool",
-          "tool:grep": "tool",
-          "tool:list_files": "tool",
-          "tool:read_file": "tool",
-          "tool:write_file": "tool"
-        },
-        "policy": 10422569056428580603
+        "policy": 9982515325419328254
       }
     }
   },
@@ -414,7 +402,7 @@
       "outcome": {
         "Err": {
           "kind": "response",
-          "retryable": false,
+          "retryable": true,
           "message": "the stream ended before its terminal record",
           "code": null,
           "http_status": null,
@@ -651,7 +639,7 @@
           }
         }
       },
-      "scope": "rigcoder/run/2"
+      "scope": "rigcoder/run/1"
     }
   ]
 }

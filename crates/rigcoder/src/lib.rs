@@ -47,15 +47,18 @@ pub fn effect_log(world: &World) -> EffectLog {
     log
 }
 pub use observe::trace as observations;
-pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, submit};
+pub use session::{AgentHandle, Conversation, Event, Transcript, cancel, expire_backoffs, submit};
 
 /// The system prompt, kept as a file so the improvement harness can edit it
 /// without touching Rust.
 pub const SYSTEM_PROMPT: &str = include_str!("prompt.md");
 
 /// Per-run provider settings shared by the CLI, UI and verification hosts.
-/// Insert before setup, or change between runs. Zero retries disables automatic
-/// whole-prompt retries; model/tool turn limits remain on `RigcoderPlugin`.
+/// Insert before setup, or change between runs. `provider_retries` is the
+/// run's `ProviderRetries` budget (CONTRACT §5): a completion lost to a
+/// retryable provider failure is re-issued that many times over the same
+/// history, never re-running a tool; zero disables it. Model/tool turn
+/// limits remain on `RigcoderPlugin`.
 #[derive(Resource, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RunSettings {
     pub stream: bool,
@@ -180,17 +183,19 @@ impl Plugin for RigcoderPlugin {
                 RigSchedule,
                 (
                     session::announce_tool_calls.in_set(BusSet::Gate),
-                    session::correlate_provider_attempts.in_set(BusSet::Gate),
+                    (
+                        session::correlate_provider_attempts,
+                        session::hold_retried_completions,
+                    )
+                        .chain()
+                        .in_set(BusSet::Gate),
                     session::stream_text.after(RigSet::Fold),
+                    session::announce_provider_retries
+                        .after(RigSet::Materialise)
+                        .before(RigSet::Settle),
                 ),
             )
-            .add_systems(Update, session::resubmit_when_due.before(run_to_quiescence))
-            .add_systems(
-                RigSchedule,
-                session::resubmit_when_due
-                    .after(checkpoint::save_between_turns)
-                    .before(RigSet::Settle),
-            )
+            .add_systems(Update, session::release_backoffs.before(run_to_quiescence))
             .add_observer(session::announce_tool_results)
             .add_observer(session::on_settled)
             .add_observer(session::on_failed);

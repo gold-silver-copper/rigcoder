@@ -180,10 +180,7 @@ impl Cell {
         let deadline = Instant::now() + Duration::from_secs(60);
         while Instant::now() < deadline {
             self.app.update();
-            self.app
-                .world_mut()
-                .resource_mut::<Conversation>()
-                .expire_backoff();
+            rigcoder::expire_backoffs(self.app.world_mut());
             if !self.app.world().resource::<Conversation>().is_busy() {
                 return;
             }
@@ -273,7 +270,7 @@ fn text(s: &str) -> Answer {
 }
 
 fn transient() -> Answer {
-    Answer::Err(ErrorReport::new(ErrorKind::Timeout, "timed out"))
+    Answer::Err(ErrorReport::new(ErrorKind::Timeout, "timed out").with_retryable(true))
 }
 
 #[test]
@@ -571,7 +568,7 @@ fn a_non_transient_provider_error_ends_the_run_without_a_retry() {
         ["issued", "landed", "ended:provider", "rigcoder/failure"],
         "{facts:?}"
     );
-    assert_eq!(cell.count("rigcoder/provider_retry"), 0);
+    assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 0);
 }
 
 #[test]
@@ -582,14 +579,15 @@ fn a_transient_provider_error_is_retried_as_a_named_decision() {
     cell.drive();
     assert_eq!(cell.ending(), "settled");
     let facts = cell.facts();
+    // The run does not end on the lost attempt: the runtime re-issues it.
     assert_eq!(
         facts,
         [
             "issued",
             "landed",
-            "ended:provider",
-            "rigcoder/failure",
-            "rigcoder/provider_retry",
+            "rig-ecs/agent/provider_retry",
+            "held",
+            "released",
             "issued",
             "landed",
             "ended:settled"
@@ -601,7 +599,7 @@ fn a_transient_provider_error_is_retried_as_a_named_decision() {
         .observations
         .into_iter()
         .find(
-            |o| matches!(&o.action, Action::Host { kind, .. } if kind == "rigcoder/provider_retry"),
+            |o| matches!(&o.action, Action::Host { kind, .. } if kind == "rig-ecs/agent/provider_retry"),
         )
         .unwrap();
     let fact = rigcoder::observe::ProviderRetry::from_action(&retry.action)
@@ -627,7 +625,7 @@ fn a_stream_without_its_terminal_record_keeps_its_tail_and_is_retried() {
     assert_eq!(cell.ending(), "settled");
     let facts = cell.facts();
     assert!(facts.contains(&"stream_truncated".to_owned()), "{facts:?}");
-    assert_eq!(cell.count("rigcoder/provider_retry"), 1, "{facts:?}");
+    assert_eq!(cell.count("rig-ecs/agent/provider_retry"), 1, "{facts:?}");
     let truncated = cell
         .trace()
         .observations
@@ -721,7 +719,7 @@ fn a_witness_trace_written_by_the_cli_shape_is_readable_by_the_digest() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("observations.json"), &json).unwrap();
     assert!(Path::new(&dir).join("observations.json").is_file());
-    assert!(json.contains("\"kind\":\"rigcoder/provider_retry\""));
+    assert!(json.contains("\"kind\":\"rig-ecs/agent/provider_retry\""));
 }
 
 #[test]
