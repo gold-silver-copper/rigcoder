@@ -636,9 +636,12 @@ fn an_empty_member_settles_stream() {
             *body = join_frames(&frames);
         },
     );
-    // This cell pins the runtime's shape: an empty answer settles. The
-    // steering rule that reprompts an empty turn is off here; it is pinned
-    // by `tests/steer.rs` with a scripted model, because a live recording
+    // This cell pins the runtime's shape since Rig #2503: an answerless
+    // turn the provider cut at its output budget is a lost turn, and the
+    // run fails as a response error naming the finish reason, not an empty
+    // settlement. The steering rule that reprompts an empty turn is off
+    // here (it only applies to answered turns anyway); it is pinned by
+    // `tests/steer.rs` with a scripted model, because a live recording
     // cannot make Gemini answer nothing on cue.
     run(
         MATRIX,
@@ -651,11 +654,18 @@ fn an_empty_member_settles_stream() {
         |cell| {
             cell.submit("Reply with the single word: pong");
             cell.drive();
-            assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
-            assert_eq!(cell.answer(), "");
+            assert_eq!(cell.ending(), "response", "{:?}", cell.events());
+            let failure = cell.failure();
+            assert_eq!(failure.kind, "response");
+            assert!(
+                failure.message.contains("finish_reason=Length"),
+                "{}",
+                failure.message
+            );
+            assert_eq!(failure.retryable, Some(false));
             assert_eq!(
                 cell.lifecycle_facts(),
-                ["issued", "landed", "ended:settled"]
+                ["issued", "landed", "ended:provider", "rigcoder/failure"]
             );
         },
     );

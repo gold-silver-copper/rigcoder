@@ -413,3 +413,18 @@ seen in this session.
 | 2 spiral signal | no signal separates spirals from passes on 274 trials; nothing built |
 | 3 retry not working live | not triggered: two live retries verified in dev2 |
 | new: empty-turn reprompt | `9b2cce0` + Rig #2504 (green, open); paired smoke 10/10 |
+
+## Pin moved to Rig `main` (2026-09-13, second time)
+
+- `a6897db62bf5ae950c3a0ffabff1241bacac3df3`, the #2504 squash; the
+  `TODO` in `Cargo.toml` is gone. `main` also took #2503 (the ECS
+  contract under faults on six wires) in between.
+- #2503 changed a contract the cells pinned: an answerless turn the
+  provider cut at its output budget (`finish_reason=Length`) is a lost
+  turn and the run fails as a non-retryable `response` error, no longer
+  an empty settlement. `turns::an_empty_member_settles_stream` and
+  `gates::two_layers_patch_in_order` now pin that ending. The
+  empty-turn reprompt is unaffected: it applies to answered turns, and
+  such a turn stopped normally (Gemini's thought-signature-only reply).
+  Other churn: the label, `code: null` no longer serialized on reports,
+  batch numbers.

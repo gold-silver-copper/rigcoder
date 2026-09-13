@@ -233,7 +233,32 @@
       "action": {
         "action": "ended",
         "ending": {
-          "code": "settled"
+          "code": "provider",
+          "detail": "response: ResponseError: the model produced no answer and stopped with finish_reason=Length; the turn ran out of output budget before producing one — raise max_tokens for this request"
+        }
+      }
+    },
+    {
+      "seq": 9,
+      "subject": {
+        "scope": "rigcoder/run/1"
+      },
+      "stage": "host",
+      "emitter": {
+        "name": "rigcoder/session",
+        "version": "0.1.0"
+      },
+      "action": {
+        "action": "host",
+        "kind": "rigcoder/failure",
+        "payload": {
+          "kind": "response",
+          "origin": "provider",
+          "boundary": "decode",
+          "message": "ResponseError: the model produced no answer and stopped with finish_reason=Length; the turn ran out of output budget before producing one — raise max_tokens for this request",
+          "retryable": false,
+          "http_status": null,
+          "adapter": null
         }
       }
     }

@@ -388,7 +388,7 @@
           "kind": "provider_response",
           "retryable": true,
           "message": "ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}",
-          "code": null,
+          "code": "RESOURCE_EXHAUSTED",
           "http_status": 429,
           "refusal": false,
           "source_chain": [],

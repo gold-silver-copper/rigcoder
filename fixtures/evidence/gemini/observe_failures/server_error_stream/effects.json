@@ -404,7 +404,7 @@
           "kind": "provider_response",
           "retryable": true,
           "message": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"}}",
-          "code": null,
+          "code": "UNAVAILABLE",
           "http_status": 503,
           "refusal": false,
           "source_chain": [],

@@ -389,7 +389,7 @@
           "kind": "provider_response",
           "retryable": false,
           "message": "ProviderResponseError: status 404 Not Found: {\"error\":{\"code\":404,\"message\":\"models/gemini-9.9-nonexistent is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.\",\"status\":\"NOT_FOUND\"}}",
-          "code": null,
+          "code": "NOT_FOUND",
           "http_status": 404,
           "refusal": false,
           "source_chain": [],

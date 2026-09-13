@@ -1,8 +1,8 @@
 {
   "runs": 1,
-  "ending": "settled",
+  "ending": "response",
   "answer": "",
   "provider_retries": 0,
   "records": 1,
-  "observations": 9
+  "observations": 10
 }

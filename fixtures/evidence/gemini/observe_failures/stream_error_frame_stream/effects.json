@@ -389,7 +389,7 @@
           "kind": "provider_response",
           "retryable": true,
           "message": "ProviderResponseError: status 500 Internal Server Error: {\"error\":{\"code\":500,\"message\":\"An internal error has occurred.\",\"status\":\"INTERNAL\"}}",
-          "code": null,
+          "code": "INTERNAL",
           "http_status": 500,
           "refusal": false,
           "source_chain": [],

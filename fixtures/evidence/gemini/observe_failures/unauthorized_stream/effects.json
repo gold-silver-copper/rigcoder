@@ -389,7 +389,7 @@
           "kind": "provider_response",
           "retryable": false,
           "message": "ProviderResponseError: status 401 Unauthorized: {\"error\":{\"code\":401,\"message\":\"Missing authentication credential.\",\"status\":\"UNAUTHENTICATED\"}}",
-          "code": null,
+          "code": "UNAUTHENTICATED",
           "http_status": 401,
           "refusal": false,
           "source_chain": [],

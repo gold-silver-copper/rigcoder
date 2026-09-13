@@ -44,9 +44,9 @@ Verification and publication results are reported separately after the final Rig
 revision is published and tested through exact Git dependency pins.
 
 The five direct Rig Git dependencies and their transitive Rig packages are pinned
-to Rig `main` at revision `3c4346318198f92583631936d73dd8d3e7f392ce`, after
-[Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443), #2500 and
-[#2502](https://github.com/0xPlaygrounds/rig/pull/2502) merged; it includes the merged replacement
+to Rig `main` at revision `a6897db62bf5ae950c3a0ffabff1241bacac3df3`, after
+[Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443), #2500,
+[#2502](https://github.com/0xPlaygrounds/rig/pull/2502) and #2504 merged; it includes the merged replacement
 [Rig PR #2482](https://github.com/0xPlaygrounds/rig/pull/2482). Evidence `cell.json` Rig revision labels
 and the test producer constant identify the revision used for the migrated replay
 verification. This metadata update does not rerecord provider cassettes.

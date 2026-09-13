@@ -513,18 +513,29 @@ fn two_layers_patch_in_order() {
         "patched_twice_stream",
         Config {
             layers: Some(|h| h.layered(Capper(64)).layered(Cooler(0.2))),
-            // The recorded answer under a 64-token cap is empty; this cell
-            // pins the patches, not the empty-turn reprompt.
+            // The recorded answer under a 64-token cap is empty and cut at
+            // the budget: since Rig #2503 that is a lost turn and the run
+            // fails as a response error. This cell pins the patches; the
+            // empty-turn reprompt is off (it applies to answered turns).
             steer: Some(|steer| steer.max_empty_retries = 0),
             ..Config::streamed()
         },
         |cell| {
             cell.submit("Reply with the single word: twice");
             cell.drive();
-            assert_eq!(cell.ending(), "settled", "{:?}", cell.events());
+            assert_eq!(cell.ending(), "response", "{:?}", cell.events());
+            assert!(
+                cell.failure().message.contains("finish_reason=Length"),
+                "{}",
+                cell.failure().message
+            );
             let facts = cell.lifecycle_facts();
             assert!(cell.count("adapter") > 0);
-            assert_eq!(facts, ["issued", "landed", "ended:settled"], "{facts:?}");
+            assert_eq!(
+                facts,
+                ["issued", "landed", "ended:provider", "rigcoder/failure"],
+                "{facts:?}"
+            );
             let record = &cell.log().records[0];
             let EffectKind::Completion { request, .. } = &record.kind else {
                 panic!()
