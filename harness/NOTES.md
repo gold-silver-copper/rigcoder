@@ -349,3 +349,27 @@ seen in this session.
   runner killed the docker client. No spend. Relaunched with the other
   19 images cached; the binary is built from `572a1a6`, whose sources
   equal `90a94d8`'s (docs-only commits since).
+
+## Empty turn reprompt (2026-09-13)
+
+- Found in dev2: path-tracing #2 settled on an empty answer after 25
+  calls with the deliverable unwritten. Gemini returned a turn holding
+  only a thought signature. 3 of 246 recorded trials end this way, all
+  failed. `harness` bucket, loop control.
+- Change (`steer.rs`): a completed turn with no tool call and no answer
+  text is retried with feedback ("Your last reply was empty. Continue
+  the task"), up to `Steer.max_empty_retries` (default 2) per run, as a
+  `RigSet::Judge` rule beside the deliverable reprompt; witness fact
+  `rigcoder/empty_turn_retry`. Two steer tests pin the reprompt and the
+  budget.
+- Rig side: rig-ecs settled an empty turn before reading the `Retry` a
+  judge wrote on it, against CONTRACT §9.4's "unless empty". Fixed
+  upstream in PR #2504 (`e4ddaf4b`), pinned at its head with the TODO
+  in `Cargo.toml`; return to `main` when it merges.
+- Threshold, set before the paired run: paired against the dev2 run
+  for that task (path-tracing) and against the last smoke run
+  (`c4-walk-run-smoke-1789279457499080000-67562`, 10/10). On smoke: no
+  previously passing task fails, no new harness event; an
+  `empty_turn_retry` fact, if one occurs, must be followed by a settled
+  answer or a tool call. The mode is 1.2% of trials, so the smoke run
+  is expected not to exercise it; the steer tests are the pin.
