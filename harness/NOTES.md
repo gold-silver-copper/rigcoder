@@ -343,3 +343,9 @@ Disclosure: the first pass of this measurement globbed
 above excludes it; the conclusion was the same with it. No decision
 used holdout data, but per-task names and rewards from that job were
 seen in this session.
+- Launch note: the first dev2 launch aborted before any trial
+  (`infra`): with all 20 images building at once,
+  `custom-memory-heap-crash` exceeded its 600 s build timeout and the
+  runner killed the docker client. No spend. Relaunched with the other
+  19 images cached; the binary is built from `572a1a6`, whose sources
+  equal `90a94d8`'s (docs-only commits since).
