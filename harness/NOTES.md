@@ -234,3 +234,14 @@ smoke (1 kill vs 0 repeat spirals on the last two runs).
   ending normally (exit 0, usage recorded), no task that passed before
   fails on a harness cause, and any refused walk shows as a tool error
   the model recovered from. Spend to date ~$163; this run about $10.
+- Result: job `c4-walk-run-smoke-1789279457499080000-67562`, commit
+  `9fb55e4`, paired against the commit 1 run. 10/10 vs 9/10.
+  headless-terminal 0 → 1 with the process ending normally (exit 0,
+  usage recorded, 90 calls). No trial asked to walk `/` this time, so
+  the refusal itself was not exercised on smoke; the unit tests pin it.
+  Deny-list denials 3 (chess-best-move, db-wal-recovery,
+  git-multibranch), all as designed. Cost $17.62, $1.76 per resolved
+  task vs $1.23: db-wal-recovery passed after a 151-call, $7.85 spiral,
+  the same shape as its dev-tier failure. That trial's `effects.json`
+  is the fixture for commit 2's cutoff test. Kept. Spend to date
+  $169.80 of $200; about $30 left, enough for commit 2's paired run.
