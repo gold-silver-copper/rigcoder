@@ -44,9 +44,24 @@ Threshold stated in `NOTES.md` before running. Checkpointed k=1 run (`r6-dbwal-c
 
 Caveats: one branch point from one passing trial; the branched turn already included the instruction and `ls -la`. Not evidence for other tasks; the rule is generic wording, not a WAL or SQL rule. Cost per attempt with the rule ($0.18–0.29) versus the $11–12 recorded failures is the case for it, on this task only.
 
-## Step 5 — smoke
+## Step 5 — smoke (run after the user raised the cap to $200)
 
-Not run. Known spend is $2.19; with the baseline's unknown usage reserved at $8 the iteration stands at ≤ $10.19, and a smoke run (recent range $9.2–23.4) could exceed the $20 ceiling. The prompt says stop and report rather than exceed. Smoke on the new binary against `r4-smoke-run-smoke-1789329109644530000-79506` is the next paid step, at the user's call.
+`r6-smoke-run-smoke-1789338864563970000-68220`, new binary (pin `234626eb`, prompt rule), 10 tasks, k=1, n=4, paired against `r4-smoke-run-smoke-1789329109644530000-79506`:
+
+| task | r4 | r6 | r4 $ | r6 $ | calls r4/r6 |
+|---|---|---|---:|---:|---|
+| cancel-async-tasks | 1 | 1 | 1.697 | 1.955 | 72/73 |
+| chess-best-move | 1 | 1 | 0.413 | 1.168 | 35/60 |
+| db-wal-recovery | 1 | 1 | 0.129 | 0.181 | 22/27 |
+| extract-elf | 1 | 1 | 2.014 | 1.257 | 55/51 |
+| git-leak-recovery | 1 | 1 | 0.155 | 0.413 | 30/47 |
+| git-multibranch | 1 | 1 | 0.899 | 1.240 | 66/69 |
+| headless-terminal | 1 | 1 | 2.137 | 2.262 | 92/93 |
+| kv-store-grpc | 1 | 1 | 0.623 | 0.633 | 35/34 |
+| password-recovery | 1 | 1 | 0.484 | 0.353 | 31/30 |
+| polyglot-rust-c | 1 | 1 | 0.680 | 0.965 | 45/60 |
+
+**10/10 → 10/10**; taxonomy: infra 0, harness 0, rig 0, model 0; contaminated 0; every trial settled with known usage. Cost $9.231 → **$10.428** ($0.923 → $1.043 per resolved trial, +13%), inside the recent smoke range ($8.98–$23.44) and within k=1 noise; no single task shows a systematic cost shift attributable to the rule (chess-best-move and git-leak-recovery went up, extract-elf and password-recovery went down). Both jobs pass db-wal-recovery; the rule's target failure was seen in `r4-retry-reason`, not in this baseline, so the smoke pairing is a no-regression check, not a demonstration of the fix. The kept-change rule holds: no harness/rig failures added, no task lost.
 
 ## Spend
 
@@ -58,7 +73,8 @@ Not run. Known spend is $2.19; with the baseline's unknown usage reserved at $8 
 | r6-dbwal-branch-baseline attempt 1, stopped at 128 calls | **unknown**, reserved $8 |
 | r6-dbwal-branch-rule, 3 attempts, 3 passes | $0.657 |
 | MIPS reproduction, digest, adapter offline check | $0 |
-| **Known total / with reserve** | **$2.186 / ≤ $10.19** of $20 |
+| r6-smoke, 10 tasks k=1, 10/10 | $10.428 |
+| **Known total / with reserve** | **$12.614 / ≤ $20.61** (cap raised to $200 by the user before the smoke) |
 
 Rates: $0.75/M input, $3.75/M output, cached input included. Ledger: `r6-dbwal-ckpt` and the Harbor job are recorded; the branch jobs are not ledger rows (branch-from does not write the ledger); their costs are in this table and the trial transcripts.
 
