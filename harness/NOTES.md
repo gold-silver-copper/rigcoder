@@ -428,3 +428,13 @@ seen in this session.
   such a turn stopped normally (Gemini's thought-signature-only reply).
   Other churn: the label, `code: null` no longer serialized on reports,
   batch numbers.
+
+## Run 3, step 1: smoke on the current pin (2026-09-13)
+
+Threshold, set before launch: `run --slice smoke -k 1 -n 4` on commit
+`ae5954a` (Rig `main` at the #2504 squash), paired against the last
+smoke run (`c5-empty-run-smoke-1789291780571062000-11822`, 10/10,
+$11.22). Kept as clean if 10/10 or one flip on a `model` cause, no
+`harness` or `rig` event, and cost per resolved task within the last
+three runs' range ($1.12 to $1.76). A `harness` or `rig` mode is the
+target and the rest of the run waits. Spend before launch $282.98.
