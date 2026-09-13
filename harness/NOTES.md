@@ -245,3 +245,27 @@ smoke (1 kill vs 0 repeat spirals on the last two runs).
   the same shape as its dev-tier failure. That trial's `effects.json`
   is the fixture for commit 2's cutoff test. Kept. Spend to date
   $169.80 of $200; about $30 left, enough for commit 2's paired run.
+
+## Commit 2 of `HARNESS_FIX_PROMPT.md`: repeat cutoff, not built
+
+Measured before building it. Byte-identical repeats (tool name plus
+exact argument JSON), and how many calls a `repeat_limit` of 3 would
+have denied, on the five most expensive trials on record:
+
+| trial | calls | distinct | max repeat | would deny |
+|---|---|---|---|---|
+| db-wal-recovery dev #3 (failed, $11.59) | 194 | 183 | 8 (`ls -la /app`) | 5, first at call 65 |
+| db-wal-recovery smoke c4 (passed, $7.85) | 151 | 146 | 6 (`ls -la /app`) | 3, first at call 137 |
+| make-mips-interpreter dev #1 (failed, $8.82) | 119 | 116 | 3 | 0 |
+| make-mips-interpreter dev #3 (passed, $11.04) | 166 | 166 | 1 | 0 |
+| password-recovery smoke c1 (passed, $2.73) | 83 | 83 | 1 | 0 |
+
+The spirals are made of varying probes, not identical ones; the only
+repeated call is a harmless `ls`. The cutoff as specified would deny a
+handful of cheap listings and leave the tail intact, so it is not
+built and its paired run (about $12 of the $30 left) is not spent.
+The cost lever that the data supports is different: a budget on the
+spiral itself (calls since the last file write, or a per-run cost
+ceiling that ends the run with a named failure), which is a design
+decision, not a rule tweak. Stopped here per the prompt's stop
+conditions; see the report.
