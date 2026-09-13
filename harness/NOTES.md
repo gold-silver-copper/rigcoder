@@ -466,3 +466,24 @@ turns) changes what the model knows and is a design decision, not a
 rule tweak. Nothing built; the script is
 `context_levers.py` in the session scratchpad and its logic is in this
 entry.
+- Result: job `r3-smoke-run-smoke-1789317158402572000-88413`, 10/10 vs
+  10/10. No `harness` or `rig` event; the only host facts are two
+  deny-list refusals (git-multibranch, password-recovery), as designed.
+  Cost $13.29, $1.33 per resolved task, inside the $1.12 to $1.76
+  range. Clean. Spend to date $296.27.
+
+## Run 3, step 3: configure-git-webserver, a prompt-lane experiment
+
+Not a fix target under the rules (`model`, 9/9 failed the same way:
+the agent sets up sshd, nginx and a hook and settles without running
+the user's own clone, push and curl). Steps 1 and 2 are done with
+budget left, so the one-sentence experiment runs as its own commit.
+- Change: one sub-item in `prompt.md`'s pre-completion audit: when the
+  instruction shows the commands the user will run, run that exact
+  sequence yourself and check its output before settling.
+- Threshold, set before launch: `-i configure-git-webserver -k 3`
+  (about $3) judged on that task: kept if at least 2/3 pass (was 0/3
+  three times) and the transcripts show the user's sequence being run;
+  then a paired smoke against the step 1 run: no passing task lost, no
+  new harness event, mean tool calls per trial up by no more than a
+  couple. Spend before launch $296.27; ask before passing $370.
