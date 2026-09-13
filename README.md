@@ -126,13 +126,16 @@ approval, persistence and process-isolation contracts.
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
 `rig-ecs`, `rig-effect-log` and `rig-cassette`) to
-`a6897db62bf5ae950c3a0ffabff1241bacac3df3`, Rig `main` after
+`234626eb8e75ee8af76e364012e3fd358119360b`, Rig `main` after
 [Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443) (`feat/effect-bus`),
 [#2500](https://github.com/0xPlaygrounds/rig/pull/2500) (run-level provider
 retries), [#2502](https://github.com/0xPlaygrounds/rig/pull/2502) (the observe
-scrub helpers restored; a truncated stream retryable) and
+scrub helpers restored; a truncated stream retryable),
 [#2504](https://github.com/0xPlaygrounds/rig/pull/2504) (a `Retry` on an empty
-turn asks again) merged. The
+turn asks again), [#2510](https://github.com/0xPlaygrounds/rig/pull/2510) (a
+Gemini prompt block is a typed refusal) and
+[#2511](https://github.com/0xPlaygrounds/rig/pull/2511) (reasoning pinned across
+the provider wires; output-tool arguments committed as text) merged. The
 consumer ownership transfer landed at the
 earlier pin `de83e9f` ([Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474)).
 To move the pin, update every Rig revision and `Cargo.lock`, then run the

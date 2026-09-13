@@ -32,14 +32,14 @@
         }
       },
       {
-        "batch": 22,
+        "batch": 21,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 25,
+        "batch": 24,
         "id": 3,
         "kind": {
           "delivery": "stream",
@@ -47,7 +47,7 @@
         }
       },
       {
-        "batch": 25,
+        "batch": 24,
         "id": 3,
         "kind": {
           "delivery": "outcome"

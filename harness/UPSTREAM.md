@@ -1,7 +1,7 @@
 # Upstream Rig work
 
-Current pin: `387abeeac47936834cd60c8696118c8da1f4de80` (Rig `main`, the #2510 squash;
-taken 2026-09-13).
+Current pin: `234626eb8e75ee8af76e364012e3fd358119360b` (Rig `main`, the #2511 squash;
+taken 2026-09-13). Previous pin: `387abeeac47936834cd60c8696118c8da1f4de80` (the #2510 squash).
 
 | PR | what | status |
 |---|---|---|
@@ -10,3 +10,4 @@ taken 2026-09-13).
 | [#2502](https://github.com/0xPlaygrounds/rig/pull/2502) | restore `observe::scrub_diagnostic` and `diagnostic_url_secrets` (removed by #2499 as "no callers"; rigcoder's failure records use them); a stream cut before its terminal record is retryable (rigcoder's session used to retry it by message text) | merged 2026-09-13 as `3c434631`, in the current pin; it also regenerated the #2501 goldens that had turned `main` red |
 | [#2504](https://github.com/0xPlaygrounds/rig/pull/2504) | a `Retry` written on an empty turn asks again instead of the run settling on an empty answer (CONTRACT §9.4 said "unless empty"; materialise settled first) | merged 2026-09-13 as `a6897db6`, in the current pin |
 | [#2510](https://github.com/0xPlaygrounds/rig/pull/2510) | re-target of [#2509](https://github.com/0xPlaygrounds/rig/pull/2509), which had merged into `ci/main-gate` and never reached `main`: a Gemini prompt block is a typed refusal (`kind: provider_response`, `refusal: true`, the block reason as `code`, never retryable); a truncated reasoning-only turn commits nothing; the streamed assembler carries image parts; a typed tool error is a `status: error` result | merged 2026-09-13 as `387abeea`, in the current pin; rigcoder's failure record carries `refusal` |
+| [#2511](https://github.com/0xPlaygrounds/rig/pull/2511) | reasoning pinned across six provider wires; doubleword orders compatible reasoning before text; rig-ecs commits output-tool arguments as text; the agent exposes committed messages at settlement (not rigcoder work) | merged 2026-09-13 as `234626eb`, in the current pin; pin moved with no rigcoder source change — fixture churn was the `rig` label, batch numbers, stream chunk counts and c4 tool-result order only |

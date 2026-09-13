@@ -10,11 +10,11 @@ repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
 # Keep all Rig dependencies on one pinned Rig main revision.
-rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "387abeeac47936834cd60c8696118c8da1f4de80", default-features = false }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "387abeeac47936834cd60c8696118c8da1f4de80" }
-rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "387abeeac47936834cd60c8696118c8da1f4de80", default-features = false }
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "387abeeac47936834cd60c8696118c8da1f4de80", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "387abeeac47936834cd60c8696118c8da1f4de80", default-features = false, features = ["reqwest", "rustls"] }
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "234626eb8e75ee8af76e364012e3fd358119360b", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "234626eb8e75ee8af76e364012e3fd358119360b" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "234626eb8e75ee8af76e364012e3fd358119360b", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "234626eb8e75ee8af76e364012e3fd358119360b", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "234626eb8e75ee8af76e364012e3fd358119360b", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }
