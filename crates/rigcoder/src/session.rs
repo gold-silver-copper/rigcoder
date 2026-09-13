@@ -185,7 +185,12 @@ type JustRetried = (With<ProviderRetrying>, Changed<ProviderRetried>);
 pub(crate) fn announce_provider_retries(
     runs: Query<(Entity, &ProviderRetried), JustRetried>,
     turns: Query<&ChildOf, With<rig_ecs::agent::Turn>>,
-    effects: Query<(&ChildOf, &Order, &rig_ecs::bus::EffectOutcome), With<PendingEffect>>,
+    effects: Query<(
+        &ChildOf,
+        &rig_ecs::bus::Seq,
+        &PendingEffect,
+        &rig_ecs::bus::EffectOutcome,
+    )>,
     conversation: Res<Conversation>,
     setup: Res<crate::Setup>,
     connection: Option<Res<crate::model::ModelConnection>>,
@@ -195,11 +200,15 @@ pub(crate) fn announce_provider_retries(
         if conversation.active != Some(run) || retried.0 == 0 {
             continue;
         }
-        // The attempt just lost: the run's latest failed completion.
+        // Effects carry the bus's Seq, not the agent graph's Order (which
+        // orders utterances and links). Select only this run's completions.
         let reason = effects
             .iter()
-            .filter(|(turn, _, _)| turns.get(turn.parent()).is_ok_and(|of| of.parent() == run))
-            .filter_map(|(_, order, outcome)| match &outcome.0 {
+            .filter(|(turn, _, effect, _)| {
+                matches!(effect.kind, EffectKind::Completion { .. })
+                    && turns.get(turn.parent()).is_ok_and(|of| of.parent() == run)
+            })
+            .filter_map(|(_, order, _, outcome)| match &outcome.0 {
                 Err(report) => Some((order.0, report)),
                 Ok(_) => None,
             })
@@ -753,6 +762,45 @@ mod retry_tests {
             .collect()
     }
 
+    #[test]
+    fn retry_transcripts_name_each_failed_completion() {
+        let dir = scratch("retry-reasons");
+        let mut live = app(
+            &dir,
+            crate::Mode::Live,
+            Some(vec![
+                Err(ErrorReport::new(ErrorKind::Timeout, "first timeout").with_retryable(true)),
+                Err(ErrorReport::new(ErrorKind::Timeout, "second timeout").with_retryable(true)),
+                Err(
+                    ErrorReport::new(ErrorKind::Timeout, "echo synthetic-retry-secret")
+                        .with_retryable(true),
+                ),
+                done(),
+            ]),
+        );
+        live.insert_resource(crate::model::ModelConnection::new(
+            "https://example.invalid",
+            "synthetic-retry-secret",
+            rig::http_client::ReqwestClient::new(reqwest::Client::new()).boxed(),
+        ));
+        submit(live.world_mut(), "finish").unwrap();
+        drive(&mut live);
+        let reasons: Vec<_> = live
+            .world()
+            .resource::<Transcript>()
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Retrying { reason, .. } => Some(reason.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(reasons.len(), 3);
+        assert_eq!(&reasons[..2], ["first timeout", "second timeout"]);
+        assert!(!reasons[2].is_empty());
+        assert!(!reasons[2].contains("synthetic-retry-secret"));
+    }
+
     fn held_backoffs(app: &mut App) -> usize {
         app.world_mut()
             .query_filtered::<Entity, (With<Held>, With<RetryBackoff>)>()
@@ -970,6 +1018,11 @@ mod retry_tests {
             [1],
             "the replay retries where the log did"
         );
+        for app in [&live, &replay] {
+            assert!(app.world().resource::<Transcript>().events.iter().any(
+                |event| matches!(event, Event::Retrying { reason, .. } if reason == "timed out")
+            ));
+        }
     }
 
     #[test]

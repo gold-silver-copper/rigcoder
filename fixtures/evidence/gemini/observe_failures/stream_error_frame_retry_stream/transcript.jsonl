@@ -1,5 +1,5 @@
 {"kind":"user","text":"Reply with the single word: pong"}
-{"kind":"retrying","reason":"","attempt":1,"wait_secs":2}
+{"kind":"retrying","reason":"ProviderResponseError: status 500 Internal Server Error: {\"error\":{\"code\":500,\"message\":\"An internal error has occurred.\",\"status\":\"INTERNAL\"}}","attempt":1,"wait_secs":2}
 {"kind":"assistant","text":"pong"}
 {"kind":"usage","input_tokens":795,"output_tokens":1,"cached_input_tokens":0,"total_tokens":856}
 {"kind":"settled","answer":"pong"}

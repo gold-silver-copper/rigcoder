@@ -547,3 +547,223 @@ entry; the cap is $400.
   and reads nothing from Rig. `cargo run -p rigcoder-verify -- verify`
   42/42. fmt and clippy (`-D warnings`) clean. Evidence packets
   regenerated in replay mode.
+
+## Run 4, step 1: baseline preflight (2026-09-13)
+
+Threshold, set before launch: smoke at `7ddd20d`, Rig
+`387abeeac47936834cd60c8696118c8da1f4de80`, model
+`gemini/gemini-3.8-flash`, `run --slice smoke -k 1 -n 4`.
+Accept 10/10 or one flip on a model cause, no harness or rig event,
+and cost per resolved task $1.12–$1.76. Classify all failures and
+inspect typed refusals. Expected spend $9–$18; prior recorded spend
+$301.30 of $700, ask before $670. No holdout access.
+
+Preflight: Rust 1.95.0 and active OrbStack confirmed. The existing
+`harness/tasks` directory contains the dataset but has no nested Git
+metadata (Git resolves the parent rigcoder repository), so its upstream
+checkout provenance is not independently established. Task files are
+left untouched to preserve the paired dataset.
+
+## Run 4, step 2: turn folding measured before building
+
+Offline input is **only** `dev2-run-dev-1789286562939723000-9523`: 60
+trials, 54 passing, 133,323,851 recorded input tokens. Long tasks use the
+run-3 definition: task names with a trial at 110+ tool calls, namely
+`db-wal-recovery` and `make-mips-interpreter` (six trials, 58,229,682 input
+tokens). No holdout job or per-task result was read.
+
+Method: `python3 harness/history_folding_measure.py`. This reads the
+actual completion request histories in `effects.json`, where the existing
+30,000-character shaping has already happened. Age counts model requests,
+including retries, not individual tool calls; an exchange first seen in
+request j is age 1 there and folds only at age > N. Native tool calls
+(name, arguments, IDs and provider signatures) stay intact. Dev2 has no
+non-tool assistant content in these histories, checked across every
+request, so there is no additional prose to remove from the exchange.
+The compact result keeps its first and last lines, any `[exit code: ...]`
+line, and `[... K chars elided; call the tool again to see it ...]`.
+Already shorter results stay unchanged.
+
+The quote check is causal: protect a result for the current request if
+any run-3 word from that result occurs verbatim in a subsequent call's
+arguments **already in that request's history**. The upcoming reply is
+not available to Assemble. Protected results are read from the original
+history each time; this is not a destructive, permanent truncation.
+Run-3 words use `[A-Za-z_][A-Za-z0-9_./-]{5,}`. A hit is an old result with
+a word only in its elided content appearing in a later generated tool
+argument or the final answer while that result would be folded. Count a
+result once per trial and N, however many later uses it has. This is the
+run-3 script's counting unit (its notes called these “passing trials”).
+Unique affected passing trials are also shown to remove that ambiguity.
+The heuristic includes generic words and does not establish causal harm.
+
+Removal uses run 3's **characters / 4 token estimate**, including the
+marker overhead, not a Gemini tokenizer or a live token measurement.
+Recorded input-token denominators are exact. The build decision also
+fails the hit limit independently of the token estimate.
+
+| N | removed, no quote check | removed, quote checked | long-task removal, no check | long-task removal, checked | result hits on passes, raw → checked | passing trials hit, raw → checked |
+|---|---:|---:|---:|---:|---:|---:|
+| 6 | 25.571M | 4.491M | 12.709M (21.8%) | 2.036M (3.5%) | 930 → 219 | 54 → 47 |
+| 10 | 22.958M | 3.650M | 12.074M (20.7%) | 1.811M (3.1%) | 847 → 147 | 54 → 39 |
+| 16 | 19.283M | 2.765M | 11.142M (19.1%) | 1.573M (2.7%) | 702 → 76 | 54 → 26 |
+
+Per-trial estimates **after** the quote check (tokens rounded to nearest
+integer); `hits` is the checked result-hit count at N=6/10/16, including
+failing trials for transparency. The rule above uses passing trials
+only. `history_folding_dev2.csv` also retains unrounded raw/checked
+removal and both hit counts for every trial and setting. Detailed
+request/call/token witnesses are in the ignored job artifact
+`history-folding-measure.json`, reproducible with the script.
+
+| dev2 trial | pass | input tokens | removed N=6 | removed N=10 | removed N=16 | hits 6/10/16 |
+|---|---:|---:|---:|---:|---:|---|
+| cancel-async-tasks__1 | 1 | 2,104,645 | 170 | 0 | 0 | 0/0/0 |
+| cancel-async-tasks__2 | 1 | 2,559,882 | 0 | 0 | 0 | 0/0/0 |
+| cancel-async-tasks__3 | 1 | 2,700,840 | 0 | 0 | 0 | 0/0/0 |
+| chess-best-move__1 | 1 | 1,765,388 | 445,463 | 381,142 | 290,870 | 2/1/1 |
+| chess-best-move__2 | 1 | 1,034,290 | 437,657 | 360,717 | 247,483 | 2/1/0 |
+| chess-best-move__3 | 1 | 780,544 | 117,965 | 81,011 | 26,355 | 2/2/2 |
+| configure-git-webserver__1 | 0 | 2,628,978 | 29,417 | 22,445 | 16,278 | 8/6/2 |
+| configure-git-webserver__2 | 0 | 2,031,351 | 23,279 | 18,703 | 12,270 | 5/3/2 |
+| configure-git-webserver__3 | 0 | 1,949,593 | 25,086 | 22,481 | 18,622 | 0/0/0 |
+| constraints-scheduling__1 | 1 | 647,857 | 342 | 225 | 112 | 1/1/1 |
+| constraints-scheduling__2 | 1 | 284,592 | 529 | 154 | 0 | 0/0/0 |
+| constraints-scheduling__3 | 1 | 462,039 | 154 | 70 | 0 | 1/0/0 |
+| crack-7z-hash__1 | 1 | 1,277,189 | 33,804 | 28,504 | 21,576 | 3/0/0 |
+| crack-7z-hash__2 | 1 | 1,579,791 | 23,540 | 14,457 | 8,127 | 6/4/1 |
+| crack-7z-hash__3 | 1 | 1,886,584 | 105,448 | 81,594 | 52,162 | 13/7/4 |
+| custom-memory-heap-crash__1 | 1 | 2,040,200 | 160,220 | 130,734 | 87,638 | 3/2/0 |
+| custom-memory-heap-crash__2 | 1 | 2,889,956 | 46,266 | 37,020 | 23,980 | 10/7/5 |
+| custom-memory-heap-crash__3 | 1 | 1,607,179 | 4,562 | 3,227 | 1,792 | 6/6/2 |
+| db-wal-recovery__1 | 0 | 14,936,445 | 236,400 | 217,748 | 194,990 | 21/17/13 |
+| db-wal-recovery__2 | 1 | 619,841 | 2,112 | 1,074 | 202 | 0/0/0 |
+| db-wal-recovery__3 | 1 | 244,781 | 1,285 | 780 | 313 | 4/2/1 |
+| extract-elf__1 | 1 | 1,507,510 | 7,860 | 5,450 | 3,624 | 3/1/1 |
+| extract-elf__2 | 1 | 3,484,231 | 216,022 | 176,228 | 128,470 | 4/3/1 |
+| extract-elf__3 | 1 | 2,250,220 | 10,777 | 3,010 | 1,806 | 10/5/2 |
+| feal-differential-cryptanalysis__1 | 1 | 810,974 | 378 | 318 | 238 | 1/0/0 |
+| feal-differential-cryptanalysis__2 | 1 | 772,505 | 244 | 0 | 0 | 0/0/0 |
+| feal-differential-cryptanalysis__3 | 1 | 448,081 | 402 | 184 | 89 | 1/0/0 |
+| fix-code-vulnerability__1 | 1 | 380,643 | 88,057 | 37,982 | 0 | 4/3/0 |
+| fix-code-vulnerability__2 | 1 | 468,210 | 30,330 | 5,972 | 0 | 3/1/0 |
+| fix-code-vulnerability__3 | 1 | 506,925 | 48,685 | 11,546 | 1,872 | 6/4/1 |
+| git-leak-recovery__1 | 1 | 1,170,363 | 37,694 | 32,312 | 25,784 | 11/10/10 |
+| git-leak-recovery__2 | 1 | 356,155 | 10,919 | 7,317 | 4,113 | 3/2/2 |
+| git-leak-recovery__3 | 1 | 572,851 | 19,629 | 15,875 | 10,708 | 5/4/4 |
+| git-multibranch__1 | 1 | 1,275,508 | 18,968 | 13,004 | 7,213 | 6/6/3 |
+| git-multibranch__2 | 1 | 1,604,309 | 72,578 | 65,202 | 54,393 | 2/2/1 |
+| git-multibranch__3 | 1 | 2,249,506 | 31,759 | 23,234 | 11,679 | 5/4/1 |
+| headless-terminal__1 | 1 | 1,809,936 | 3,534 | 2,405 | 1,854 | 4/3/1 |
+| headless-terminal__2 | 1 | 2,279,399 | 17,853 | 15,899 | 13,682 | 2/1/0 |
+| headless-terminal__3 | 1 | 3,983,888 | 48,343 | 38,158 | 23,925 | 10/10/6 |
+| kv-store-grpc__1 | 1 | 1,117,899 | 7,575 | 5,384 | 3,017 | 1/1/0 |
+| kv-store-grpc__2 | 1 | 558,773 | 3,740 | 1,720 | 0 | 3/2/0 |
+| kv-store-grpc__3 | 1 | 1,309,023 | 3,544 | 2,077 | 1,460 | 1/0/0 |
+| make-mips-interpreter__1 | 0 | 12,741,301 | 815,770 | 726,581 | 627,735 | 18/16/11 |
+| make-mips-interpreter__2 | 1 | 11,599,338 | 315,317 | 268,072 | 213,384 | 21/16/10 |
+| make-mips-interpreter__3 | 1 | 18,087,976 | 665,205 | 597,008 | 535,908 | 16/8/3 |
+| password-recovery__1 | 1 | 452,325 | 15,696 | 8,348 | 1,000 | 2/2/0 |
+| password-recovery__2 | 1 | 513,682 | 20,057 | 13,155 | 3,978 | 2/1/0 |
+| password-recovery__3 | 1 | 548,672 | 17,851 | 14,214 | 9,971 | 1/0/0 |
+| path-tracing__1 | 1 | 2,558,159 | 10,463 | 235 | 151 | 3/0/0 |
+| path-tracing__2 | 0 | 667,065 | 13,948 | 5,054 | 326 | 1/1/0 |
+| path-tracing__3 | 1 | 1,881,669 | 113,560 | 68,572 | 38,687 | 7/4/2 |
+| polyglot-rust-c__1 | 1 | 1,115,354 | 16,248 | 14,070 | 10,996 | 5/4/4 |
+| polyglot-rust-c__2 | 1 | 786,127 | 7,551 | 6,162 | 4,095 | 0/0/0 |
+| polyglot-rust-c__3 | 1 | 544,207 | 5,591 | 3,979 | 2,238 | 2/1/0 |
+| sparql-university__1 | 1 | 1,297,299 | 16,260 | 12,120 | 6,204 | 5/4/2 |
+| sparql-university__2 | 1 | 1,268,786 | 14,402 | 9,131 | 2,354 | 3/3/0 |
+| sparql-university__3 | 1 | 1,460,629 | 19,476 | 14,958 | 8,902 | 8/6/5 |
+| write-compressor__1 | 1 | 560,272 | 1,804 | 398 | 64 | 1/0/0 |
+| write-compressor__2 | 1 | 1,571,782 | 37,665 | 15,676 | 0 | 3/2/0 |
+| write-compressor__3 | 1 | 720,334 | 11,663 | 7,042 | 2,642 | 2/1/0 |
+
+Read-through examples at N=16:
+- `path-tracing__3`, request 25: the symbol table from
+  `objdump -t /app/orig | grep -E "F .text"` contains `is_in_shadow`
+  between the first line and exit status. Age 18; the later C source
+  written through bash defines that symbol. No already-recorded later
+  argument protects the result at that request. This is a symbol hit.
+- `git-leak-recovery__1`, request 47: the tree listing from
+  `git cat-file -p aa7dfd0` has `secret.txt` in the cut middle. Age 18;
+  `write_file` later writes `/app/secret.txt`. This is a path hit, though
+  matching its basename does not prove the listing was necessary.
+- `extract-elf__2`, request 51: `env` has `usr/bin` in its cut body; the
+  later script has `#!/usr/bin/env node`. This is a benign generic-path
+  collision, illustrating why the heuristic is not a causal failure count.
+
+**No N meets the predeclared build rule.** After the implementable quote
+check, long-task removal is 2.7–3.5%, below 20%, and 76–219 result hits
+remain on 26–47 passing trials, above two under either counting unit.
+Nothing in `Steer`, the witness, digest or evidence packets is changed;
+there is no winning setting to build or spend a paired smoke/dev run on.
+Do not substitute an oracle that reads the upcoming model reply. The
+required next decision is a different history design from the user.
+
+Measurement validation in this session: the script completed over all 60
+trials with assertions that each request has unique result IDs, stable
+result text, text-only results, and no omitted assistant prose. All 60
+result input-token totals equal the sum of recorded completion usage.
+A synthetic 20-request check confirms N=16 folds first at age 17, the
+upcoming quote is still a hit, and a quote in prior history protects the
+next requests. Single-/two-line no-ops and an exit-status line in the
+middle were checked. The budget module's six unit tests passed.
+
+## Run 4, step 1 result and new target
+
+Job `r4-smoke-run-smoke-1789329109644530000-79506`, binary/ledger
+commit `7ddd20d`, Rig `387abeeac47936834cd60c8696118c8da1f4de80`.
+10/10 vs run 3's 10/10; every paired task stays 1 → 1. Cost $9.230922
+vs $13.294974, $0.923092 vs $1.329497 per resolved task. Input 11,953,406
+vs 17,238,577; tool calls 483 vs 602. Cost is below the predeclared
+$1.12–$1.76 band, so the literal band condition is not met.
+
+Failed trials: none. Typed provider refusals: zero; no failure record
+with `refusal: true`, no adapter prompt block, and no untyped block.
+One deny-list event in chess-best-move (whole-filesystem search),
+recovered as designed. Two infrastructure events: retryable 503
+`UNAVAILABLE` responses in extract-elf and headless-terminal. Each
+re-issued the identical completion immediately after its failed effect
+(72 → 73 and 30 → 31), without a tool record between the attempts;
+both trials settled and passed. All ten traces are complete, with zero
+dropped observations. Spend now $310.530922 of $700.
+
+New `harness` mode, two non-fatal occurrences: both retry transcript
+lines have an empty `reason`, although their recorded error reports
+contain the full 503 message. `announce_provider_retries` queries
+`agent::Order` on effect entities; effects have `bus::Seq`, so its
+query is empty. A new scripted test reproduced two empty reasons.
+Fix: use `Seq` to select the latest failed completion of the active run,
+explicitly excluding tool effects, and retain diagnostic scrubbing.
+Tests cover distinct consecutive reasons, a secret-bearing diagnostic,
+and the reason on both recording and replay. This is the step-1 target;
+the already-completed folding measurement remains offline evidence,
+not authorization to build a rejected setting.
+
+Paired-smoke threshold, before launch: same model/slice/k/concurrency
+as `r4-smoke`, no passing task lost on a harness cause, no new harness
+or Rig mode, and any live retry must have a nonempty scrubbed reason
+matching its failed completion, with no tool duplicated across retry.
+If no retry occurs, the scripted and replay regression tests prove the
+reporting fix; smoke only checks regressions. Report cost per resolved
+task and task deltas, with expected spend $9–$18. Ask before $670.
+
+Retry-fix verification so far: `cargo test -p rigcoder --lib retry_tests`
+10/10; check, fmt and Clippy (`-D warnings`) passed. Offline evidence
+regeneration: 71/71. Audited all 124 changed packets: 102 effect logs
+have identical records and per-record delivery totals after normalizing
+policy hashes, batch splitting/timing and dispatch IDs; five observation
+files retain the same fact multiset; five transcripts only reorder
+concurrent tool results; 12 transcripts now name the failed completion
+instead of an empty retry reason. Every `cell.json` is unchanged.
+The old extract-elf smoke replay refuses the changed policy fingerprint,
+so it cannot validate the new reporter; the scripted live/replay test
+checks the corrected reason on both paths. No paid recording was used.
+
+The full `cargo test --workspace` run and
+`cargo run --locked -p rigcoder-verify -- verify` passed (42/42).
+Separate code/diff review checked active-run isolation, completion-only
+selection, bus ordering after scene restore, and retained secret
+scrubbing; no additional correctness finding. Paired smoke is pending
+at the fix commit.

@@ -1,4 +1,4 @@
 {"kind":"user","text":"Reply with the single word: pong"}
-{"kind":"retrying","reason":"","attempt":1,"wait_secs":2}
+{"kind":"retrying","reason":"ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"},\"usageMetadata\":{\"promptTokenCount\":11,\"totalTokenCount\":11}}","attempt":1,"wait_secs":2}
 {"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
 {"kind":"failed","reason":{"kind":"provider_response","origin":"provider","boundary":"provider_response","message":"ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}","retryable":true,"refusal":false,"http_status":429,"adapter":null}}

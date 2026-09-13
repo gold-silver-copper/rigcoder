@@ -1,5 +1,5 @@
 {"kind":"user","text":"Reply with the single word: pong"}
-{"kind":"retrying","reason":"","attempt":1,"wait_secs":2}
+{"kind":"retrying","reason":"ProviderResponseError: status 429 Too Many Requests: {\"error\":{\"code\":429,\"message\":\"Quota exceeded for quota metric 'Generate Content API requests per minute'\",\"status\":\"RESOURCE_EXHAUSTED\"}}","attempt":1,"wait_secs":2}
 {"kind":"assistant","text":"pong"}
 {"kind":"usage","input_tokens":795,"output_tokens":1,"cached_input_tokens":0,"total_tokens":888}
 {"kind":"settled","answer":"pong"}
