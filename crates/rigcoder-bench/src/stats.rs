@@ -53,7 +53,7 @@ pub struct Cost {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Summary {
-    /// Mean reward over every trial.
+    /// Mean reward over every counted trial (contaminated trials excluded).
     pub score: f64,
     /// Mean over tasks of the fraction of attempts that passed.
     pub pass1: f64,
@@ -63,14 +63,28 @@ pub struct Summary {
     pub ci_high: f64,
     pub trials: usize,
     pub tasks: usize,
-    /// Per task, the reward of each attempt in order.
+    /// Trials whose transcript referenced the public benchmark's own material.
+    /// Excluded from score, pass rates and the interval; their cost still counts.
+    #[serde(default)]
+    pub contaminated: usize,
+    /// Per task, the reward of each attempt in order (contaminated attempts
+    /// recorded as NaN so their position is kept without scoring them).
     pub rewards: BTreeMap<String, Vec<f64>>,
     pub cost: Cost,
 }
 
-pub fn summarize(trials: &[TrialRecord]) -> Summary {
+pub fn summarize(all: &[TrialRecord]) -> Summary {
+    let contaminated = all.iter().filter(|t| t.contaminated).count();
+    let mut rewards: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for t in all {
+        rewards
+            .entry(t.task.clone())
+            .or_default()
+            .push(if t.contaminated { f64::NAN } else { t.reward });
+    }
+    let trials: Vec<&TrialRecord> = all.iter().filter(|t| !t.contaminated).collect();
     let mut by_task: BTreeMap<String, Vec<f64>> = BTreeMap::new();
-    for t in trials {
+    for t in &trials {
         by_task.entry(t.task.clone()).or_default().push(t.reward);
     }
     let n = trials.len();
@@ -100,6 +114,7 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
         0.0
     };
     let (ci_low, ci_high) = wilson(passed, n);
+    let trials = all;
     let cost = Cost {
         input_tokens: token_total(trials.iter().map(|t| t.input_tokens)),
         output_tokens: token_total(trials.iter().map(|t| t.output_tokens)),
@@ -115,7 +130,8 @@ pub fn summarize(trials: &[TrialRecord]) -> Summary {
         ci_high,
         trials: n,
         tasks,
-        rewards: by_task,
+        contaminated,
+        rewards,
         cost,
     }
 }
@@ -135,6 +151,7 @@ mod tests {
                 out.push(TrialRecord {
                     task: (*task).to_owned(),
                     attempt: i + 1,
+                    contaminated: false,
                     reward: *r,
                     input_tokens: Some(10),
                     output_tokens: Some(5),
@@ -147,6 +164,24 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn contaminated_trials_are_neither_passes_nor_failures_but_still_cost() {
+        let mut records = trials(&[("a", &[1.0, 1.0]), ("b", &[0.0])]);
+        records[0].contaminated = true;
+        let s = summarize(&records);
+        assert_eq!(s.contaminated, 1);
+        assert_eq!(s.trials, 2);
+        assert_eq!(s.score, 0.5);
+        assert_eq!(s.pass1, 0.5);
+        assert_eq!(s.passk, 0.5);
+        assert_eq!(s.ci_low, wilson(1, 2).0);
+        assert!(s.rewards["a"][0].is_nan() && s.rewards["a"][1] == 1.0);
+        assert_eq!(s.cost.tool_calls, 9);
+        let clean = summarize(&trials(&[("a", &[1.0, 1.0]), ("b", &[0.0])]));
+        assert_eq!(clean.contaminated, 0);
+        assert_eq!(clean.trials, 3);
     }
 
     #[test]

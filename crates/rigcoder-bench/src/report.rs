@@ -255,6 +255,7 @@ mod tests {
             wall_seconds: 0.0,
             settled: false,
             error: None,
+            contaminated: false,
         };
         std::fs::write(
             trial.join("result.json"),

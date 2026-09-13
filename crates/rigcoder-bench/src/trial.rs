@@ -26,6 +26,11 @@ pub struct TrialRecord {
     pub settled: bool,
     /// A harness-side failure (build, container, verifier), not the agent's.
     pub error: Option<String>,
+    /// A tool call referenced the public benchmark's own material
+    /// (`digest::benchmark_reference`). The reward stays recorded as evidence,
+    /// but the trial counts as neither a pass nor a failure in a summary.
+    #[serde(default)]
+    pub contaminated: bool,
 }
 
 pub struct TrialSpec<'a> {
@@ -488,6 +493,7 @@ fn read_agent_output(dir: &Path, task: &str, attempt: usize) -> TrialRecord {
         wall_seconds: 0.0,
         settled: false,
         error: None,
+        contaminated: false,
     };
     let Ok(text) = std::fs::read_to_string(dir.join("agent").join("transcript.jsonl")) else {
         record.input_tokens = None;
@@ -504,7 +510,16 @@ fn read_agent_output(dir: &Path, task: &str, attempt: usize) -> TrialRecord {
             continue;
         };
         match event.get("kind").and_then(|k| k.as_str()) {
-            Some("tool_call") => record.tool_calls += 1,
+            Some("tool_call") => {
+                record.tool_calls += 1;
+                if event["args"]
+                    .as_str()
+                    .and_then(crate::digest::benchmark_reference)
+                    .is_some()
+                {
+                    record.contaminated = true;
+                }
+            }
             Some("settled") => record.settled = true,
             Some("usage") => {
                 saw_usage = true;

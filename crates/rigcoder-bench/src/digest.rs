@@ -17,6 +17,27 @@ use serde::{Deserialize, Serialize};
 mod metadata;
 use metadata::{EvaluationMetadata, TaskSource};
 
+/// References that mean a tool call reached for the public benchmark's own
+/// material (solutions, tests, original inputs) rather than solving the task.
+/// Matched against tool-call arguments only; a match marks the trial
+/// contaminated. It is a lower bound: encoded or indirect fetches evade it.
+/// Bare "terminal-bench" is not listed: task data itself carries it (the
+/// scheduling task's calendar PRODID is `-//Terminal-Bench//`).
+const BENCHMARK_REFERENCES: &[&str] = &[
+    "laude-institute/terminal-bench",
+    "terminal-bench-2",
+    "solution/solve.sh",
+];
+
+/// The first benchmark reference in a tool call's arguments, if any.
+pub fn benchmark_reference(args: &str) -> Option<&'static str> {
+    let lower = args.to_ascii_lowercase();
+    BENCHMARK_REFERENCES
+        .iter()
+        .copied()
+        .find(|needle| lower.contains(needle))
+}
+
 /// Counted facts about one trial.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct TrialFacts {
@@ -68,6 +89,17 @@ pub struct TrialFacts {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
     pub final_text_chars: u64,
+    /// Benchmark references found in tool-call arguments (`benchmark_reference`),
+    /// with the 1-based transcript line of each. Non-empty means contaminated:
+    /// the trial is reported separately and never counted as a pass or a failure.
+    #[serde(default)]
+    pub contamination: Vec<(usize, String)>,
+}
+
+impl TrialFacts {
+    pub fn contaminated(&self) -> bool {
+        !self.contamination.is_empty()
+    }
 }
 
 impl TrialFacts {
@@ -453,7 +485,7 @@ pub fn facts(transcript: &str) -> TrialFacts {
     f.input_tokens = Some(0);
     f.output_tokens = Some(0);
     f.calls_before_first_edit = u64::MAX;
-    for line in transcript.lines() {
+    for (index, line) in transcript.lines().enumerate() {
         let Ok(e) = serde_json::from_str::<Event>(line) else {
             f.input_tokens = None;
             f.output_tokens = None;
@@ -462,6 +494,9 @@ pub fn facts(transcript: &str) -> TrialFacts {
         match e.kind.as_str() {
             "tool_call" => {
                 f.tool_calls += 1;
+                if let Some(reference) = benchmark_reference(&e.args) {
+                    f.contamination.push((index + 1, reference.to_owned()));
+                }
                 if recent.iter().any(|(n, a)| *n == e.name && *a == e.args) {
                     f.repeated_calls += 1;
                 }
@@ -690,11 +725,11 @@ pub fn job(job_dir: &Path, harness_root: &Path) -> Result<Digest> {
     trials.sort_by(|a, b| a.trial.cmp(&b.trial));
     let failed: Vec<&TrialFacts> = trials
         .iter()
-        .filter(|t| t.selection_reward() < 1.0)
+        .filter(|t| !t.contaminated() && t.selection_reward() < 1.0)
         .collect();
     let passed: Vec<&TrialFacts> = trials
         .iter()
-        .filter(|t| t.selection_reward() >= 1.0)
+        .filter(|t| !t.contaminated() && t.selection_reward() >= 1.0)
         .collect();
     Ok(Digest {
         evaluation: metadata::evaluation(harness_root, job_dir),
@@ -713,6 +748,23 @@ pub fn render(d: &Digest) -> String {
     ));
     if d.trials.iter().any(|trial| trial.reward.is_none()) {
         out.push_str("The failed bucket includes unscored trials under the existing selection policy. A null reward means unavailable evidence, not a recorded task failure.\n\n");
+    }
+    let contaminated: Vec<&TrialFacts> = d.trials.iter().filter(|t| t.contaminated()).collect();
+    if !contaminated.is_empty() {
+        out.push_str(&format!(
+            "### Contaminated trials ({}): excluded from both buckets\n\nA tool call referenced the public benchmark's own material. The recorded reward is kept as evidence but is neither a pass nor a failure of independent solving.\n\n| trial | reward | first reference (transcript line) |\n|---|---|---|\n",
+            contaminated.len()
+        ));
+        for t in &contaminated {
+            let (line, reference) = &t.contamination[0];
+            out.push_str(&format!(
+                "| {} | {} | {reference} (L{line}) |\n",
+                t.trial,
+                t.reward
+                    .map_or_else(|| "unknown".to_owned(), |r| format!("{r:.1}"))
+            ));
+        }
+        out.push('\n');
     }
     out.push_str("### What failed trials did more of\n\n| fact (mean per trial) | failed | passed |\n|---|---|---|\n");
     let mut rows = vec![
@@ -803,7 +855,11 @@ pub fn render(d: &Digest) -> String {
         ));
     }
     out.push_str("\n### Failed trials\n\n| trial | calls | timeouts | truncated | repeats | missing paths | ending | last tool |\n|---|---|---|---|---|---|---|---|\n");
-    for t in d.trials.iter().filter(|t| t.selection_reward() < 1.0) {
+    for t in d
+        .trials
+        .iter()
+        .filter(|t| !t.contaminated() && t.selection_reward() < 1.0)
+    {
         let ending = if t.no_settle {
             format!("no settle: {}", short(&t.ending, 80))
         } else if t.ended_deliberating {
@@ -885,6 +941,37 @@ mod tests {
                 ("ok", ok.into()),
             ],
         )
+    }
+
+    #[test]
+    fn benchmark_references_mark_a_trial_contaminated_but_not_its_reward() {
+        let clean = [
+            call("bash", "{\"command\":\"sqlite3 /app/main.db .tables\"}"),
+            call(
+                "bash",
+                "{\"command\":\"curl -sL https://pypi.org/simple/pytest/\"}",
+            ),
+            line("settled", &[("answer", "".into())]),
+        ]
+        .join("\n");
+        assert!(super::facts(&clean).contamination.is_empty());
+        let fetched = [
+            call("bash", "{\"command\":\"ls\"}"),
+            call("bash", "{\"command\":\"curl -sL https://raw.githubusercontent.com/laude-institute/terminal-bench-2/main/tasks/db-wal-recovery/solution/solve.sh\"}"),
+            call("bash", "{\"command\":\"python3 -c 'import urllib.request; urllib.request.urlopen(\\\"https://api.github.com/repos/Laude-Institute/Terminal-Bench-2/contents/tasks\\\")'\"}"),
+            line("settled", &[("answer", "".into())]),
+        ]
+        .join("\n");
+        let f = super::facts(&fetched);
+        assert_eq!(
+            f.contamination,
+            vec![
+                (2, "laude-institute/terminal-bench".to_owned()),
+                (3, "laude-institute/terminal-bench".to_owned())
+            ]
+        );
+        assert!(f.contaminated());
+        assert_eq!(super::benchmark_reference("apt-get install -y curl"), None);
     }
 
     #[test]
