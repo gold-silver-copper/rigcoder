@@ -373,3 +373,27 @@ seen in this session.
   `empty_turn_retry` fact, if one occurs, must be followed by a settled
   answer or a tool call. The mode is 1.2% of trials, so the smoke run
   is expected not to exercise it; the steer tests are the pin.
+- No Gemini matrix cell for the reprompt: a live recording cannot make
+  the model answer nothing on cue, and a derived second exchange would
+  need a hand-edited request body. The two steer tests with a scripted
+  model are the pin; the two matrix cells whose recorded answer is empty
+  (`empty_member_stream`, `patched_twice_stream`) run with the rule off
+  and keep pinning the runtime shape and the layer patches.
+- Result of step 1: job `dev2-run-dev-1789286562939723000-9523`, 54/60,
+  pass@1 0.900 [0.799, 0.953] vs 50/60, 0.833. Cost $101.95, $1.89 per
+  resolved task vs $2.08. Paired per task, changes only:
+  polyglot-rust-c 1 → 3, fix-code-vulnerability 1 → 3, password-recovery
+  2 → 3, path-tracing 3 → 2 (the empty-turn settle, fixed below). No
+  trial ended on a retryable provider failure; no exit 137; no
+  unsettled run without a failure. Two live retries occurred
+  (crack-7z-hash #3 passed after one, configure-git-webserver #3 retried
+  once then failed on its model cause): each carries one
+  `rig-ecs/agent/provider_retry` fact and the effect log holds exactly
+  one failed completion and no duplicated tool record. Threshold met on
+  every item. Taxonomy of the 6 failures: `model` 5
+  (configure-git-webserver 3, db-wal-recovery spiral 1, make-mips 1),
+  `harness` 1 (the empty turn). Spend to date $271.75 of $400.
+- Step 2 with dev2's transcripts added (274 trials, 12 with 110+
+  calls): unchanged. Total calls ≥ 120 fires on 9 trials, 5 of them
+  passes; dollars ≥ 8 on 8, 4 passes; calls since a novel result never
+  reaches 40. Nothing built.
