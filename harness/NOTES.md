@@ -767,3 +767,94 @@ Separate code/diff review checked active-run isolation, completion-only
 selection, bus ordering after scene restore, and retained secret
 scrubbing; no additional correctness finding. Paired smoke is pending
 at the fix commit.
+
+Fix commit `c778630`: the required post-commit check, fmt, Clippy, full
+workspace tests and 42/42 verifier all passed. The isolated Linux build
+passed and its receipt's `source_head` is
+`c778630faccbf841694812c3f3de7c84aac164e7`. Paired smoke launched with
+`--job-name r4-retry-reason`, same model and settings; results pending.
+
+Long-trial denominator cross-check: selecting individual trials with
+110+ tool calls (rather than run 3's six-trial task-name grouping) gives
+4 trials and 57,365,060 input tokens. The rejection is unchanged:
+
+| N | raw estimated removal | quote-checked estimated removal |
+|---|---:|---:|
+| 6 | 12.602M (22.0%) | 2.033M (3.5%) |
+| 10 | 11.989M (20.9%) | 1.809M (3.2%) |
+| 16 | 11.090M (19.3%) | 1.572M (2.7%) |
+
+## Run 4: paired retry-reason smoke and stop decision
+
+Job `r4-retry-reason-run-smoke-1789330685663024000-44255`, commit
+`c778630`, same model, slice, k=1 and concurrency=4 as the baseline.
+9/10 vs 10/10. The only task flip is db-wal-recovery (model); every
+other task stays 1 → 1. Every trial settled, with no harness-side
+`error`, no dropped observations and complete traces.
+
+| task | baseline → fixed passes | tool calls | token-priced cost |
+|---|---:|---:|---:|
+| cancel-async-tasks | 1 → 1 | 72 → 95 | $1.697 → $3.499 |
+| chess-best-move | 1 → 1 | 35 → 66 | $0.413 → $1.738 |
+| db-wal-recovery | 1 → 0 | 22 → 189 | $0.129 → $12.118 |
+| extract-elf | 1 → 1 | 55 → 53 | $2.014 → $1.509 |
+| git-leak-recovery | 1 → 1 | 30 → 41 | $0.155 → $0.288 |
+| git-multibranch | 1 → 1 | 66 → 56 | $0.899 → $0.925 |
+| headless-terminal | 1 → 1 | 92 → 72 | $2.137 → $1.538 |
+| kv-store-grpc | 1 → 1 | 35 → 43 | $0.623 → $0.718 |
+| password-recovery | 1 → 1 | 31 → 25 | $0.484 → $0.242 |
+| polyglot-rust-c | 1 → 1 | 45 → 60 | $0.680 → $0.861 |
+
+Total cost $9.230922 → $23.436040; cost per resolved task
+$0.923092 → $2.604004. Input 11,953,406 → 30,688,989;
+tool calls 483 → 700. **Cost worsened substantially; this is not a
+performance improvement.** db-wal-recovery alone cost
+$12.117789, explaining 84.4% of
+the run-cost increase. Its 189-call trajectory exported old WAL values
+(apple 100 instead of 150), then verified its JSON against the database
+it had reconstructed; the verifier failed completeness and WAL-update
+checks. Its initial parsed model request exactly matches the baseline,
+and it had no provider failure or retry, so the
+changed reporter was never exercised on this failed trial. This is the
+known model spiral, not a target for another prompt experiment.
+
+Taxonomy: failed trials model 0 → 1; infra/harness/Rig failed trials
+remain 0. Non-fatal harness reporting errors 2 → 0; recovered infra
+503s 2 → 2. No new harness or Rig mode. Three deny-list denials in
+db-wal-recovery are the existing whole-filesystem-search rule working
+as designed. Typed provider refusals 0 → 0; no adapter prompt block
+and no untyped refusal, so no new refusal row or Rig follow-up.
+
+Live confirmation of the fix: headless-terminal's effect 98 failed
+with retryable 503 `UNAVAILABLE`; effect 99 repeated exactly that
+completion. kv-store-grpc's effects 66 → 67 show the same pattern.
+Each transcript's nonempty retry reason matches its failed report's
+message exactly. There is no tool record between either failed
+completion and its identical retry. Both tasks passed. The fix meets
+its predeclared correctness threshold and is kept; the cost increase
+above is reported, not treated as a benefit or hidden by the pass count.
+The original step-1 cost band is not met literally: baseline was below
+$1.12 and the paired run exceeds $1.76 per resolved task.
+
+Spend: $301.30 before this run + $9.230922 baseline +
+$23.436040 paired smoke = **$333.966962 of $700**
+($333.97 rounded), below the $670 ask line. No other paid run or
+provider recording was launched in this session. Rig remains pinned
+to `387abeeac47936834cd60c8696118c8da1f4de80` (the #2510 squash).
+No upstream PR was opened or changed.
+
+Completion audit against `NEXT_RUN_3_PROMPT.md`: baseline and paired
+source receipts were checked against their launch commits; thresholds
+were written before launch; all ten task pairs and both runs' refusal
+records were inspected. The discovered reporting mode was reproduced,
+fixed once, covered by scripted, replay and live evidence, and paired.
+Dev2's 60 trials were measured at all three N values; the per-trial
+CSV contains raw/quote-checked estimates and hit counts; NOTES retains
+both aggregate estimates and the checked per-trial table, with the
+hit unit, causal quote rule and token-estimate limitation
+explicit. No N meets the rule under either long-trial denominator.
+Therefore the prompt's explicit “No N meets the rule in step 2” stop
+condition applies: no folding implementation, `history_folded` fact,
+folding smoke/dev run, or holdout proposal is warranted. No cell folds.
+Holdout data was neither read nor run. Stop and ask the user for the
+next history design; do not weaken this run's rule retrospectively.
