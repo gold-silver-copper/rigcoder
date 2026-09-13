@@ -438,3 +438,31 @@ $11.22). Kept as clean if 10/10 or one flip on a `model` cause, no
 `harness` or `rig` event, and cost per resolved task within the last
 three runs' range ($1.12 to $1.76). A `harness` or `rig` mode is the
 target and the rest of the run waits. Spend before launch $282.98.
+
+## Run 3, step 2: context levers measured, nothing built (2026-09-13)
+
+Over dev2's 60 transcripts (133.3M input tokens; the long trials are
+db-wal-recovery and make-mips-interpreter). "Hits" are passing trials
+where a token found only in the cut part of a result appears in a
+later tool call or the final answer.
+
+| lever | setting | tokens removed | on the long trials | hits on passes |
+|---|---|---|---|---|
+| A lower `max_result_chars` | 10 000 | 5.9M (4%) | 2.7M | 20 |
+| A | 15 000 | 3.2M (2%) | 1.5M | 6 |
+| A | 20 000 | 1.5M (1%) | 0.7M | 5 |
+| B elide stale results (N calls, M chars) | 8, 4 000 | 13.2M (10%) | 7.0M | 76 |
+| B | 8, 8 000 | 9.9M (7%) | 4.8M | 37 |
+| B | 12, 8 000 | 8.7M (7%) | 4.6M | 33 |
+| B | 16, 8 000 | 7.6M (6%) | 4.3M | 26 |
+
+Both levers have hits on passing trials at every setting, and the
+larger removal costs more hits; the rule set before measuring was zero
+hits. The check is a heuristic and some hits are surely benign, but
+the ceiling is the real finding: the best case removes a tenth of the
+input. The cost is the history growing call by call, not oversized
+single results; a lever on that (summarising or dropping whole old
+turns) changes what the model knows and is a design decision, not a
+rule tweak. Nothing built; the script is
+`context_levers.py` in the session scratchpad and its logic is in this
+entry.
