@@ -167,3 +167,24 @@ had merged. Commits 1 and 2 pair against the smoke run this produces.
   effects header its policy hash, nothing else.
 - Checks: fmt, clippy warning-free, `cargo test --workspace`,
   `rigcoder-verify verify` 42/42.
+- Paired smoke for commit 3, threshold set before the run: paired
+  against iteration 3 (`iter3-clean-run-smoke-1789257486902491000-21858`,
+  10/10, $8.98). Kept if no task that passed before fails and no new
+  `harness` event appears; a provider retry, if one occurs, must show as
+  a `retrying` transcript line and a `rig-ecs/agent/provider_retry` fact
+  with the tool count unchanged across the retry. The smoke slice has no
+  scripted provider failure, so this run cannot show the fix working;
+  the dev-tier provider-error tasks (`fix-code-vulnerability`,
+  `password-recovery`) at k=3 would, at about $6, if budget allows.
+  Spend to date $142.02 of $200.
+- Result: job `c3-retry-run-smoke-1789276232859197000-48641`, commit
+  `02fcc82`, paired against iteration 3. 9/10 vs 10/10. The flip is
+  polyglot-rust-c on the known leftover-binaries mode (commit 1's
+  target): no denial, no retry, no harness event. No trial retried a
+  provider call, so the smoke slice neither exercised nor contradicted
+  the change; the run-level retry is pinned by the session, matrix,
+  Gemini and rig-ecs tests. Deny-list denials 1 (extract-elf). Cost
+  $10.16, $1.13 per resolved task vs $0.90; the difference is one
+  headless-terminal trial at 108 calls and $2.54, within noise at k=1.
+  Kept under the threshold: no previously passing task failed on a
+  harness cause and no new harness event. Spend to date $152.18.
