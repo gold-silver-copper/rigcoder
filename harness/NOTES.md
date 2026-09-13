@@ -89,3 +89,44 @@ Terse log of the eval → diagnose → fix → re-eval loop described in
 | 1 rustfmt fix | dfafa76 | 9/10 | $9.65 | $1.07 | 0 | 0 | 0 | 1 |
 | 2 | dfafa76 | 10/10 | $9.15 | $0.92 | 0 | 0 | 0 | 0 |
 | 3 | a91e46e | 10/10 | $8.98 | $0.90 | 0 | 0 | 0 | 0 |
+
+## Dev tier (2026-09-12)
+
+- `run --slice dev -k 3 -n 4`, 60 trials, commit `d6f7787`. Note: the
+  harness `polyglot_*.py` scripts score the Terminal-Bench polyglot task
+  on the host; they are not Aider Polyglot, so the dev tier is the dev
+  slice only.
+- Cost watch after 12 trials: $20.97, mean $1.75/trial, projected ~$105
+  for the run. That exceeds the $110 development-phase allocation
+  derived when the ledger was scaled ($38.21 already spent on smoke) but
+  stays under the user's $200 cap. Continued on that basis. One
+  make-mips-interpreter trial alone cost $8.82 (11.6M input tokens,
+  119 calls): long hard-task trials dominate cost.
+- Result: job `dev-tier-run-dev-1789258759508791000-59132`, 50/60,
+  pass@1 0.833 [0.720, 0.907], pass@k 0.95. Cost $103.81, $2.08 per
+  resolved task, mean $1.73 per trial. Total spend today $142.02 of the
+  $200 cap; $58 left, enough for smoke runs but not another dev run.
+- Failed-trial taxonomy (10):
+  - `model` 6: configure-git-webserver 3/3 (deploy hook leaves the web
+    server at 404), make-mips-interpreter 1/3 (DOOM frame timeout),
+    db-wal-recovery 1/3 (194-call spiral, $11.59, wrong answer),
+    polyglot-rust-c 2/3 (compiled `main`/`cmain` left beside `main.rs`;
+    same mode as smoke iteration 1, 3 of 6 trials overall).
+  - `harness` 3: fix-code-vulnerability 2/3 ended on the first request
+    with Gemini `block_reason=OTHER`, which rigcoder treats as a final
+    verdict like SAFETY although attempt 1 of the identical prompt
+    succeeded; password-recovery 1/3 died on a mid-run 503 because
+    whole-prompt retries are refused once a request has produced tool
+    work (`session.rs`, deliberate: tools may be irreversible).
+  - `infra` 1 (the 503 itself, counted with the harness gap above).
+- Most frequent `harness` mode: provider-failure handling, 3 trials
+  (block OTHER x2, mid-run 503 x1). Candidate fix for the next
+  iteration: retry once on `block_reason=OTHER` only, and retry a failed
+  completion by re-issuing that request over the preserved history
+  instead of resubmitting the prompt, so tool work is not redone.
+- Cost lever, not a failure mode: the three trials above $8 each had
+  119-194 calls. A lower `--max-turns` or a repeated-call cutoff would
+  cap the tail; changing it needs a paired run to see the pass-rate cost.
+- Polyglot leftovers (3/6 trials) are model behavior addressable only by
+  prompting (the deliverables audit could say "remove build outputs the
+  task did not ask for"); parked behind the provider-failure fix.

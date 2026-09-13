@@ -59,9 +59,11 @@ run is not the goal.
   `harness/slices/smoke.txt`, commit it, never change it mid-session.
   Purpose: catch breakage (edits not applying, malformed tool calls,
   container/setup failures). The error taxonomy matters more than pass rate.
-- **Dev (only with a candidate improvement):** all of `dev.txt` at `-k 3`,
-  plus Aider Polyglot via `harness/polyglot_execute.py` and
-  `polyglot_evaluate.py`, because Polyglot isolates edit-format correctness.
+- **Dev (only with a candidate improvement):** all of `dev.txt` at `-k 3`.
+  (`harness/polyglot_*.py` score the Terminal-Bench polyglot task on the
+  host; they are not Aider Polyglot, which this repo does not run.)
+  Budget about $1.75 per trial, so roughly $105 per dev run; one hard
+  trial can cost $11 at the 200-turn default.
   Keep or revert by the repo's rule: Wilson lower bound not below the best
   kept, mean not dropped (`crates/rigcoder-bench/src/stats.rs`).
 - **Holdout (`harness/slices/holdout.txt`): never run it, never read its
