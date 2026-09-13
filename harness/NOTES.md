@@ -290,3 +290,23 @@ $169.80.
   what the evidence holds. Fixture churn: the revision label and that
   part reordering in history and effects, nothing else. fmt, clippy,
   `cargo test --workspace`, `rigcoder-verify verify` 42/42.
+
+## Next run, step 1: dev tier on the three fixes (2026-09-13)
+
+Threshold, set before launch. Job `dev2`, `run --slice dev -k 3 -n 4`
+on commit `572a1a6`, paired per task against
+`dev-tier-run-dev-1789258759508791000-59132` (50/60, $103.81).
+- polyglot-rust-c 3/3 expected (was 1/3); under 2/3 means the audit
+  line is not enough and the prompt lane is next.
+- fix-code-vulnerability (was 1/3) and password-recovery (was 2/3): no
+  trial may end on a provider failure whose transcript `failed` reason
+  is `retryable: true`; a block for `OTHER` or a 503 must show as
+  `retrying` lines and a `rig-ecs/agent/provider_retry` fact with the
+  tool count unchanged across the retry.
+- No trial ends with exit 137 or `settled: false` without a `failed`
+  event.
+- A task that was 3/3 stays at least 2/3; a 1-task delta elsewhere is
+  noise. Cost per resolved task reported beside pass@1; expected about
+  the first run's, since nothing touches the spiral tail yet.
+- Expected `model` residue: configure-git-webserver 0/3; not a target.
+Spend before launch $169.80 of $400.
