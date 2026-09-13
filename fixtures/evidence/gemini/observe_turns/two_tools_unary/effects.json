@@ -9,28 +9,28 @@
         }
       },
       {
-        "batch": 20,
+        "batch": 18,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 23,
+        "batch": 21,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 25,
+        "batch": 23,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 28,
+        "batch": 26,
         "id": 4,
         "kind": {
           "delivery": "outcome"

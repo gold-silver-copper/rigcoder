@@ -188,3 +188,31 @@ had merged. Commits 1 and 2 pair against the smoke run this produces.
   headless-terminal trial at 108 calls and $2.54, within noise at k=1.
   Kept under the threshold: no previously passing task failed on a
   harness cause and no new harness event. Spend to date $152.18.
+
+## Commit 1 of `HARNESS_FIX_PROMPT.md`: leftovers beside a deliverable (prompt)
+
+- Change: one sub-item in the pre-completion deliverables audit of
+  `prompt.md`: list each deliverable's directory, remove anything you
+  created there that the instruction did not ask for, list it again.
+- Evidence packets: only stream batch numbers moved (the Gemini cells
+  run under a prompt override, so the audit text is not in their
+  identity); every suite green.
+- Threshold, set before the run: paired against the commit 3 run
+  (`c3-retry-run-smoke-1789276232859197000-48641`, 9/10, $10.16).
+  Kept if polyglot-rust-c passes and no task that passed before fails;
+  at k=1 one polyglot pass is weak evidence, so also: mean tool calls
+  per trial must not rise by more than a couple, and no new denial or
+  harness event. Spend to date $152.18; this run about $10.
+- Result: job `c1-audit-run-smoke-1789278185724667000-1527`, paired
+  against the commit 3 run. 9/10 vs 9/10. polyglot-rust-c 0 → 1: the
+  transcript shows `rm -f /app/polyglot/main /app/polyglot/cmain`, the
+  test compile moved to `/tmp`, and the directory listed before
+  settling, so the audit line did what it says. headless-terminal 1 → 0:
+  the agent process was killed (exit 137, no usage, no ending) 62 s in,
+  on `grep {"path": "/", "pattern": "BaseTerminal"}`. The bash deny list
+  refuses `find /` and `grep -r /`; the grep tool itself walks any root
+  and reads every file whole, so `/proc` and `/sys` under `/` take the
+  2 GB task limit down. A `harness` failure mode, independent of the
+  prompt change, and the next target. Mean tool calls 52.4 → 51.6, no
+  denials, no retries. Cost $11.10, $1.23 per resolved task (one
+  password-recovery trial at 83 calls). Kept. Spend to date ~$163.

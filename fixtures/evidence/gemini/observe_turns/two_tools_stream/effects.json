@@ -17,14 +17,14 @@
         }
       },
       {
-        "batch": 19,
+        "batch": 13,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 22,
+        "batch": 16,
         "id": 2,
         "kind": {
           "delivery": "stream",
@@ -32,21 +32,21 @@
         }
       },
       {
-        "batch": 22,
+        "batch": 16,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 24,
+        "batch": 18,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 27,
+        "batch": 21,
         "id": 4,
         "kind": {
           "delivery": "stream",
@@ -54,7 +54,7 @@
         }
       },
       {
-        "batch": 27,
+        "batch": 21,
         "id": 4,
         "kind": {
           "delivery": "outcome"

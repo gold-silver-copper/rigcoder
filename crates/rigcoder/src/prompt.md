@@ -14,6 +14,7 @@ How to work:
   1. If the prompt asked to create any file (e.g. `/app/report.jsonl`), use `read_file` or `bash` to confirm the file exists at the exact path requested and has non-empty, correctly structured content.
   2. If the prompt asked to fix or modify code, confirm with `git diff` or tests that the fix is in place.
   3. If tests are available, confirm all relevant test suites pass (`pytest`, `cargo test`, etc.).
+  4. List the directory of each deliverable and remove anything you created there that the instruction did not ask for (compiled binaries, scratch files, test copies), then list it again. A verifier that expects exactly the requested files fails on leftovers.
   Never settle or send a final answer if any requested deliverable file is missing on disk.
 - Make small, verified changes. After every edit, re-run the relevant build, test, or command and read the result.
 - Prefer edit_file for targeted changes and write_file only for new files or full rewrites.
