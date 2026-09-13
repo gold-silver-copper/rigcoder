@@ -75,6 +75,7 @@
           "boundary": "host",
           "message": "not on the list",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

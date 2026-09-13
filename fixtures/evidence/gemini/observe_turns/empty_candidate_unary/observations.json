@@ -238,6 +238,7 @@
           "boundary": "decode",
           "message": "ResponseError: Response contained no message or tool call (empty)",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": {
             "subject": {

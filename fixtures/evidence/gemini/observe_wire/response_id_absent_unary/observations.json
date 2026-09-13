@@ -170,6 +170,7 @@
           "boundary": "decode",
           "message": "ResponseError: No response candidates in response",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": {
             "subject": {

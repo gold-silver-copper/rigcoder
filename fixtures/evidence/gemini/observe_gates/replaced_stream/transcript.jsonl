@@ -1,4 +1,4 @@
 {"kind":"user","text":"Reply with the single word: kept"}
 {"kind":"assistant","text":"kept"}
 {"kind":"usage","input_tokens":0,"output_tokens":0,"cached_input_tokens":0,"total_tokens":0}
-{"kind":"failed","reason":{"kind":"provider","origin":"provider","boundary":"host","message":"the answer was withdrawn by policy","retryable":false,"http_status":null,"adapter":null}}
+{"kind":"failed","reason":{"kind":"provider","origin":"provider","boundary":"host","message":"the answer was withdrawn by policy","retryable":false,"refusal":false,"http_status":null,"adapter":null}}

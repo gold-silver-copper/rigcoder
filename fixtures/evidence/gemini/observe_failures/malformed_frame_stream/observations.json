@@ -287,6 +287,7 @@
           "boundary": "decode",
           "message": "JsonError: EOF while parsing a value at line 1 column 28",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": {
             "subject": {

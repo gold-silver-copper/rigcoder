@@ -369,6 +369,7 @@
           "boundary": "host",
           "message": "operator stop at hold",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

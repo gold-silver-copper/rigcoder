@@ -504,3 +504,46 @@ The condition was step 1 clean and step 2 landed. Step 1 is clean;
 step 2 did not land (both context levers had needed-later hits), so
 the holdout is not proposed this run. Spend to date is in the last
 entry; the cap is $400.
+
+## Pin moved to Rig `main` (2026-09-13, third time)
+
+- `387abeeac47936834cd60c8696118c8da1f4de80`, the #2510 squash. #2510
+  is #2509 re-targeted: #2509 had merged into `ci/main-gate`, and the
+  audit of every PR merged since #2395 found it the only one whose
+  content never reached `main` (#2478 and #2479 merged into the
+  unmerged `feat/observe-1`, but #2482 replaced both on `main`; the
+  other effect-bus squashes are on `main` through #2443).
+- Migration: a Gemini prompt block is now a typed refusal on the
+  report (`kind: provider_response`, `refusal: true`, `code` the block
+  reason, no status, never retryable), no longer `kind: provider`.
+  `FailureDetail` gains `refusal` (from the report; `false` for host
+  failures, `#[serde(default)]` so old packets still read). The
+  blocked-prompt test and the two blocked-prompt cells' endings move
+  from `provider` to `provider_response`; the bench digest already keyed
+  refusals off the witness action, so its counts do not move.
+- The empty-turn cells (`turns::an_empty_member_settles_stream`,
+  `gates::two_layers_patch_in_order`) still end on the #2503 rule: a
+  turn cut at its output budget with no answer fails non-retryably. The
+  #2510 "truncated reasoning-only turn commits nothing" rule is the
+  history side of the same ending and changed nothing the cells pin.
+- Packet churn otherwise: the pin label, the new `refusal: false`
+  field on every recorded failure, batch numbers, and the dispatch
+  order among a batch's concurrent calls (`order`/`effect`/`id`
+  renumbered within the same pass; the facts are the same set). Two
+  serial regenerations differ from each other in those same fields,
+  so they are measurements, as the lineage cells already say.
+- A test-runner note, not a regression: `cargo nextest` runs each test
+  in its own process, so the observe suite's in-process
+  one-cell-at-a-time lock does not serialize cells across processes and
+  the lineage cells that share `observe_turns/one_tool_stream`'s
+  workspace race (bash starts in a directory another process just
+  reset). CI's `cargo test` is one process and is green; under nextest
+  use `-j1` for this suite.
+- Verification at the pin: `cargo test --locked --workspace` (CI's two
+  invocations) green except one run of rigcoder-verify's
+  `the_real_project_compiles_and_reports_its_behavioral_failure_in_isolation`,
+  whose sandboxed `cargo test --no-run` hit its 30 s limit while the
+  rest of the workspace was compiling beside it; it passes 3/3 alone
+  and reads nothing from Rig. `cargo run -p rigcoder-verify -- verify`
+  42/42. fmt and clippy (`-D warnings`) clean. Evidence packets
+  regenerated in replay mode.

@@ -59,6 +59,9 @@ pub struct FailureDetail {
     pub message: String,
     /// Provider/report retryability, not the host's decision to retry.
     pub retryable: Option<bool>,
+    /// The provider refused the prompt (typed on the report; never retryable).
+    #[serde(default)]
+    pub refusal: bool,
     /// Status retained by the error report; an in-band error can differ from HTTP.
     pub http_status: Option<u16>,
     /// Unambiguously associated provider attempt, if observable.
@@ -74,6 +77,7 @@ impl FailureDetail {
             boundary: FailureBoundary::Host,
             message: rig::observe::scrub_diagnostic(message, secrets),
             retryable: Some(false),
+            refusal: false,
             http_status: None,
             adapter: None,
         }
@@ -107,6 +111,7 @@ impl FailureDetail {
             boundary,
             message: rig::observe::scrub_diagnostic(&report.message, secrets),
             retryable: Some(report.is_retryable()),
+            refusal: report.refusal,
             http_status: report.http_status,
             adapter: None,
         }
@@ -142,6 +147,7 @@ impl FailureDetail {
                 boundary: FailureBoundary::Unknown,
                 message: "failure detail unavailable".into(),
                 retryable: None,
+                refusal: false,
                 http_status: None,
                 adapter: None,
             },

@@ -170,6 +170,7 @@
           "boundary": "decode",
           "message": "HttpError: Invalid content type was returned: \"text/plain\"",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": {
             "subject": {

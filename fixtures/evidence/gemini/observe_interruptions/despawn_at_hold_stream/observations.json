@@ -388,6 +388,7 @@
           "boundary": "host",
           "message": "the consumer cancelled the dispatch before it was answered",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

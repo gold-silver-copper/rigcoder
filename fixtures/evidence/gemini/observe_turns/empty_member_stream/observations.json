@@ -325,6 +325,7 @@
           "boundary": "decode",
           "message": "ResponseError: the model produced no answer and stopped with finish_reason=Length; the turn ran out of output budget before producing one — raise max_tokens for this request",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

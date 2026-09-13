@@ -204,6 +204,7 @@
           "boundary": "host",
           "message": "operator stop mid-stream",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

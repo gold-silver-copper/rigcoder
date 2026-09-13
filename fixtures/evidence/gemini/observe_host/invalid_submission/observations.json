@@ -17,6 +17,7 @@
           "boundary": "host",
           "message": "max_tokens must be greater than zero",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

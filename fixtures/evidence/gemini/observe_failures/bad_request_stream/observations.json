@@ -200,6 +200,7 @@
           "boundary": "provider_response",
           "message": "ProviderResponseError: status 400 Bad Request: {\"error\":{\"code\":400,\"message\":\"* GenerateContentRequest.generation_config.temperature: temperature must be in the range [0.0, 2.0].\\n\",\"status\":\"INVALID_ARGUMENT\"}}",
           "retryable": false,
+          "refusal": false,
           "http_status": 400,
           "adapter": {
             "subject": {

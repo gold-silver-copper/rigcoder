@@ -231,6 +231,7 @@
           "boundary": "decode",
           "message": "the stream ended before its terminal record",
           "retryable": true,
+          "refusal": false,
           "http_status": null,
           "adapter": {
             "subject": {

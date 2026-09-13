@@ -1,6 +1,6 @@
 # Upstream Rig work
 
-Current pin: `a6897db62bf5ae950c3a0ffabff1241bacac3df3` (Rig `main`, the #2504 squash;
+Current pin: `387abeeac47936834cd60c8696118c8da1f4de80` (Rig `main`, the #2510 squash;
 taken 2026-09-13).
 
 | PR | what | status |
@@ -9,3 +9,4 @@ taken 2026-09-13).
 | [#2500](https://github.com/0xPlaygrounds/rig/pull/2500) | `block_reason=OTHER` is a transient `ProviderResponse`, not a refusal; rig-ecs re-issues a completion lost to a retryable provider failure inside the run (`ProviderRetries`, default 3), never re-running tools; witness fact `rig-ecs/agent/provider_retry` | merged 2026-09-13 as `724dce27`, in the current pin; consumed by rigcoder (session resubmission removed, run budget set from `RunSettings.provider_retries`) |
 | [#2502](https://github.com/0xPlaygrounds/rig/pull/2502) | restore `observe::scrub_diagnostic` and `diagnostic_url_secrets` (removed by #2499 as "no callers"; rigcoder's failure records use them); a stream cut before its terminal record is retryable (rigcoder's session used to retry it by message text) | merged 2026-09-13 as `3c434631`, in the current pin; it also regenerated the #2501 goldens that had turned `main` red |
 | [#2504](https://github.com/0xPlaygrounds/rig/pull/2504) | a `Retry` written on an empty turn asks again instead of the run settling on an empty answer (CONTRACT §9.4 said "unless empty"; materialise settled first) | merged 2026-09-13 as `a6897db6`, in the current pin |
+| [#2510](https://github.com/0xPlaygrounds/rig/pull/2510) | re-target of [#2509](https://github.com/0xPlaygrounds/rig/pull/2509), which had merged into `ci/main-gate` and never reached `main`: a Gemini prompt block is a typed refusal (`kind: provider_response`, `refusal: true`, the block reason as `code`, never retryable); a truncated reasoning-only turn commits nothing; the streamed assembler carries image parts; a typed tool error is a `status: error` result | merged 2026-09-13 as `387abeea`, in the current pin; rigcoder's failure record carries `refusal` |

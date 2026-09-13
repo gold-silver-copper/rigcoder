@@ -325,6 +325,7 @@
           "boundary": "host",
           "message": "unknown tool: teleport",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

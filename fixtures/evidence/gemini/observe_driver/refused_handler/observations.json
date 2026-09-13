@@ -431,6 +431,7 @@
           "boundary": "host",
           "message": "no handler is bound to `tool:bash`",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

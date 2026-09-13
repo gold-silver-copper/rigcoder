@@ -428,6 +428,7 @@
           "boundary": "host",
           "message": "rigcoder --timeout-secs elapsed",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }

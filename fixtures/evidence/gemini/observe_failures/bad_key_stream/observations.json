@@ -200,6 +200,7 @@
           "boundary": "provider_response",
           "message": "[redacted]",
           "retryable": false,
+          "refusal": false,
           "http_status": 400,
           "adapter": {
             "subject": {

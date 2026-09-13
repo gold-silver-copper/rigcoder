@@ -378,13 +378,20 @@
       },
       "outcome": {
         "Err": {
-          "kind": "provider",
+          "kind": "provider_response",
           "retryable": false,
-          "message": "ProviderError: Gemini blocked the prompt: block_reason=SAFETY",
-          "code": null,
+          "message": "ProviderResponseError: Gemini blocked the prompt: block_reason=SAFETY",
+          "code": "SAFETY",
           "http_status": null,
-          "refusal": false,
-          "source_chain": []
+          "refusal": true,
+          "source_chain": [],
+          "provider_response": {
+            "status": null,
+            "body": "Gemini blocked the prompt: block_reason=SAFETY",
+            "provider_request_id": null,
+            "code": "SAFETY",
+            "refusal": true
+          }
         }
       },
       "scope": "rigcoder/run/1"

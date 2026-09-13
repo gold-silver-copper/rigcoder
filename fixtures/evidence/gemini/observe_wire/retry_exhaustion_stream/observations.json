@@ -559,6 +559,7 @@
           "boundary": "provider_response",
           "message": "ProviderResponseError: status 503 Service Unavailable: {\"error\":{\"code\":503,\"message\":\"The model is overloaded. Please try again later.\",\"status\":\"UNAVAILABLE\"},\"usageMetadata\":{\"promptTokenCount\":13,\"totalTokenCount\":13}}",
           "retryable": true,
+          "refusal": false,
           "http_status": 503,
           "adapter": null
         }

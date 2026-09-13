@@ -163,7 +163,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "provider",
+              "kind": "provider_response",
               "status": null,
               "retryable": false
             }
@@ -190,8 +190,8 @@
         "outcome": {
           "outcome": "err",
           "reason": {
-            "code": "provider",
-            "detail": "ProviderError: Gemini blocked the prompt: block_reason=SAFETY"
+            "code": "provider_response",
+            "detail": "ProviderResponseError: Gemini blocked the prompt: block_reason=SAFETY"
           },
           "retryable": false
         }
@@ -211,7 +211,7 @@
         "action": "ended",
         "ending": {
           "code": "provider",
-          "detail": "provider: ProviderError: Gemini blocked the prompt: block_reason=SAFETY"
+          "detail": "provider_response: ProviderResponseError: Gemini blocked the prompt: block_reason=SAFETY"
         }
       }
     },
@@ -229,11 +229,12 @@
         "action": "host",
         "kind": "rigcoder/failure",
         "payload": {
-          "kind": "provider",
+          "kind": "provider_response",
           "origin": "provider",
           "boundary": "provider_response",
-          "message": "ProviderError: Gemini blocked the prompt: block_reason=SAFETY",
+          "message": "ProviderResponseError: Gemini blocked the prompt: block_reason=SAFETY",
           "retryable": false,
+          "refusal": true,
           "http_status": null,
           "adapter": {
             "subject": {
@@ -250,7 +251,7 @@
             "ending": {
               "ending": "error",
               "boundary": "provider_response",
-              "kind": "provider",
+              "kind": "provider_response",
               "status": null,
               "retryable": false
             },

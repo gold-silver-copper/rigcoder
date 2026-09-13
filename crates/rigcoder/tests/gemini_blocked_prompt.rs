@@ -134,8 +134,16 @@ fn a_blocked_prompt_fails_once_with_the_block_reason() {
         .collect();
     assert_eq!(failures.len(), 1, "one ending: {events:?}");
     let reason = failures[0];
-    assert_eq!(reason.kind, "provider");
+    assert_eq!(reason.kind, "provider_response");
     assert_eq!(reason.retryable, Some(false));
+    assert!(
+        reason.refusal,
+        "a blocked prompt is a typed refusal: {reason}"
+    );
+    assert_eq!(
+        reason.http_status, None,
+        "the block is the reply, not a status: {reason}"
+    );
     assert!(reason.message.contains("blocked the prompt"), "{reason}");
     assert!(reason.message.contains("PROHIBITED_CONTENT"), "{reason}");
     assert!(
@@ -167,7 +175,17 @@ fn a_blocked_prompt_fails_once_with_the_block_reason() {
     let Err(report) = &record.outcome else {
         panic!("expected a failed completion: {record:?}");
     };
-    assert_eq!(report.kind, rig::error::ErrorKind::Provider, "{report:?}");
+    assert_eq!(
+        report.kind,
+        rig::error::ErrorKind::ProviderResponse,
+        "{report:?}"
+    );
+    assert!(report.refusal, "{report:?}");
+    assert_eq!(
+        report.code.as_deref(),
+        Some("PROHIBITED_CONTENT"),
+        "{report:?}"
+    );
     assert!(!report.retryable, "{report:?}");
     assert!(app.world().get::<rig_ecs::agent::Failed>(run).is_some());
 }

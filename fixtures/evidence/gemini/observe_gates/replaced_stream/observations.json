@@ -354,6 +354,7 @@
           "boundary": "host",
           "message": "the answer was withdrawn by policy",
           "retryable": false,
+          "refusal": false,
           "http_status": null,
           "adapter": null
         }
