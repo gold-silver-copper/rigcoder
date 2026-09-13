@@ -98,10 +98,10 @@
             "event": "usage",
             "usage": {
               "input_tokens": 777,
-              "output_tokens": 9,
-              "total_tokens": 866,
+              "output_tokens": 2,
+              "total_tokens": 857,
               "cached_input_tokens": null,
-              "reasoning_tokens": 80,
+              "reasoning_tokens": 78,
               "tool_input_tokens": null
             }
           }
@@ -166,10 +166,10 @@
             "event": "usage",
             "usage": {
               "input_tokens": 777,
-              "output_tokens": 9,
-              "total_tokens": 866,
+              "output_tokens": 2,
+              "total_tokens": 857,
               "cached_input_tokens": null,
-              "reasoning_tokens": 80,
+              "reasoning_tokens": 78,
               "tool_input_tokens": null
             }
           }
@@ -382,11 +382,11 @@
           "event": {
             "event": "usage",
             "usage": {
-              "input_tokens": 838,
-              "output_tokens": 76,
-              "total_tokens": 1046,
+              "input_tokens": 831,
+              "output_tokens": 70,
+              "total_tokens": 1098,
               "cached_input_tokens": null,
-              "reasoning_tokens": 132,
+              "reasoning_tokens": 197,
               "tool_input_tokens": null
             }
           }
@@ -448,11 +448,11 @@
           "event": {
             "event": "usage",
             "usage": {
-              "input_tokens": 918,
-              "output_tokens": 76,
-              "total_tokens": 1126,
+              "input_tokens": 909,
+              "output_tokens": 70,
+              "total_tokens": 1176,
               "cached_input_tokens": null,
-              "reasoning_tokens": 132,
+              "reasoning_tokens": 197,
               "tool_input_tokens": null
             }
           }
@@ -605,7 +605,7 @@
         "action": "host",
         "kind": "rigcoder/approval",
         "payload": {
-          "operation": "d3da98e6029f5478670cdddd911a5b0eccbf057b205c971d98a1e3209ba14298",
+          "operation": "04cad6e9c4736767e89778cf1b78cf45187113032de3c29eab0f62230a85079d",
           "tool": "bash",
           "mode": "auto",
           "decision": "prepared"
@@ -629,7 +629,7 @@
         "action": "host",
         "kind": "rigcoder/approval",
         "payload": {
-          "operation": "d3da98e6029f5478670cdddd911a5b0eccbf057b205c971d98a1e3209ba14298",
+          "operation": "04cad6e9c4736767e89778cf1b78cf45187113032de3c29eab0f62230a85079d",
           "tool": "bash",
           "mode": "auto",
           "decision": "approved"
@@ -787,11 +787,11 @@
           "event": {
             "event": "usage",
             "usage": {
-              "input_tokens": 936,
-              "output_tokens": 12,
-              "total_tokens": 991,
+              "input_tokens": 919,
+              "output_tokens": 9,
+              "total_tokens": 937,
               "cached_input_tokens": null,
-              "reasoning_tokens": 43,
+              "reasoning_tokens": 9,
               "tool_input_tokens": null
             }
           }
@@ -853,11 +853,11 @@
           "event": {
             "event": "usage",
             "usage": {
-              "input_tokens": 1148,
-              "output_tokens": 12,
-              "total_tokens": 1203,
+              "input_tokens": 1194,
+              "output_tokens": 9,
+              "total_tokens": 1212,
               "cached_input_tokens": null,
-              "reasoning_tokens": 43,
+              "reasoning_tokens": 9,
               "tool_input_tokens": null
             }
           }

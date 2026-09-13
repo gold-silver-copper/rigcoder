@@ -9,12 +9,12 @@ license = "MIT"
 repository = "https://github.com/gold-silver-copper/rigcoder"
 
 [workspace.dependencies]
-# Keep all Rig dependencies on one pinned Rig revision. TODO: return to Rig main when https://github.com/0xPlaygrounds/rig/pull/2502 merges (this is its branch head, main 724dce2728a6bc73cf33512ccbea0d95d8ca15e8 plus the restored observe scrub helpers).
-rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "7830f83399ede81adc9f62370073e3ca196c1de2", default-features = false }
-rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "7830f83399ede81adc9f62370073e3ca196c1de2" }
-rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "7830f83399ede81adc9f62370073e3ca196c1de2", default-features = false }
-rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "7830f83399ede81adc9f62370073e3ca196c1de2", default-features = false, features = ["replay"] }
-rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "7830f83399ede81adc9f62370073e3ca196c1de2", default-features = false, features = ["reqwest", "rustls"] }
+# Keep all Rig dependencies on one pinned Rig main revision.
+rig-core = { git = "https://github.com/0xPlaygrounds/rig", rev = "3c4346318198f92583631936d73dd8d3e7f392ce", default-features = false }
+rig-effect-log = { git = "https://github.com/0xPlaygrounds/rig", rev = "3c4346318198f92583631936d73dd8d3e7f392ce" }
+rig-cassette = { git = "https://github.com/0xPlaygrounds/rig", rev = "3c4346318198f92583631936d73dd8d3e7f392ce", default-features = false }
+rig-ecs = { git = "https://github.com/0xPlaygrounds/rig", rev = "3c4346318198f92583631936d73dd8d3e7f392ce", default-features = false, features = ["replay"] }
+rig = { git = "https://github.com/0xPlaygrounds/rig", rev = "3c4346318198f92583631936d73dd8d3e7f392ce", default-features = false, features = ["reqwest", "rustls"] }
 bevy_ecs = { version = "0.19.1", default-features = false, features = ["std", "multi_threaded"] }
 bevy_app = { version = "0.19.1", default-features = false, features = ["std"] }
 bevy_tasks = { version = "0.19.1", default-features = false, features = ["multi_threaded"] }

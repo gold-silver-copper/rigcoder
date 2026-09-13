@@ -126,12 +126,11 @@ approval, persistence and process-isolation contracts.
 
 `Cargo.toml` pins all five direct Rig dependencies (`rig`, `rig-core`,
 `rig-ecs`, `rig-effect-log` and `rig-cassette`) to
-`7830f83399ede81adc9f62370073e3ca196c1de2`, the head of
-[Rig PR #2502](https://github.com/0xPlaygrounds/rig/pull/2502): Rig `main` after
-[Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443) (`feat/effect-bus`)
-and [#2500](https://github.com/0xPlaygrounds/rig/pull/2500) (run-level provider
-retries) merged, plus the two fixes #2502 carries (the observe scrub helpers
-restored; a truncated stream retryable). Return to `main` when it merges. The
+`3c4346318198f92583631936d73dd8d3e7f392ce`, Rig `main` after
+[Rig PR #2443](https://github.com/0xPlaygrounds/rig/pull/2443) (`feat/effect-bus`),
+[#2500](https://github.com/0xPlaygrounds/rig/pull/2500) (run-level provider
+retries) and [#2502](https://github.com/0xPlaygrounds/rig/pull/2502) (the observe
+scrub helpers restored; a truncated stream retryable) merged. The
 consumer ownership transfer landed at the
 earlier pin `de83e9f` ([Rig PR #2474](https://github.com/0xPlaygrounds/rig/pull/2474)).
 To move the pin, update every Rig revision and `Cargo.lock`, then run the

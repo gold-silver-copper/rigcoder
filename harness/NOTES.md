@@ -269,3 +269,24 @@ spiral itself (calls since the last file write, or a per-run cost
 ceiling that ends the run with a named failure), which is a design
 decision, not a rule tweak. Stopped here per the prompt's stop
 conditions; see the report.
+
+## Cap raised to $400 (2026-09-13)
+
+`gemini_budget.py`: proposal $44, development $220, holdout $132, total
+$398 under the $400 hard cap. Ledger reinitialized (it held no
+reservations; smoke and dev runs use the key directly). Spend to date
+$169.80.
+
+## Pin moved to Rig `main` (2026-09-13)
+
+- `3c4346318198f92583631936d73dd8d3e7f392ce`, the #2502 squash; the
+  `TODO` in `Cargo.toml` is gone. Between the branch head and this
+  commit `main` also took #2501, which commits a streamed turn in the
+  canonical part order (reasoning, text, calls). Two cassettes whose
+  second request carries an assistant turn with a thought signature no
+  longer matched and were re-recorded live (`observe_driver/
+  retry_deliverable_stream`, `observe_lineage/two_runs`; cents), then
+  their packets regenerated in replay mode so the scrubbed signature is
+  what the evidence holds. Fixture churn: the revision label and that
+  part reordering in history and effects, nothing else. fmt, clippy,
+  `cargo test --workspace`, `rigcoder-verify verify` 42/42.

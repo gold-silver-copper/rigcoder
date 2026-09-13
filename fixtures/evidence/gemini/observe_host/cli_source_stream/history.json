@@ -59,10 +59,6 @@
     "id": null,
     "content": [
       {
-        "type": "text",
-        "text": "The command has been executed successfully."
-      },
-      {
         "type": "reasoning",
         "id": null,
         "content": [
@@ -74,6 +70,10 @@
             }
           }
         ]
+      },
+      {
+        "type": "text",
+        "text": "The command has been executed successfully."
       }
     ]
   }

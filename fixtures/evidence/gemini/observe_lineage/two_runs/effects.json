@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 4,
+        "batch": 7,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -10,14 +10,14 @@
         }
       },
       {
-        "batch": 4,
+        "batch": 7,
         "id": 0,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 8,
+        "batch": 11,
         "id": 1,
         "kind": {
           "delivery": "stream",
@@ -25,7 +25,7 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 11,
         "id": 1,
         "kind": {
           "delivery": "outcome"
@@ -436,11 +436,11 @@
           "usage": {
             "input_tokens": 796,
             "output_tokens": 1,
-            "total_tokens": 817,
+            "total_tokens": 816,
             "cached_input_tokens": 0,
             "cache_creation_input_tokens": 0,
             "tool_use_prompt_tokens": 0,
-            "reasoning_tokens": 20
+            "reasoning_tokens": 19
           },
           "message_id": null,
           "response_id": "id_REDACTED_1",
@@ -451,8 +451,8 @@
             "usage_metadata": {
               "promptTokenCount": 796,
               "candidatesTokenCount": 1,
-              "totalTokenCount": 817,
-              "thoughtsTokenCount": 20,
+              "totalTokenCount": 816,
+              "thoughtsTokenCount": 19,
               "promptTokensDetails": [
                 {
                   "modality": "TEXT",
@@ -495,10 +495,6 @@
               "id": null,
               "content": [
                 {
-                  "type": "text",
-                  "text": "one"
-                },
-                {
                   "type": "reasoning",
                   "id": null,
                   "content": [
@@ -510,6 +506,10 @@
                       }
                     }
                   ]
+                },
+                {
+                  "type": "text",
+                  "text": "one"
                 }
               ]
             },
@@ -695,9 +695,9 @@
             }
           ],
           "usage": {
-            "input_tokens": 827,
+            "input_tokens": 826,
             "output_tokens": 1,
-            "total_tokens": 848,
+            "total_tokens": 847,
             "cached_input_tokens": 0,
             "cache_creation_input_tokens": 0,
             "tool_use_prompt_tokens": 0,
@@ -710,14 +710,14 @@
           "model": "gemini-3.8-flash",
           "raw": {
             "usage_metadata": {
-              "promptTokenCount": 827,
+              "promptTokenCount": 826,
               "candidatesTokenCount": 1,
-              "totalTokenCount": 848,
+              "totalTokenCount": 847,
               "thoughtsTokenCount": 20,
               "promptTokensDetails": [
                 {
                   "modality": "TEXT",
-                  "tokenCount": 827
+                  "tokenCount": 826
                 }
               ]
             },

@@ -13,10 +13,6 @@
     "id": null,
     "content": [
       {
-        "type": "text",
-        "text": "one"
-      },
-      {
         "type": "reasoning",
         "id": null,
         "content": [
@@ -28,6 +24,10 @@
             }
           }
         ]
+      },
+      {
+        "type": "text",
+        "text": "one"
       }
     ]
   },
@@ -45,10 +45,6 @@
     "id": null,
     "content": [
       {
-        "type": "text",
-        "text": "two"
-      },
-      {
         "type": "reasoning",
         "id": null,
         "content": [
@@ -60,6 +56,10 @@
             }
           }
         ]
+      },
+      {
+        "type": "text",
+        "text": "two"
       }
     ]
   }

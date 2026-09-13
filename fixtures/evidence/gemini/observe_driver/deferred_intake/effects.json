@@ -17,31 +17,39 @@
         }
       },
       {
-        "batch": 19,
+        "batch": 18,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 23,
+        "batch": 19,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 23,
+        "batch": 21,
         "id": 3,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 25,
+        "batch": 24,
         "id": 4,
         "kind": {
           "delivery": "outcome"
+        }
+      },
+      {
+        "batch": 27,
+        "id": 5,
+        "kind": {
+          "delivery": "stream",
+          "items": 3
         }
       },
       {
@@ -49,7 +57,7 @@
         "id": 5,
         "kind": {
           "delivery": "stream",
-          "items": 5
+          "items": 2
         }
       },
       {

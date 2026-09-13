@@ -99,9 +99,9 @@
             "usage": {
               "input_tokens": 796,
               "output_tokens": 1,
-              "total_tokens": 817,
+              "total_tokens": 816,
               "cached_input_tokens": null,
-              "reasoning_tokens": 20,
+              "reasoning_tokens": 19,
               "tool_input_tokens": null
             }
           }
@@ -167,9 +167,9 @@
             "usage": {
               "input_tokens": 796,
               "output_tokens": 1,
-              "total_tokens": 817,
+              "total_tokens": 816,
               "cached_input_tokens": null,
-              "reasoning_tokens": 20,
+              "reasoning_tokens": 19,
               "tool_input_tokens": null
             }
           }
@@ -402,9 +402,9 @@
           "event": {
             "event": "usage",
             "usage": {
-              "input_tokens": 827,
+              "input_tokens": 807,
               "output_tokens": 1,
-              "total_tokens": 848,
+              "total_tokens": 828,
               "cached_input_tokens": null,
               "reasoning_tokens": 20,
               "tool_input_tokens": null
@@ -470,9 +470,9 @@
           "event": {
             "event": "usage",
             "usage": {
-              "input_tokens": 827,
+              "input_tokens": 826,
               "output_tokens": 1,
-              "total_tokens": 848,
+              "total_tokens": 847,
               "cached_input_tokens": null,
               "reasoning_tokens": 20,
               "tool_input_tokens": null

@@ -19,7 +19,7 @@ Any change under `crates/rigcoder/src` moves the policy hash: run
 `RIGCODER_EVIDENCE=write cargo test -p rigcoder --test gemini_observe`,
 then confirm with `git diff --stat -- fixtures` and a histogram of the
 changed lines that only `policy`, `batch` and stream-batching lines
-moved. Budget: about $10 per smoke run; ~$58 remained after the dev tier
+moved. Budget: $9 to $18 per smoke run; the cap is $400 and
 on 2026-09-12. One paired smoke run per commit; no dev run without asking.
 
 ## Commit 1: build outputs left beside a deliverable (prompt)
@@ -162,4 +162,4 @@ targeted, and the before/after per-task counts and cost, as
 
 - The repeat cutoff denies a call in a trial that passed before.
 - The prompt change costs a task that passed in all three dev attempts.
-- Spend would exceed what remains under the $200 cap.
+- Spend would exceed what remains under the $400 cap.

@@ -2,7 +2,7 @@
   "header": {
     "deliveries": [
       {
-        "batch": 5,
+        "batch": 4,
         "id": 0,
         "kind": {
           "delivery": "stream",
@@ -10,14 +10,14 @@
         }
       },
       {
-        "batch": 5,
+        "batch": 4,
         "id": 0,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 8,
+        "batch": 7,
         "id": 1,
         "kind": {
           "delivery": "stream",
@@ -25,21 +25,21 @@
         }
       },
       {
-        "batch": 8,
+        "batch": 7,
         "id": 1,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 20,
+        "batch": 21,
         "id": 2,
         "kind": {
           "delivery": "outcome"
         }
       },
       {
-        "batch": 23,
+        "batch": 24,
         "id": 3,
         "kind": {
           "delivery": "stream",
@@ -47,7 +47,7 @@
         }
       },
       {
-        "batch": 23,
+        "batch": 24,
         "id": 3,
         "kind": {
           "delivery": "outcome"
@@ -428,7 +428,7 @@
           "choice": [
             {
               "type": "text",
-              "text": "Hello! How can I help you today?"
+              "text": "Hello!"
             },
             {
               "type": "reasoning",
@@ -446,12 +446,12 @@
           ],
           "usage": {
             "input_tokens": 777,
-            "output_tokens": 9,
-            "total_tokens": 866,
+            "output_tokens": 2,
+            "total_tokens": 857,
             "cached_input_tokens": 0,
             "cache_creation_input_tokens": 0,
             "tool_use_prompt_tokens": 0,
-            "reasoning_tokens": 80
+            "reasoning_tokens": 78
           },
           "message_id": null,
           "response_id": "id_REDACTED_1",
@@ -461,9 +461,9 @@
           "raw": {
             "usage_metadata": {
               "promptTokenCount": 777,
-              "candidatesTokenCount": 9,
-              "totalTokenCount": 866,
-              "thoughtsTokenCount": 80,
+              "candidatesTokenCount": 2,
+              "totalTokenCount": 857,
+              "thoughtsTokenCount": 78,
               "promptTokensDetails": [
                 {
                   "modality": "TEXT",
@@ -506,10 +506,6 @@
               "id": null,
               "content": [
                 {
-                  "type": "text",
-                  "text": "Hello! How can I help you today?"
-                },
-                {
                   "type": "reasoning",
                   "id": null,
                   "content": [
@@ -521,6 +517,10 @@
                       }
                     }
                   ]
+                },
+                {
+                  "type": "text",
+                  "text": "Hello!"
                 }
               ]
             },
@@ -691,15 +691,15 @@
               "type": "toolcall",
               "id": {
                 "origin": "explicit",
-                "id": "call_14902"
+                "id": "call_604879"
               },
               "provider": {
-                "call_id": "call_14902"
+                "call_id": "call_604879"
               },
               "function": {
                 "name": "bash",
                 "arguments": {
-                  "command": "printf \"Report content\\n\" > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && echo \"File created successfully\""
+                  "command": "printf 'Report created successfully.\\n' > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt"
                 }
               },
               "signature": "signature_REDACTED_2",
@@ -707,13 +707,13 @@
             }
           ],
           "usage": {
-            "input_tokens": 918,
-            "output_tokens": 76,
-            "total_tokens": 1126,
+            "input_tokens": 909,
+            "output_tokens": 70,
+            "total_tokens": 1176,
             "cached_input_tokens": 0,
             "cache_creation_input_tokens": 0,
             "tool_use_prompt_tokens": 0,
-            "reasoning_tokens": 132
+            "reasoning_tokens": 197
           },
           "message_id": null,
           "response_id": "id_REDACTED_2",
@@ -722,14 +722,14 @@
           "model": "gemini-3.8-flash",
           "raw": {
             "usage_metadata": {
-              "promptTokenCount": 918,
-              "candidatesTokenCount": 76,
-              "totalTokenCount": 1126,
-              "thoughtsTokenCount": 132,
+              "promptTokenCount": 909,
+              "candidatesTokenCount": 70,
+              "totalTokenCount": 1176,
+              "thoughtsTokenCount": 197,
               "promptTokensDetails": [
                 {
                   "modality": "TEXT",
-                  "tokenCount": 918
+                  "tokenCount": 909
                 }
               ]
             },
@@ -748,7 +748,7 @@
       "kind": {
         "effect": "tool_call",
         "name": "bash",
-        "args": "{\"command\":\"printf \\\"Report content\\\\n\\\" > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && echo \\\"File created successfully\\\"\"}"
+        "args": "{\"command\":\"printf 'Report created successfully.\\\\n' > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt\"}"
       },
       "outcome": {
         "Ok": {
@@ -758,7 +758,7 @@
             "value": [
               {
                 "type": "text",
-                "text": "File created successfully\n[exit code: 0]"
+                "text": "[exit code: 0]"
               }
             ]
           }
@@ -793,10 +793,6 @@
               "id": null,
               "content": [
                 {
-                  "type": "text",
-                  "text": "Hello! How can I help you today?"
-                },
-                {
                   "type": "reasoning",
                   "id": null,
                   "content": [
@@ -808,6 +804,10 @@
                       }
                     }
                   ]
+                },
+                {
+                  "type": "text",
+                  "text": "Hello!"
                 }
               ]
             },
@@ -828,15 +828,15 @@
                   "type": "toolcall",
                   "id": {
                     "origin": "explicit",
-                    "id": "call_14902"
+                    "id": "call_604879"
                   },
                   "provider": {
-                    "call_id": "call_14902"
+                    "call_id": "call_604879"
                   },
                   "function": {
                     "name": "bash",
                     "arguments": {
-                      "command": "printf \"Report content\\n\" > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && echo \"File created successfully\""
+                      "command": "printf 'Report created successfully.\\n' > /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt && test -f /tmp/rigcoder-observe/observe_driver/retry_deliverable_stream/report.txt"
                     }
                   },
                   "signature": "signature_REDACTED_2",
@@ -851,16 +851,16 @@
                   "type": "toolresult",
                   "call": {
                     "origin": "explicit",
-                    "id": "call_14902"
+                    "id": "call_604879"
                   },
                   "provider": {
-                    "call_id": "call_14902"
+                    "call_id": "call_604879"
                   },
                   "name": "bash",
                   "content": [
                     {
                       "type": "text",
-                      "text": "File created successfully\n[exit code: 0]"
+                      "text": "[exit code: 0]"
                     }
                   ]
                 }
@@ -1022,7 +1022,7 @@
           "choice": [
             {
               "type": "text",
-              "text": "I have created and verified the required report.txt file."
+              "text": "The report file has been created and verified."
             },
             {
               "type": "reasoning",
@@ -1039,13 +1039,13 @@
             }
           ],
           "usage": {
-            "input_tokens": 1148,
-            "output_tokens": 12,
-            "total_tokens": 1203,
+            "input_tokens": 1194,
+            "output_tokens": 9,
+            "total_tokens": 1212,
             "cached_input_tokens": 0,
             "cache_creation_input_tokens": 0,
             "tool_use_prompt_tokens": 0,
-            "reasoning_tokens": 43
+            "reasoning_tokens": 9
           },
           "message_id": null,
           "response_id": "id_REDACTED_3",
@@ -1054,14 +1054,14 @@
           "model": "gemini-3.8-flash",
           "raw": {
             "usage_metadata": {
-              "promptTokenCount": 1148,
-              "candidatesTokenCount": 12,
-              "totalTokenCount": 1203,
-              "thoughtsTokenCount": 43,
+              "promptTokenCount": 1194,
+              "candidatesTokenCount": 9,
+              "totalTokenCount": 1212,
+              "thoughtsTokenCount": 9,
               "promptTokensDetails": [
                 {
                   "modality": "TEXT",
-                  "tokenCount": 1148
+                  "tokenCount": 1194
                 }
               ]
             },

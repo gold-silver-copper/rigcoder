@@ -60,10 +60,6 @@
     "id": null,
     "content": [
       {
-        "type": "text",
-        "text": "I was unable to write to outside.txt because the operation was denied."
-      },
-      {
         "type": "reasoning",
         "id": null,
         "content": [
@@ -75,6 +71,10 @@
             }
           }
         ]
+      },
+      {
+        "type": "text",
+        "text": "I was unable to write to outside.txt because the operation was denied."
       }
     ]
   }

@@ -164,10 +164,6 @@
     "id": null,
     "content": [
       {
-        "type": "text",
-        "text": "All four echo commands have been executed successfully."
-      },
-      {
         "type": "reasoning",
         "id": null,
         "content": [
@@ -179,6 +175,10 @@
             }
           }
         ]
+      },
+      {
+        "type": "text",
+        "text": "All four echo commands have been executed successfully."
       }
     ]
   }

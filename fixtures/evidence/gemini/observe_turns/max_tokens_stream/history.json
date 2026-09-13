@@ -13,10 +13,6 @@
     "id": null,
     "content": [
       {
-        "type": "text",
-        "text": "Rivers are"
-      },
-      {
         "type": "reasoning",
         "id": null,
         "content": [
@@ -28,6 +24,10 @@
             }
           }
         ]
+      },
+      {
+        "type": "text",
+        "text": "Rivers are"
       }
     ]
   }
