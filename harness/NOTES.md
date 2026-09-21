@@ -548,6 +548,13 @@ entry; the cap is $400.
   42/42. fmt and clippy (`-D warnings`) clean. Evidence packets
   regenerated in replay mode.
 
+## Cap raised to $700 (2026-09-13)
+
+`gemini_budget.py`: proposal $77, development $386, holdout $235, total
+$698 under the $700 hard cap; the ask line moves to $670. No ledger to
+reinitialize (smoke and dev runs use the key directly; the gateway
+ledgers are per-check temporaries). Spend to date $301.30.
+
 ## Run 4, step 1: baseline preflight (2026-09-13)
 
 Threshold, set before launch: smoke at `7ddd20d`, Rig
@@ -858,3 +865,101 @@ condition applies: no folding implementation, `history_folded` fact,
 folding smoke/dev run, or holdout proposal is warranted. No cell folds.
 Holdout data was neither read nor run. Stop and ask the user for the
 next history design; do not weaken this run's rule retrospectively.
+
+
+## Development audit: execute NEXT_RUN_4_PROMPT.md (2026-09-13)
+
+Offline audit on `ed2d6e2`; [report](DEVELOPMENT_AUDIT.md) and
+[per-job/per-trial evidence](DEVELOPMENT_AUDIT_EVIDENCE.md). No runtime
+candidate, paid call, task/verifier edit, holdout access, commit or PR.
+Existing bench digest inspected 317 trials in 21 explicit non-holdout
+jobs; all 33 recorded failures and twelve highest-cost known successes
+were reviewed. Failure taxonomy: model 23 (two provisional MIPS stdout
+mismatches), harness 7, infra/provider 3. These are historical counts,
+not evidence that the current pin still has the old runtime defects.
+
+Corrections to earlier summaries: c4's $7.85 database pass fetched the
+public benchmark solution and verifier; an older Harbor database pass
+also fetched answer material. Retain rewards but exclude these as
+independent-solving evidence. The two recent MIPS failures passed frame
+existence/similarity and failed expected stdout, not frame timeouts.
+Dev2 MIPS #3 passed despite an empty final answer.
+
+Spend is not reconciled: recent trial-level known subtotal $344.678996
+plus unknown killed-trial usage, rather than the $333.97 ledger-based
+figure that omitted c1's null aggregate. Including two older custom
+ledger rows gives $345.065155; including the older unledgered native dev
+generation gives $419.709985, still excluding unknown Harbor charges.
+These are overlapping historical scopes, not amounts to add together;
+the cap-period boundary and invoice remain unverified. No paid launch
+until unknowns are reconciled/reserved against the $700 cap/$670 line.
+
+Recommendation: one $0 feasibility experiment for host-enforced task
+network isolation using the existing model relay. First inventory all
+20 dev tasks' legitimate network needs and extend the synthetic canary;
+reject rollout if task capabilities or scoring integrity cannot be
+preserved without changing tasks. Detailed fixed-setting paired smoke
+and k=3 dev gates and a conditional $240 ceiling are in the report;
+this is a proposal, not a paid allocation. No history/cutoff design is
+selected and the rejected folding gate remains unchanged.
+
+Ran `python3 -B harness/check_gemini_relay_docker.py`: PASS with mocked
+upstream, network-none Docker, key/accounting on host. This does not
+prove full-dev isolation. Artifact validation checks inventory/failure
+coverage, local references and arithmetic; no Rust runtime was changed.
+
+## 2026-09-13 — network-isolation feasibility (NEXT_RUN_5), $0
+
+Pin moved first at the user's request: Rig `main` 387abeea → 234626eb
+(#2511), commit `b86457d`; section-0 checks green (380 workspace tests,
+71 observe, 42/42 verify); fixture churn was labels/batches/chunk
+order only.
+
+Experiment result: **no** minimal integration preserves the dev slice.
+All 20 verifiers download at scoring time (uv installer/apt/pip);
+7 tasks need runtime installs or data (kv-store-grpc by instruction;
+headless-terminal, configure-git-webserver, sparql-university,
+crack-7z-hash in every pass; make-mips-interpreter's WAD because the
+image build fetch yields a 341-byte file); db-wal-recovery has two
+confirmed answer fetches, chess-best-move 13 failed lichess attempts.
+New `check_network_boundary_docker.py` PASS: direct-IP, hostname,
+redirect, /dev/tcp, getent and pip egress denied on network-none;
+loopback, mocked relay, failure accounting (reservation retained) and
+shutdown intact. Scoring in the candidate container remains
+unresolved. Next: phase-split (`--internal` agent phase, bridge
+reconnect for verify) measured with the synthetic agent. Report:
+`harness/NETWORK_ISOLATION_FEASIBILITY.md`. No paid launch.
+
+## 2026-09-13 — NEXT_RUN_6, Step 3 acceptance threshold (stated before the run)
+
+Target: db-wal-recovery early input loss (dev-tier __3 L6–11, dev2 __1 L4–7,
+r4-retry-reason __1 L4–7 open the original database before preserving its
+WAL). Candidate: one task-agnostic prompt rule — preserve a copy of task
+inputs before a command that may mutate or consume them. Cheap path first:
+one k=1 `--checkpoint` run of db-wal-recovery on the current binary, then
+`branch-from` at the turn before the first mutating open, `--times 3`, with
+the rule applied. Keep only if all three branched attempts preserve an input
+copy before opening the database AND at least two pass the verifier; a
+`replay` of one recorded smoke trial must show no divergence from the rule.
+Otherwise revert. Budget for this step ≤ $8; no smoke unless kept.
+Step 3 deviation (recorded before the with-rule run): the baseline branch
+(turn 2, current prompt) reproduced the failure at its first calls — sqlite3
+opened /app/main.db, the WAL vanished — and entered the recovery spiral; it
+was stopped by hand at 128 calls to protect the budget, so its usage is
+unknown (no settlement event; reserved conservatively at $8 from comparable
+failed trials, not zero). That consumes the step's ≤$8. The with-rule branch
+is run anyway, bounded to --max-turns 40 per attempt (≈$1–2 total), because
+the observable that matters — a copy made before the first open — shows in
+the first few calls; verifier passes within 40 turns are a stricter bar than
+stated, so a "preserve but no pass" outcome is reported as inconclusive, not
+as keep.
+Run 6 result: Step 1 Harbor adapter restored (75f7b1a); one egress-allowlist
+trial passed with all external probes denied, $1.30. Step 2 contamination
+column (4cf0cae): exactly the two known trials flagged. Step 4 MIPS mismatch
+reproduced as a verifier stale-frame race under CPU starvation, not a
+runtime bug. Step 3 rule kept: baseline branch lost the WAL by call 3 (usage
+unknown, reserved $8); with the rule 3/3 preserved at call 1 and 3/3 passed,
+$0.657. Known spend $2.19, ≤$10.19 with the reserve. Smoke not run (could
+exceed $20). Report: harness/RUN_6_REPORT.md.
+r6-smoke (cap raised to $200): 10/10 vs r4-smoke 10/10, $10.43 vs $9.23
+($1.04 vs $0.92 per resolved), taxonomy all zero, no contamination. Kept.

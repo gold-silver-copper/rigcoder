@@ -12,8 +12,8 @@ from pathlib import Path
 import sqlite3
 import stat
 
-LIMITS = {"proposal": 44_000_000, "development": 220_000_000, "holdout": 132_000_000}
-TOTAL = 398_000_000  # $2 headroom below the user's $400 hard cap (raised from $200 on 2026-09-13).
+LIMITS = {"proposal": 77_000_000, "development": 386_000_000, "holdout": 235_000_000}
+TOTAL = 698_000_000  # $2 headroom below the user's $700 hard cap (raised from $200 to $400 and then $700 on 2026-09-13).
 MAX_INPUT = 1_048_576
 MAX_OUTPUT = 65_536
 

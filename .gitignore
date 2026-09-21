@@ -10,3 +10,8 @@ harness/tasks/
 
 # Trusted Gemini budget ledger (host-only, never inside a container).
 harness/gemini-budget.sqlite
+
+# OS and Python artifacts
+.DS_Store
+**/__pycache__/
+*.pyc
